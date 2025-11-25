@@ -51,7 +51,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { toast } = useToast();
 
   const { data: salesExecutives } = useQuery<User[]>({
-    queryKey: ["/api/users", { role: "sales_executive" }],
+    queryKey: ["/api/users?role=sales_executive"],
   });
 
   const form = useForm<InsertLead>({

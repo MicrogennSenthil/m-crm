@@ -83,7 +83,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   });
 
   const { data: salesExecutives } = useQuery<User[]>({
-    queryKey: ["/api/users", { role: "sales_executive" }],
+    queryKey: ["/api/users?role=sales_executive"],
     enabled: open,
   });
 

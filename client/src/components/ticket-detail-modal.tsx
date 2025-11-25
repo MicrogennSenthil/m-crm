@@ -53,7 +53,7 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   });
 
   const { data: supportEngineers } = useQuery<User[]>({
-    queryKey: ["/api/users", { role: "support" }],
+    queryKey: ["/api/users?role=support"],
     enabled: open,
   });
 
