@@ -101,31 +101,33 @@ export default function Sales() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Sales Pipeline</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Sales Pipeline</h1>
+          <p className="text-sm text-muted-foreground">
             Track and manage leads through your sales process
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant="outline"
             onClick={() => setImportOpen(true)}
             data-testid="button-import-leads"
+            className="min-h-[44px]"
           >
             <Upload className="h-4 w-4 mr-2" />
-            Import
+            <span className="hidden sm:inline">Import</span>
+            <span className="sm:hidden">Import</span>
           </Button>
           <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-lead">
+              <Button data-testid="button-add-lead" className="min-h-[44px]">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Lead
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Lead</DialogTitle>
                 <DialogDescription>
@@ -140,45 +142,45 @@ export default function Sales() {
       
       <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search leads..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 min-h-[44px]"
             data-testid="input-search-leads"
           />
         </div>
-        <Button variant="outline" size="icon">
+        <Button variant="outline" size="icon" className="min-h-[44px] min-w-[44px]">
           <Filter className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Kanban Board */}
-      <div className="flex gap-6 overflow-x-auto pb-4">
+      <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
         {STAGES.map((stage) => {
           const stageLeads = getLeadsByStage(stage.id);
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-80"
+              className="flex-shrink-0 w-72 sm:w-80"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, stage.id)}
             >
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-2 sm:mb-3 flex items-center gap-2">
                 <div className={`h-2 w-2 rounded-full ${stage.color}`} />
-                <h3 className="font-semibold">{stage.title}</h3>
+                <h3 className="font-semibold text-sm sm:text-base">{stage.title}</h3>
                 <Badge variant="secondary" className="ml-auto">
                   {stageLeads.length}
                 </Badge>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {isLoading ? (
                   Array(3)
                     .fill(0)
-                    .map((_, i) => <Skeleton key={i} className="h-32 w-full" />)
+                    .map((_, i) => <Skeleton key={i} className="h-28 sm:h-32 w-full" />)
                 ) : stageLeads.length > 0 ? (
                   stageLeads.map((lead) => (
                     <Card
@@ -189,25 +191,25 @@ export default function Sales() {
                       onClick={() => setSelectedLead(lead)}
                       data-testid={`card-lead-${lead.id}`}
                     >
-                      <CardHeader className="p-4 space-y-2">
-                        <CardTitle className="text-sm font-semibold">
+                      <CardHeader className="p-3 sm:p-4 space-y-1 sm:space-y-2">
+                        <CardTitle className="text-sm font-semibold leading-tight">
                           {lead.companyName}
                         </CardTitle>
                         <div className="text-xs text-muted-foreground">
                           {lead.contactPerson}
                         </div>
                       </CardHeader>
-                      <CardContent className="p-4 pt-0 space-y-2">
+                      <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
                         {lead.estimatedValue && (
                           <div className="text-sm font-medium">
                             ${lead.estimatedValue.toLocaleString()}
                           </div>
                         )}
-                        <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
                           <Badge variant="outline" className="capitalize">
                             {lead.leadSource}
                           </Badge>
-                          <span className="text-muted-foreground">
+                          <span className="text-muted-foreground whitespace-nowrap">
                             {lead.daysInStage}d in stage
                           </span>
                         </div>
@@ -216,8 +218,8 @@ export default function Sales() {
                   ))
                 ) : (
                   <Card className="border-dashed">
-                    <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                      No leads in this stage
+                    <CardContent className="p-6 sm:p-8 text-center text-sm text-muted-foreground">
+                      No leads
                     </CardContent>
                   </Card>
                 )}

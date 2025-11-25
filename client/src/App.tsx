@@ -47,13 +47,13 @@ function Router() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-4 border-b bg-background">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 sm:p-4 border-b bg-background">
+            <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px]" />
             <div className="flex items-center gap-2">
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-3 sm:p-6">
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/sales" component={Sales} />

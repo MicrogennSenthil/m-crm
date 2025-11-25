@@ -142,11 +142,11 @@ export default function Reports() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Reports & Analytics</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Reports & Analytics</h1>
+          <p className="text-sm text-muted-foreground">
             Comprehensive insights and performance metrics
           </p>
         </div>
@@ -156,6 +156,7 @@ export default function Reports() {
             size="sm"
             onClick={() => handleExport("leads")}
             data-testid="button-export-leads"
+            className="min-h-[44px] sm:min-h-0"
           >
             <Download className="w-4 h-4 mr-2" />
             Export Leads
@@ -165,6 +166,7 @@ export default function Reports() {
             size="sm"
             onClick={() => handleExport("projects")}
             data-testid="button-export-projects"
+            className="min-h-[44px] sm:min-h-0"
           >
             <Download className="w-4 h-4 mr-2" />
             Export Projects
@@ -174,6 +176,7 @@ export default function Reports() {
             size="sm"
             onClick={() => handleExport("tickets")}
             data-testid="button-export-tickets"
+            className="min-h-[44px] sm:min-h-0"
           >
             <Download className="w-4 h-4 mr-2" />
             Export Tickets
@@ -181,26 +184,26 @@ export default function Reports() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="overview" data-testid="tab-overview">
-            <BarChart3 className="w-4 h-4 mr-2" />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
+        <TabsList className="w-full sm:w-auto flex flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="overview" data-testid="tab-overview" className="min-h-[40px] sm:min-h-0 flex-1 sm:flex-none text-xs sm:text-sm">
+            <BarChart3 className="w-4 h-4 mr-1 sm:mr-2" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="productivity" data-testid="tab-productivity">
-            <Users className="w-4 h-4 mr-2" />
-            Team Productivity
+          <TabsTrigger value="productivity" data-testid="tab-productivity" className="min-h-[40px] sm:min-h-0 flex-1 sm:flex-none text-xs sm:text-sm">
+            <Users className="w-4 h-4 mr-1 sm:mr-2" />
+            Productivity
           </TabsTrigger>
-          <TabsTrigger value="sales" data-testid="tab-sales-reports">
-            <Target className="w-4 h-4 mr-2" />
+          <TabsTrigger value="sales" data-testid="tab-sales-reports" className="min-h-[40px] sm:min-h-0 flex-1 sm:flex-none text-xs sm:text-sm">
+            <Target className="w-4 h-4 mr-1 sm:mr-2" />
             Sales
           </TabsTrigger>
-          <TabsTrigger value="projects" data-testid="tab-project-reports">
-            <FolderKanban className="w-4 h-4 mr-2" />
+          <TabsTrigger value="projects" data-testid="tab-project-reports" className="min-h-[40px] sm:min-h-0 flex-1 sm:flex-none text-xs sm:text-sm">
+            <FolderKanban className="w-4 h-4 mr-1 sm:mr-2" />
             Projects
           </TabsTrigger>
-          <TabsTrigger value="support" data-testid="tab-support-reports">
-            <Ticket className="w-4 h-4 mr-2" />
+          <TabsTrigger value="support" data-testid="tab-support-reports" className="min-h-[40px] sm:min-h-0 flex-1 sm:flex-none text-xs sm:text-sm">
+            <Ticket className="w-4 h-4 mr-1 sm:mr-2" />
             Support
           </TabsTrigger>
         </TabsList>

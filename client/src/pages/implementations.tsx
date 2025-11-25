@@ -21,11 +21,11 @@ import { ProjectDetailModal } from "@/components/project-detail-modal";
 import type { Project, User } from "@shared/schema";
 import { format } from "date-fns";
 
-const STATUS_BADGES = {
-  not_started: { variant: "secondary" as const, label: "Not Started" },
-  in_progress: { variant: "default" as const, label: "In Progress" },
-  training: { variant: "outline" as const, label: "Training" },
-  completed: { variant: "default" as const, label: "Completed", className: "bg-green-600" },
+const STATUS_BADGES: Record<string, { variant: "secondary" | "default" | "outline" | "destructive"; label: string; className?: string }> = {
+  not_started: { variant: "secondary", label: "Not Started" },
+  in_progress: { variant: "default", label: "In Progress" },
+  training: { variant: "outline", label: "Training" },
+  completed: { variant: "default", label: "Completed", className: "bg-green-600" },
 };
 
 export default function Implementations() {
@@ -44,22 +44,22 @@ export default function Implementations() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Implementations</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Implementations</h1>
+          <p className="text-sm text-muted-foreground">
             Track project implementation progress and training
           </p>
         </div>
         <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-add-project">
+            <Button data-testid="button-add-project" className="min-h-[44px] w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               New Project
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
               <DialogDescription>
@@ -71,13 +71,13 @@ export default function Implementations() {
         </Dialog>
       </div>
 
-      <div className="relative max-w-md">
+      <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search projects..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
+          className="pl-10 min-h-[44px]"
           data-testid="input-search-projects"
         />
       </div>

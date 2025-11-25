@@ -95,43 +95,43 @@ export default function Home() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">
           Welcome to your Microgenn CRM dashboard
         </p>
       </div>
 
       {/* Hero Stats Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {statsLoading
           ? Array(4)
               .fill(0)
               .map((_, i) => (
                 <Card key={i}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <Skeleton className="h-4 w-24" />
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-3 sm:p-6">
+                    <Skeleton className="h-4 w-16 sm:w-24" />
                     <Skeleton className="h-5 w-5" />
                   </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-8 w-16 mb-2" />
-                    <Skeleton className="h-3 w-20" />
+                  <CardContent className="p-3 sm:p-6 pt-0">
+                    <Skeleton className="h-6 sm:h-8 w-12 sm:w-16 mb-2" />
+                    <Skeleton className="h-3 w-16 sm:w-20" />
                   </CardContent>
                 </Card>
               ))
           : metricCards.map((card) => (
               <Card key={card.title} data-testid={`card-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+                <CardHeader className="flex flex-row items-center justify-between gap-1 sm:gap-2 space-y-0 pb-2 p-3 sm:p-6">
+                  <CardTitle className="text-xs sm:text-sm font-medium leading-tight">
                     {card.title}
                   </CardTitle>
-                  <div className={`h-8 w-8 rounded-md ${card.bgColor} flex items-center justify-center`}>
-                    <card.icon className={`h-4 w-4 ${card.color}`} />
+                  <div className={`h-6 w-6 sm:h-8 sm:w-8 rounded-md ${card.bgColor} flex items-center justify-center flex-shrink-0`}>
+                    <card.icon className={`h-3 w-3 sm:h-4 sm:w-4 ${card.color}`} />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold" data-testid={`value-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>{card.value}</div>
+                <CardContent className="p-3 sm:p-6 pt-0">
+                  <div className="text-xl sm:text-2xl font-bold" data-testid={`value-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>{card.value}</div>
                   <div className="flex items-center text-xs text-muted-foreground mt-1">
                     {card.change > 0 ? (
                       <ArrowUp className="h-3 w-3 text-green-600 mr-1" />
@@ -141,27 +141,27 @@ export default function Home() {
                     <span className={card.change > 0 ? "text-green-600" : card.change < 0 ? "text-red-600" : ""}>
                       {card.change > 0 ? "+" : ""}{card.change}%
                     </span>
-                    <span className="ml-1">vs last month</span>
+                    <span className="ml-1 hidden sm:inline">vs last month</span>
                   </div>
                 </CardContent>
               </Card>
             ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
         {/* Activity Feed - 2/3 width */}
         <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-base sm:text-lg">Recent Activity</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-0">
             {activitiesLoading ? (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {Array(5)
                   .fill(0)
                   .map((_, i) => (
                     <div key={i} className="flex gap-3">
-                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-4 w-full" />
                         <Skeleton className="h-3 w-24" />
@@ -170,7 +170,7 @@ export default function Home() {
                   ))}
               </div>
             ) : activities && activities.length > 0 ? (
-              <div className="space-y-4" data-testid="activity-feed">
+              <div className="space-y-3 sm:space-y-4" data-testid="activity-feed">
                 {activities.map((activity) => {
                   const Icon = getActivityIcon(activity.entityType);
                   return (
@@ -179,7 +179,7 @@ export default function Home() {
                         <Icon className="h-4 w-4 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm">{activity.description}</p>
+                        <p className="text-sm leading-tight">{activity.description}</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {activity.createdAt && formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
                         </p>
@@ -189,7 +189,7 @@ export default function Home() {
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
+              <p className="text-sm text-muted-foreground text-center py-6 sm:py-8">
                 No recent activity
               </p>
             )}
@@ -197,18 +197,18 @@ export default function Home() {
         </Card>
 
         {/* Quick Actions Panel - 1/3 width */}
-        <div className="space-y-6">
+        <div className="space-y-3 sm:space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent Leads</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-sm sm:text-base">Recent Leads</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6 pt-0">
               {leadsLoading ? (
                 <div className="space-y-3">
                   {Array(3)
                     .fill(0)
                     .map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <Skeleton key={i} className="h-12 sm:h-16 w-full" />
                     ))}
                 </div>
               ) : recentLeads && recentLeads.length > 0 ? (
@@ -233,16 +233,16 @@ export default function Home() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Active Projects</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-sm sm:text-base">Active Projects</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6 pt-0">
               {projectsLoading ? (
                 <div className="space-y-3">
                   {Array(3)
                     .fill(0)
                     .map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <Skeleton key={i} className="h-12 sm:h-16 w-full" />
                     ))}
                 </div>
               ) : activeProjects && activeProjects.length > 0 ? (
@@ -250,7 +250,7 @@ export default function Home() {
                   {activeProjects.map((project) => (
                     <div key={project.id} className="text-sm space-y-1">
                       <div className="font-medium truncate">{project.clientName}</div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="secondary" className="text-xs">
                           {project.status.replace("_", " ")}
                         </Badge>
@@ -270,16 +270,16 @@ export default function Home() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Open Tickets</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-sm sm:text-base">Open Tickets</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6 pt-0">
               {ticketsLoading ? (
                 <div className="space-y-3">
                   {Array(3)
                     .fill(0)
                     .map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                      <Skeleton key={i} className="h-12 sm:h-16 w-full" />
                     ))}
                 </div>
               ) : openTickets && openTickets.length > 0 ? (
