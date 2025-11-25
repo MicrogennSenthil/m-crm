@@ -237,8 +237,9 @@ export type Quote = typeof quotes.$inferSelect;
 // Projects table - Implementation phase
 export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").references(() => customers.id), // Link to Customer Master
   leadId: varchar("lead_id").references(() => leads.id),
-  clientName: text("client_name").notNull(),
+  clientName: text("client_name").notNull(), // Denormalized for display
   implementationDate: timestamp("implementation_date"),
   status: text("status").notNull().default("not_started"), // not_started, in_progress, training, completed
   completionPercentage: integer("completion_percentage").default(0),
@@ -327,9 +328,11 @@ export type TrainingRecord = typeof trainingRecords.$inferSelect;
 export const tickets = pgTable("tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ticketNumber: text("ticket_number").notNull().unique(),
+  customerId: varchar("customer_id").references(() => customers.id), // Link to Customer Master
   projectId: varchar("project_id").references(() => projects.id),
-  customerName: text("customer_name").notNull(),
+  customerName: text("customer_name").notNull(), // Denormalized for display
   customerEmail: text("customer_email").notNull(),
+  customerPhone: text("customer_phone"), // Contact phone
   issueSummary: text("issue_summary").notNull(),
   issueDescription: text("issue_description").notNull(),
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
