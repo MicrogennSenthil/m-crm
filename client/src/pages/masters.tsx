@@ -64,7 +64,7 @@ export default function Masters() {
         <TabsList className="w-full flex-wrap gap-1">
           <TabsTrigger value="customers" data-testid="tab-customers" className="flex-1 sm:flex-none">
             <Users className="w-4 h-4 mr-2" />
-            Customers
+            Company Master
           </TabsTrigger>
           <TabsTrigger value="modules" data-testid="tab-modules" className="flex-1 sm:flex-none">
             <Package className="w-4 h-4 mr-2" />
@@ -164,8 +164,11 @@ function CustomersTab() {
   const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.company?.toLowerCase().includes(searchTerm.toLowerCase())
+      customer.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.industry?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.city?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -173,17 +176,17 @@ function CustomersTab() {
       <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <CardTitle className="text-base sm:text-lg">Customers</CardTitle>
-            <CardDescription>Manage customer master data</CardDescription>
+            <CardTitle className="text-base sm:text-lg">Company Master</CardTitle>
+            <CardDescription>Manage companies and existing customers</CardDescription>
           </div>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-customer" className="min-h-[44px] sm:min-h-0">
                 <Plus className="w-4 h-4 mr-2" />
-                Add Customer
+                Add Company
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <CustomerForm
                 onSubmit={(data) => createMutation.mutate(data)}
                 isPending={createMutation.isPending}
@@ -198,7 +201,7 @@ function CustomersTab() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search customers..."
+              placeholder="Search companies..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -215,17 +218,19 @@ function CustomersTab() {
           </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            {searchTerm ? "No customers found matching your search" : "No customers yet. Add your first customer."}
+            {searchTerm ? "No companies found matching your search" : "No companies yet. Add your first company."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden sm:table-cell">Company</TableHead>
+                  <TableHead>Company Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Contact Person</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                  <TableHead className="hidden xl:table-cell">Industry</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -234,9 +239,15 @@ function CustomersTab() {
                 {filteredCustomers.map((customer) => (
                   <TableRow key={customer.id} data-testid={`row-customer-${customer.id}`}>
                     <TableCell className="font-medium">{customer.name}</TableCell>
-                    <TableCell className="hidden sm:table-cell">{customer.company || "-"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{customer.contactPerson || "-"}</TableCell>
                     <TableCell className="hidden md:table-cell">{customer.email || "-"}</TableCell>
                     <TableCell className="hidden lg:table-cell">{customer.phone || "-"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{customer.industry || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {customer.customerType || "prospect"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={customer.status === "active" ? "default" : "secondary"}>
                         {customer.status}
@@ -271,7 +282,7 @@ function CustomersTab() {
       </CardContent>
 
       <Dialog open={!!editingCustomer} onOpenChange={() => setEditingCustomer(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {editingCustomer && (
             <CustomerForm
               customer={editingCustomer}
@@ -286,7 +297,7 @@ function CustomersTab() {
       <AlertDialog open={!!deletingCustomer} onOpenChange={() => setDeletingCustomer(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogTitle>Delete Company</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deletingCustomer?.name}"? This action cannot be undone.
             </AlertDialogDescription>
@@ -319,14 +330,23 @@ function CustomerForm({
 }) {
   const [formData, setFormData] = useState({
     name: customer?.name || "",
+    contactPerson: customer?.contactPerson || "",
+    designation: customer?.designation || "",
     email: customer?.email || "",
     phone: customer?.phone || "",
+    alternatePhone: customer?.alternatePhone || "",
+    website: customer?.website || "",
+    industry: customer?.industry || "",
     company: customer?.company || "",
+    gstNumber: customer?.gstNumber || "",
+    panNumber: customer?.panNumber || "",
     address: customer?.address || "",
     city: customer?.city || "",
     state: customer?.state || "",
     country: customer?.country || "",
+    pincode: customer?.pincode || "",
     status: customer?.status || "active",
+    customerType: customer?.customerType || "prospect",
     notes: customer?.notes || "",
   });
 
@@ -338,22 +358,47 @@ function CustomerForm({
   return (
     <form onSubmit={handleSubmit}>
       <DialogHeader>
-        <DialogTitle>{customer ? "Edit Customer" : "Add Customer"}</DialogTitle>
+        <DialogTitle>{customer ? "Edit Company" : "Add Company"}</DialogTitle>
         <DialogDescription>
-          {customer ? "Update customer information" : "Add a new customer to the system"}
+          {customer ? "Update company information" : "Add a new company to the system"}
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
-          <Label htmlFor="name">Name *</Label>
+          <Label htmlFor="name">Company Name *</Label>
           <Input
             id="name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
+            placeholder="Enter company name"
             data-testid="input-customer-name"
           />
         </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="contactPerson">Contact Person</Label>
+            <Input
+              id="contactPerson"
+              value={formData.contactPerson}
+              onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+              placeholder="Primary contact name"
+              data-testid="input-customer-contact-person"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="designation">Designation</Label>
+            <Input
+              id="designation"
+              value={formData.designation}
+              onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+              placeholder="Job title"
+              data-testid="input-customer-designation"
+            />
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
@@ -362,6 +407,7 @@ function CustomerForm({
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="company@example.com"
               data-testid="input-customer-email"
             />
           </div>
@@ -371,35 +417,115 @@ function CustomerForm({
               id="phone"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="+91 XXXXX XXXXX"
               data-testid="input-customer-phone"
             />
           </div>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="company">Company</Label>
-          <Input
-            id="company"
-            value={formData.company}
-            onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-            data-testid="input-customer-company"
-          />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="alternatePhone">Alternate Phone</Label>
+            <Input
+              id="alternatePhone"
+              value={formData.alternatePhone}
+              onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
+              placeholder="Secondary contact number"
+              data-testid="input-customer-alternate-phone"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="website">Website</Label>
+            <Input
+              id="website"
+              value={formData.website}
+              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+              placeholder="https://www.example.com"
+              data-testid="input-customer-website"
+            />
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="industry">Industry</Label>
+            <Select
+              value={formData.industry}
+              onValueChange={(value) => setFormData({ ...formData, industry: value })}
+            >
+              <SelectTrigger data-testid="select-customer-industry">
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hospitality">Hospitality</SelectItem>
+                <SelectItem value="retail">Retail</SelectItem>
+                <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                <SelectItem value="healthcare">Healthcare</SelectItem>
+                <SelectItem value="education">Education</SelectItem>
+                <SelectItem value="technology">Technology</SelectItem>
+                <SelectItem value="finance">Finance & Banking</SelectItem>
+                <SelectItem value="real_estate">Real Estate</SelectItem>
+                <SelectItem value="logistics">Logistics</SelectItem>
+                <SelectItem value="food_beverage">Food & Beverage</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="company">Parent Company</Label>
+            <Input
+              id="company"
+              value={formData.company}
+              onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+              placeholder="If subsidiary"
+              data-testid="input-customer-parent-company"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="gstNumber">GST Number</Label>
+            <Input
+              id="gstNumber"
+              value={formData.gstNumber}
+              onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+              placeholder="22AAAAA0000A1Z5"
+              data-testid="input-customer-gst"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="panNumber">PAN Number</Label>
+            <Input
+              id="panNumber"
+              value={formData.panNumber}
+              onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+              placeholder="AAAAA0000A"
+              data-testid="input-customer-pan"
+            />
+          </div>
+        </div>
+
         <div className="grid gap-2">
           <Label htmlFor="address">Address</Label>
-          <Input
+          <Textarea
             id="address"
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="Street address, building, floor"
+            rows={2}
             data-testid="input-customer-address"
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="city">City</Label>
             <Input
               id="city"
               value={formData.city}
               onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+              placeholder="City"
               data-testid="input-customer-city"
             />
           </div>
@@ -409,6 +535,7 @@ function CustomerForm({
               id="state"
               value={formData.state}
               onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+              placeholder="State"
               data-testid="input-customer-state"
             />
           </div>
@@ -418,31 +545,63 @@ function CustomerForm({
               id="country"
               value={formData.country}
               onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              placeholder="Country"
               data-testid="input-customer-country"
             />
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="pincode">Pincode</Label>
+            <Input
+              id="pincode"
+              value={formData.pincode}
+              onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+              placeholder="PIN"
+              data-testid="input-customer-pincode"
+            />
+          </div>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="status">Status</Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => setFormData({ ...formData, status: value })}
-          >
-            <SelectTrigger data-testid="select-customer-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="customerType">Customer Type</Label>
+            <Select
+              value={formData.customerType}
+              onValueChange={(value) => setFormData({ ...formData, customerType: value })}
+            >
+              <SelectTrigger data-testid="select-customer-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="prospect">Prospect</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+                <SelectItem value="partner">Partner</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="status">Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger data-testid="select-customer-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
         <div className="grid gap-2">
           <Label htmlFor="notes">Notes</Label>
           <Textarea
             id="notes"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            placeholder="Additional notes about this company..."
             rows={3}
             data-testid="input-customer-notes"
           />

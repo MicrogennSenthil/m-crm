@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Search, Filter, Upload, Clock } from "lucide-react";
 import { format } from "date-fns";
@@ -41,6 +41,16 @@ export default function Sales() {
   const { data: leads, isLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
   });
+
+  // Update selectedLead when leads data changes to ensure modal shows fresh data
+  useEffect(() => {
+    if (selectedLead && leads) {
+      const updatedLead = leads.find(l => l.id === selectedLead.id);
+      if (updatedLead && JSON.stringify(updatedLead) !== JSON.stringify(selectedLead)) {
+        setSelectedLead(updatedLead);
+      }
+    }
+  }, [leads, selectedLead]);
 
   const updateLeadMutation = useMutation({
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {

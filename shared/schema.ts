@@ -91,15 +91,24 @@ export type UserRoleRight = typeof userRoleRights.$inferSelect;
 // Customers table - Master data for customer companies
 export const customers = pgTable("customers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
+  name: text("name").notNull(), // Company name
+  contactPerson: text("contact_person"), // Primary contact name
+  designation: text("designation"), // Contact's job title
   email: text("email"),
   phone: text("phone"),
-  company: text("company"),
+  alternatePhone: text("alternate_phone"),
+  website: text("website"),
+  industry: text("industry"), // Industry type
+  company: text("company"), // Parent company (if subsidiary)
+  gstNumber: text("gst_number"), // Tax ID
+  panNumber: text("pan_number"), // PAN for India
   address: text("address"),
   city: text("city"),
   state: text("state"),
   country: text("country"),
+  pincode: text("pincode"),
   status: text("status").notNull().default("active"), // active, inactive
+  customerType: text("customer_type").default("prospect"), // prospect, customer, partner
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
