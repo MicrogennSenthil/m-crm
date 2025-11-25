@@ -12,6 +12,7 @@ import type { Project, ProjectModule, Module, TrainingRecord, User } from "@shar
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { AttachmentsList } from "./attachments-list";
 
 interface ProjectDetailModalProps {
   project: Project & { engineers?: User[] };
@@ -202,6 +203,15 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
               </p>
             )}
           </div>
+
+          <Separator />
+
+          {/* Project Documents */}
+          <AttachmentsList
+            entityType="project"
+            entityId={project.id}
+            title="Project Documents"
+          />
         </div>
       </DialogContent>
     </Dialog>

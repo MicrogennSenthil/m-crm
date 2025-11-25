@@ -13,6 +13,7 @@ import {
   escalationHistory,
   feedback,
   activityLog,
+  attachments,
   type User,
   type UpsertUser,
   type Lead,
@@ -41,6 +42,8 @@ import {
   type InsertFeedback,
   type ActivityLog,
   type InsertActivityLog,
+  type Attachment,
+  type InsertAttachment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -128,6 +131,11 @@ export interface IStorage {
   getTimeSeriesAnalytics(): Promise<any>;
   getEngineerProductivity(): Promise<any>;
   getExportData(type: string): Promise<any>;
+
+  // Attachment operations
+  getAttachments(entityType: string, entityId: string): Promise<Attachment[]>;
+  createAttachment(attachment: InsertAttachment): Promise<Attachment>;
+  deleteAttachment(id: string): Promise<Attachment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -881,6 +889,25 @@ export class DatabaseStorage implements IStorage {
       default:
         return [];
     }
+  }
+
+  // Attachment operations
+  async getAttachments(entityType: string, entityId: string): Promise<Attachment[]> {
+    return await db
+      .select()
+      .from(attachments)
+      .where(and(eq(attachments.entityType, entityType), eq(attachments.entityId, entityId)))
+      .orderBy(desc(attachments.createdAt));
+  }
+
+  async createAttachment(attachment: InsertAttachment): Promise<Attachment> {
+    const [newAttachment] = await db.insert(attachments).values(attachment).returning();
+    return newAttachment;
+  }
+
+  async deleteAttachment(id: string): Promise<Attachment | undefined> {
+    const [deleted] = await db.delete(attachments).where(eq(attachments.id, id)).returning();
+    return deleted;
   }
 }
 

@@ -19,7 +19,10 @@ import {
   insertTicketCommentSchema,
   insertEscalationHistorySchema,
   insertFeedbackSchema,
+  insertAttachmentSchema,
 } from "@shared/schema";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -962,6 +965,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error exporting data:", error);
       res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
+  // File Upload Routes (Document Management)
+  const objectStorageService = new ObjectStorageService();
+
+  // Get upload URL for file upload
+  app.post("/api/objects/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const { fileName } = req.body;
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName);
+      res.json({ uploadURL, objectPath });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Save attachment metadata after upload
+  app.post("/api/attachments", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertAttachmentSchema.parse({
+        ...req.body,
+        uploadedBy: req.user.claims.sub,
+      });
+      
+      // Set ACL policy on the uploaded object
+      const userId = req.user.claims.sub;
+      if (validatedData.objectPath.startsWith("/objects/")) {
+        await objectStorageService.trySetObjectEntityAclPolicy(validatedData.objectPath, {
+          owner: userId,
+          visibility: "private",
+        });
+      }
+      
+      const attachment = await storage.createAttachment(validatedData);
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: validatedData.entityType,
+        entityId: validatedData.entityId,
+        action: "file_uploaded",
+        description: `File uploaded: ${validatedData.fileName}`,
+        userId: req.user.claims.sub,
+        metadata: { attachmentId: attachment.id, fileName: validatedData.fileName },
+      });
+      
+      res.json(attachment);
+    } catch (error) {
+      console.error("Error saving attachment:", error);
+      res.status(500).json({ message: "Failed to save attachment" });
+    }
+  });
+
+  // Get attachments for an entity
+  app.get("/api/attachments/:entityType/:entityId", isAuthenticated, async (req, res) => {
+    try {
+      const { entityType, entityId } = req.params;
+      const attachmentList = await storage.getAttachments(entityType, entityId);
+      res.json(attachmentList);
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      res.status(500).json({ message: "Failed to fetch attachments" });
+    }
+  });
+
+  // Delete attachment
+  app.delete("/api/attachments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const attachment = await storage.deleteAttachment(req.params.id);
+      if (!attachment) {
+        return res.status(404).json({ message: "Attachment not found" });
+      }
+      
+      // Try to delete from object storage
+      try {
+        await objectStorageService.deleteObject(attachment.objectPath);
+      } catch (deleteError) {
+        console.error("Error deleting object from storage:", deleteError);
+      }
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: attachment.entityType,
+        entityId: attachment.entityId,
+        action: "file_deleted",
+        description: `File deleted: ${attachment.fileName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting attachment:", error);
+      res.status(500).json({ message: "Failed to delete attachment" });
+    }
+  });
+
+  // Serve private objects (with authentication)
+  app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
+    const userId = req.user?.claims?.sub;
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error accessing object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Serve public objects
+  app.get("/public-objects/:filePath(*)", async (req, res) => {
+    const filePath = req.params.filePath;
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 

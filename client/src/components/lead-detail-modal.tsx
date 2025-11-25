@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { AttachmentsList } from "./attachments-list";
 
 interface LeadDetailModalProps {
   lead: Lead;
@@ -173,6 +174,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 </div>
               </>
             )}
+
+            <Separator />
+            <AttachmentsList
+              entityType="lead"
+              entityId={lead.id}
+              title="Documents & Files"
+            />
           </div>
 
           {/* Right: Activity Timeline & Follow-ups */}

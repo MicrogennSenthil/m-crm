@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { AttachmentsList } from "./attachments-list";
 
 interface TicketDetailModalProps {
   ticket: Ticket;
@@ -390,6 +391,13 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                 </div>
               </div>
             )}
+
+            {/* Ticket Attachments */}
+            <AttachmentsList
+              entityType="ticket"
+              entityId={ticket.id}
+              title="Attachments"
+            />
 
             {/* Actions */}
             {ticket.status !== "closed" && (
