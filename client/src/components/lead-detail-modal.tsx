@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -44,6 +45,17 @@ const STAGES = [
   { value: "closed_lost", label: "Closed Lost" },
 ];
 
+const AVAILABLE_MODULES = [
+  "Front Office",
+  "Power Automation",
+  "POS",
+  "Inventory Management",
+  "HR & Payroll",
+  "Accounting",
+  "CRM Integration",
+  "Reporting & Analytics",
+];
+
 interface LeadDetailModalProps {
   lead: Lead;
   open: boolean;
@@ -56,6 +68,17 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [followUpTime, setFollowUpTime] = useState("09:00");
   const [demoDate, setDemoDate] = useState<Date>();
   const [demoTime, setDemoTime] = useState("10:00");
+  // Quote state
+  const [quoteDate, setQuoteDate] = useState<Date>();
+  const [quoteValue, setQuoteValue] = useState("");
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  // Negotiation state
+  const [negotiationDate, setNegotiationDate] = useState<Date>();
+  // Close deal state
+  const [closedDate, setClosedDate] = useState<Date>();
+  const [confirmedOrderValue, setConfirmedOrderValue] = useState("");
+  const [closedReason, setClosedReason] = useState("");
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<InsertLead>>({});
   const { toast } = useToast();
@@ -218,6 +241,142 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       });
     },
   });
+
+  const sendQuoteMutation = useMutation({
+    mutationFn: async () => {
+      if (!quoteDate || !quoteValue || selectedModules.length === 0) return;
+      
+      await apiRequest("PATCH", `/api/leads/${lead.id}`, {
+        quoteSentDate: quoteDate.toISOString(),
+        quoteValue: parseInt(quoteValue),
+        selectedModules,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      setQuoteDate(undefined);
+      setQuoteValue("");
+      setSelectedModules([]);
+      toast({
+        title: "Quote Sent",
+        description: "Quote has been sent and lead moved to Quote Sent stage",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to send quote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const startNegotiationMutation = useMutation({
+    mutationFn: async () => {
+      if (!negotiationDate) return;
+      
+      await apiRequest("PATCH", `/api/leads/${lead.id}`, {
+        negotiationDate: negotiationDate.toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      setNegotiationDate(undefined);
+      toast({
+        title: "Negotiation Started",
+        description: "Lead moved to Negotiation stage",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to start negotiation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const closeDealMutation = useMutation({
+    mutationFn: async (isWon: boolean) => {
+      if (!closedDate) return;
+      
+      if (isWon && !confirmedOrderValue) {
+        throw new Error("Confirmed order value is required");
+      }
+      
+      await apiRequest("PATCH", `/api/leads/${lead.id}`, {
+        closedDate: closedDate.toISOString(),
+        stage: isWon ? "closed_won" : "closed_lost",
+        confirmedOrderValue: isWon ? parseInt(confirmedOrderValue) : undefined,
+        closedReason: !isWon ? closedReason : undefined,
+      });
+    },
+    onSuccess: (_, isWon) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setClosedDate(undefined);
+      setConfirmedOrderValue("");
+      setClosedReason("");
+      toast({
+        title: isWon ? "Deal Won!" : "Deal Lost",
+        description: isWon 
+          ? `Congratulations! Deal closed with confirmed value of $${parseInt(confirmedOrderValue).toLocaleString()}`
+          : "Deal has been marked as lost",
+        variant: isWon ? "default" : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to close deal",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleModuleToggle = (module: string) => {
+    setSelectedModules(prev => 
+      prev.includes(module) 
+        ? prev.filter(m => m !== module)
+        : [...prev, module]
+    );
+  };
 
   const handleSaveEdit = () => {
     updateLeadMutation.mutate(editForm);
@@ -572,6 +731,304 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     </Button>
                   </div>
                 </div>
+              </div>
+
+              <Separator />
+
+              {/* Quote Sent Section */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Send Quote
+                </h3>
+                
+                {/* Current Quote Display */}
+                {lead.quoteSentDate && (
+                  <div className="mb-3 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+                    <div className="flex flex-col gap-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-green-600" />
+                        <span className="font-medium">Quote Sent:</span>
+                        <span>{format(new Date(lead.quoteSentDate), "PPP")}</span>
+                      </div>
+                      {lead.quoteValue && (
+                        <div className="flex items-center gap-2 ml-6">
+                          <DollarSign className="h-3 w-3" />
+                          <span>Value: ${lead.quoteValue.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {lead.selectedModules && lead.selectedModules.length > 0 && (
+                        <div className="flex items-start gap-2 ml-6">
+                          <Package className="h-3 w-3 mt-0.5" />
+                          <span>Modules: {lead.selectedModules.join(", ")}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Send Quote Form */}
+                {(lead.stage === "demo_scheduled" || lead.stage === "new_lead" || !lead.quoteSentDate) && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {lead.quoteSentDate ? "Update quote details:" : "Send quote to move lead to Quote Sent stage:"}
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">Quote Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !quoteDate && "text-muted-foreground"
+                              )}
+                              data-testid="button-select-quote-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {quoteDate ? format(quoteDate, "PPP") : "Pick date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={quoteDate}
+                              onSelect={setQuoteDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Quote Value ($)</Label>
+                        <Input
+                          type="number"
+                          value={quoteValue}
+                          onChange={(e) => setQuoteValue(e.target.value)}
+                          placeholder="Enter amount"
+                          data-testid="input-quote-value"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-xs mb-2 block">Select Modules</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {AVAILABLE_MODULES.map((module) => (
+                          <div key={module} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={module}
+                              checked={selectedModules.includes(module)}
+                              onCheckedChange={() => handleModuleToggle(module)}
+                              data-testid={`checkbox-module-${module.toLowerCase().replace(/\s+/g, "-")}`}
+                            />
+                            <label htmlFor={module} className="text-xs cursor-pointer">{module}</label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <Button
+                      onClick={() => sendQuoteMutation.mutate()}
+                      disabled={!quoteDate || !quoteValue || selectedModules.length === 0 || sendQuoteMutation.isPending}
+                      className="w-full"
+                      data-testid="button-send-quote"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      {sendQuoteMutation.isPending ? "Sending..." : "Send Quote"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Negotiation Section */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Handshake className="h-4 w-4" />
+                  Negotiation
+                </h3>
+                
+                {/* Current Negotiation Display */}
+                {lead.negotiationDate && (
+                  <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded-md">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Handshake className="h-4 w-4 text-orange-600" />
+                      <span className="font-medium">Negotiation Started:</span>
+                      <span>{format(new Date(lead.negotiationDate), "PPP")}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Start Negotiation Form */}
+                {(lead.stage === "quote_sent" || lead.stage === "demo_scheduled") && !lead.negotiationDate && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Start negotiation to move lead to Negotiation stage:
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "justify-start text-left font-normal flex-1 min-w-[180px]",
+                              !negotiationDate && "text-muted-foreground"
+                            )}
+                            data-testid="button-select-negotiation-date"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {negotiationDate ? format(negotiationDate, "PPP") : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={negotiationDate}
+                            onSelect={setNegotiationDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Button
+                        onClick={() => startNegotiationMutation.mutate()}
+                        disabled={!negotiationDate || startNegotiationMutation.isPending}
+                        data-testid="button-start-negotiation"
+                      >
+                        <Handshake className="h-4 w-4 mr-2" />
+                        {startNegotiationMutation.isPending ? "Starting..." : "Start Negotiation"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Close Deal Section */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Close Deal
+                </h3>
+                
+                {/* Closed Deal Display */}
+                {(lead.stage === "closed_won" || lead.stage === "closed_lost") && lead.closedDate && (
+                  <div className={cn(
+                    "mb-3 p-3 border rounded-md",
+                    lead.stage === "closed_won" 
+                      ? "bg-green-500/10 border-green-500/20" 
+                      : "bg-red-500/10 border-red-500/20"
+                  )}>
+                    <div className="flex flex-col gap-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        {lead.stage === "closed_won" ? (
+                          <Trophy className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-600" />
+                        )}
+                        <span className="font-medium">
+                          {lead.stage === "closed_won" ? "Deal Won!" : "Deal Lost"}
+                        </span>
+                        <span>{format(new Date(lead.closedDate), "PPP")}</span>
+                      </div>
+                      {lead.stage === "closed_won" && lead.confirmedOrderValue && (
+                        <div className="flex items-center gap-2 ml-6">
+                          <DollarSign className="h-3 w-3" />
+                          <span>Confirmed Value: ${lead.confirmedOrderValue.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {lead.stage === "closed_lost" && lead.closedReason && (
+                        <div className="ml-6 text-muted-foreground">
+                          Reason: {lead.closedReason}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Close Deal Form */}
+                {lead.stage !== "closed_won" && lead.stage !== "closed_lost" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Close this deal as won or lost:
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">Close Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !closedDate && "text-muted-foreground"
+                              )}
+                              data-testid="button-select-close-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {closedDate ? format(closedDate, "PPP") : "Pick date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={closedDate}
+                              onSelect={setClosedDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Confirmed Order Value ($)</Label>
+                        <Input
+                          type="number"
+                          value={confirmedOrderValue}
+                          onChange={(e) => setConfirmedOrderValue(e.target.value)}
+                          placeholder="Required for Won"
+                          data-testid="input-confirmed-order-value"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-xs">Reason (for Lost deals)</Label>
+                      <Input
+                        value={closedReason}
+                        onChange={(e) => setClosedReason(e.target.value)}
+                        placeholder="Why was the deal lost?"
+                        data-testid="input-closed-reason"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => closeDealMutation.mutate(true)}
+                        disabled={!closedDate || !confirmedOrderValue || closeDealMutation.isPending}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        data-testid="button-close-won"
+                      >
+                        <Trophy className="h-4 w-4 mr-2" />
+                        {closeDealMutation.isPending ? "Closing..." : "Close as Won"}
+                      </Button>
+                      <Button
+                        onClick={() => closeDealMutation.mutate(false)}
+                        disabled={!closedDate || closeDealMutation.isPending}
+                        variant="destructive"
+                        className="flex-1"
+                        data-testid="button-close-lost"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        {closeDealMutation.isPending ? "Closing..." : "Close as Lost"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Separator />

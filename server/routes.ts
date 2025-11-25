@@ -558,33 +558,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {
-      // Convert demoDate string to Date object if provided
       let updateData = { ...req.body };
+      
+      // Convert date strings to Date objects
       if (updateData.demoDate) {
         updateData.demoDate = new Date(updateData.demoDate);
+      }
+      if (updateData.quoteSentDate) {
+        updateData.quoteSentDate = new Date(updateData.quoteSentDate);
+      }
+      if (updateData.negotiationDate) {
+        updateData.negotiationDate = new Date(updateData.negotiationDate);
+      }
+      if (updateData.closedDate) {
+        updateData.closedDate = new Date(updateData.closedDate);
       }
       
       // Get current lead to check stage
       const currentLead = await storage.getLead(req.params.id);
       
+      let activityAction = "updated";
+      let activityDescription = "";
+      
       // Auto-transition to demo_scheduled when demo date is set and lead is in new_lead stage
       if (updateData.demoDate && currentLead && currentLead.stage === "new_lead") {
         updateData.stage = "demo_scheduled";
+        activityAction = "demo_scheduled";
+        activityDescription = `Demo scheduled for ${currentLead.companyName} on ${new Date(updateData.demoDate).toLocaleString()}`;
+      }
+      
+      // Auto-transition to quote_sent when quote is sent
+      if (updateData.quoteSentDate && currentLead && 
+          (currentLead.stage === "demo_scheduled" || currentLead.stage === "new_lead")) {
+        updateData.stage = "quote_sent";
+        activityAction = "quote_sent";
+        const modulesList = updateData.selectedModules?.join(", ") || "No modules";
+        activityDescription = `Quote sent to ${currentLead.companyName} - Value: $${updateData.quoteValue?.toLocaleString() || 0} - Modules: ${modulesList}`;
+      }
+      
+      // Auto-transition to negotiation when negotiation date is set
+      if (updateData.negotiationDate && currentLead && 
+          (currentLead.stage === "quote_sent" || currentLead.stage === "demo_scheduled")) {
+        updateData.stage = "negotiation";
+        activityAction = "negotiation_started";
+        activityDescription = `Negotiation started with ${currentLead.companyName} on ${new Date(updateData.negotiationDate).toLocaleString()}`;
+      }
+      
+      // Handle deal closure (won or lost)
+      if (updateData.closedDate && updateData.stage) {
+        if (updateData.stage === "closed_won") {
+          if (!updateData.confirmedOrderValue) {
+            return res.status(400).json({ message: "Confirmed order value is required to close the deal" });
+          }
+          activityAction = "deal_won";
+          activityDescription = `Deal won with ${currentLead?.companyName} - Confirmed Value: $${updateData.confirmedOrderValue?.toLocaleString()}`;
+        } else if (updateData.stage === "closed_lost") {
+          activityAction = "deal_lost";
+          activityDescription = `Deal lost with ${currentLead?.companyName}${updateData.closedReason ? ` - Reason: ${updateData.closedReason}` : ""}`;
+        }
       }
       
       const updated = await storage.updateLead(req.params.id, updateData);
       
-      // Log activity
-      let activityDescription = `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`;
-      if (updateData.demoDate) {
-        const demoDateStr = new Date(updateData.demoDate).toLocaleString();
-        activityDescription = `Demo scheduled for ${updated.companyName} on ${demoDateStr}`;
+      // Default activity description if not set
+      if (!activityDescription) {
+        activityDescription = `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`;
       }
       
       await storage.logActivity({
         entityType: "lead",
         entityId: updated.id,
-        action: updateData.demoDate ? "demo_scheduled" : "updated",
+        action: activityAction,
         description: activityDescription,
         userId: req.user.claims.sub,
       });

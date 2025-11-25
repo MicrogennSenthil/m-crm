@@ -126,6 +126,16 @@ export const leads = pgTable("leads", {
   stage: text("stage").notNull().default("new_lead"), // new_lead, demo_scheduled, quote_sent, negotiation, closed_won, closed_lost
   salesExecutiveId: varchar("sales_executive_id").references(() => users.id),
   demoDate: timestamp("demo_date"), // Scheduled demo date and time
+  // Quote stage fields
+  quoteSentDate: timestamp("quote_sent_date"), // When quote was sent
+  quoteValue: integer("quote_value"), // Quote amount
+  selectedModules: text("selected_modules").array(), // Array of module names
+  // Negotiation stage fields
+  negotiationDate: timestamp("negotiation_date"), // When negotiation started
+  // Close deal fields
+  closedDate: timestamp("closed_date"), // When deal was closed (won or lost)
+  confirmedOrderValue: integer("confirmed_order_value"), // Final confirmed order value
+  closedReason: text("closed_reason"), // Reason for lost deals
   daysInStage: integer("days_in_stage").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
