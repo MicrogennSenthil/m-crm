@@ -1080,7 +1080,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/projects", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertProjectSchema.parse(req.body);
+      // Convert date string to Date object if present
+      let projectData = { ...req.body };
+      if (projectData.implementationDate) {
+        projectData.implementationDate = new Date(projectData.implementationDate);
+      }
+      
+      const validatedData = insertProjectSchema.parse(projectData);
       const newProject = await storage.createProject(validatedData);
       
       // Log activity
