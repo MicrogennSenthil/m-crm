@@ -129,6 +129,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk import leads (authenticated)
+  app.post("/api/leads/bulk-import", isAuthenticated, async (req: any, res) => {
+    try {
+      const { leads: leadsData } = req.body;
+      
+      if (!Array.isArray(leadsData) || leadsData.length === 0) {
+        return res.status(400).json({ message: "No leads data provided" });
+      }
+      
+      const createdLeads = [];
+      const errors: string[] = [];
+      
+      for (let i = 0; i < leadsData.length; i++) {
+        try {
+          const leadRow = leadsData[i];
+          const validatedData = insertLeadSchema.parse({
+            companyName: leadRow.companyName || leadRow.company_name || leadRow["Company Name"] || "",
+            contactPerson: leadRow.contactPerson || leadRow.contact_person || leadRow["Contact Person"] || "",
+            contactEmail: leadRow.contactEmail || leadRow.contact_email || leadRow["Email"] || "",
+            contactPhone: leadRow.contactPhone || leadRow.contact_phone || leadRow["Phone"] || "",
+            leadSource: leadRow.leadSource || leadRow.lead_source || leadRow["Source"] || "website",
+            stage: "new_lead",
+            estimatedValue: parseFloat(leadRow.estimatedValue || leadRow.estimated_value || leadRow["Value"]) || 0,
+            notes: leadRow.notes || leadRow["Notes"] || "",
+          });
+          
+          const newLead = await storage.createLead(validatedData);
+          createdLeads.push(newLead);
+          
+          // Log activity
+          await storage.logActivity({
+            entityType: "lead",
+            entityId: newLead.id,
+            action: "imported",
+            description: `Lead imported via bulk import: ${newLead.companyName}`,
+            userId: req.user.claims.sub,
+          });
+        } catch (err) {
+          errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : "Invalid data"}`);
+        }
+      }
+      
+      res.json({
+        success: createdLeads.length,
+        failed: errors.length,
+        errors: errors.slice(0, 10), // Return first 10 errors
+        leads: createdLeads,
+      });
+    } catch (error) {
+      console.error("Error bulk importing leads:", error);
+      res.status(400).json({ message: "Failed to import leads" });
+    }
+  });
+
+  // Social Media Webhook Endpoints (public - no auth required for webhooks)
+  // These endpoints receive lead data from social media platforms
+
+  // Facebook Lead Ads Webhook
+  app.post("/api/webhooks/facebook", async (req, res) => {
+    try {
+      const { leadgen_id, form_id, field_data, created_time, ad_id, page_id } = req.body;
+      
+      // Parse Facebook's field_data array format
+      const fieldMap = new Map();
+      if (Array.isArray(field_data)) {
+        field_data.forEach((field: { name: string; values: string[] }) => {
+          fieldMap.set(field.name, field.values?.[0] || "");
+        });
+      }
+      
+      const leadData = {
+        companyName: fieldMap.get("company") || fieldMap.get("company_name") || "Facebook Lead",
+        contactPerson: fieldMap.get("full_name") || `${fieldMap.get("first_name") || ""} ${fieldMap.get("last_name") || ""}`.trim() || "Unknown",
+        contactEmail: fieldMap.get("email") || "",
+        contactPhone: fieldMap.get("phone_number") || fieldMap.get("phone") || "",
+        leadSource: "facebook",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Facebook Lead Ad - Form ID: ${form_id || "N/A"}, Ad ID: ${ad_id || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Facebook Lead Ads: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Facebook webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Facebook Webhook Verification (GET request for initial setup)
+  app.get("/api/webhooks/facebook", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+    
+    // Verify token should be configured in environment
+    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN || "microgenn_crm_webhook";
+    
+    if (mode === "subscribe" && token === verifyToken) {
+      res.status(200).send(challenge);
+    } else {
+      res.status(403).send("Verification failed");
+    }
+  });
+
+  // LinkedIn Lead Gen Webhook
+  app.post("/api/webhooks/linkedin", async (req, res) => {
+    try {
+      const { lead, campaign, form } = req.body;
+      
+      const leadData = {
+        companyName: lead?.company || lead?.organization || "LinkedIn Lead",
+        contactPerson: `${lead?.firstName || ""} ${lead?.lastName || ""}`.trim() || "Unknown",
+        contactEmail: lead?.email || "",
+        contactPhone: lead?.phone || "",
+        leadSource: "linkedin",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `LinkedIn Lead Gen Form - Campaign: ${campaign?.name || "N/A"}, Form: ${form?.name || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from LinkedIn: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("LinkedIn webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Instagram Lead Ads Webhook (uses Facebook's API)
+  app.post("/api/webhooks/instagram", async (req, res) => {
+    try {
+      const { leadgen_id, form_id, field_data, instagram_user_id } = req.body;
+      
+      const fieldMap = new Map();
+      if (Array.isArray(field_data)) {
+        field_data.forEach((field: { name: string; values: string[] }) => {
+          fieldMap.set(field.name, field.values?.[0] || "");
+        });
+      }
+      
+      const leadData = {
+        companyName: fieldMap.get("company") || "Instagram Lead",
+        contactPerson: fieldMap.get("full_name") || `${fieldMap.get("first_name") || ""} ${fieldMap.get("last_name") || ""}`.trim() || "Unknown",
+        contactEmail: fieldMap.get("email") || "",
+        contactPhone: fieldMap.get("phone_number") || fieldMap.get("phone") || "",
+        leadSource: "instagram",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Instagram Lead Ad - Form ID: ${form_id || "N/A"}, Instagram User: ${instagram_user_id || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Instagram: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Instagram webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Twitter/X Lead Ads Webhook
+  app.post("/api/webhooks/twitter", async (req, res) => {
+    try {
+      const { card_data, user_data } = req.body;
+      
+      const leadData = {
+        companyName: user_data?.company || card_data?.company_name || "Twitter Lead",
+        contactPerson: user_data?.name || card_data?.full_name || "Unknown",
+        contactEmail: user_data?.email || card_data?.email || "",
+        contactPhone: user_data?.phone || card_data?.phone_number || "",
+        leadSource: "twitter",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Twitter/X Lead Card`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Twitter/X: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Twitter webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Generic Website Form Webhook (for custom integrations)
+  app.post("/api/webhooks/website", async (req, res) => {
+    try {
+      const { company, name, email, phone, source, notes } = req.body;
+      
+      const leadData = {
+        companyName: company || req.body.companyName || "Website Lead",
+        contactPerson: name || req.body.contactPerson || "Unknown",
+        contactEmail: email || req.body.contactEmail || "",
+        contactPhone: phone || req.body.contactPhone || "",
+        leadSource: source || "website",
+        stage: "new_lead" as const,
+        estimatedValue: parseFloat(req.body.value) || 0,
+        notes: notes || req.body.notes || "Submitted via website form",
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from website form: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Website webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
   // Follow-up routes
   app.get("/api/leads/:id/follow-ups", isAuthenticated, async (req, res) => {
     try {

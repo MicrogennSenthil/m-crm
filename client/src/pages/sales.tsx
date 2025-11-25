@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
+import { LeadImportDialog } from "@/components/lead-import-dialog";
 import type { Lead } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,7 @@ const STAGES = [
 export default function Sales() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const { toast } = useToast();
 
@@ -107,24 +109,36 @@ export default function Sales() {
             Track and manage leads through your sales process
           </p>
         </div>
-        <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-lead">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Lead
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New Lead</DialogTitle>
-              <DialogDescription>
-                Create a new lead in your sales pipeline
-              </DialogDescription>
-            </DialogHeader>
-            <LeadForm onSuccess={() => setNewLeadOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+            data-testid="button-import-leads"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-lead">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Lead
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Add New Lead</DialogTitle>
+                <DialogDescription>
+                  Create a new lead in your sales pipeline
+                </DialogDescription>
+              </DialogHeader>
+              <LeadForm onSuccess={() => setNewLeadOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+      
+      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-md">

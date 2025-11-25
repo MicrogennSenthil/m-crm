@@ -14,8 +14,19 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import type { Lead, Project, Ticket, ActivityLog } from "@shared/schema";
 
+interface DashboardStats {
+  activeLeads: number;
+  ongoingProjects: number;
+  openTickets: number;
+  monthlyClosures: number;
+  leadsChange: number;
+  projectsChange: number;
+  ticketsChange: number;
+  closuresChange: number;
+}
+
 export default function Home() {
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
   });
 
@@ -24,15 +35,15 @@ export default function Home() {
   });
 
   const { data: recentLeads, isLoading: leadsLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads", { limit: 5 }],
+    queryKey: ["/api/leads?limit=5"],
   });
 
   const { data: activeProjects, isLoading: projectsLoading } = useQuery<Project[]>({
-    queryKey: ["/api/projects", { status: "in_progress" }],
+    queryKey: ["/api/projects?status=in_progress"],
   });
 
   const { data: openTickets, isLoading: ticketsLoading } = useQuery<Ticket[]>({
-    queryKey: ["/api/tickets", { status: "open", limit: 5 }],
+    queryKey: ["/api/tickets?status=open&limit=5"],
   });
 
   const metricCards = [
