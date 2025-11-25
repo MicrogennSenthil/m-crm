@@ -49,7 +49,7 @@ import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 export interface IStorage {
   // User operations (required for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
+  upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
   getUsersByRole(role: string): Promise<User[]>;
 
   // Lead operations
@@ -132,7 +132,11 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
+  async upsertUser(userData: UpsertUser): Promise<{ user: User; isNew: boolean }> {
+    // Check if user exists first (only if id is provided)
+    const existingUser = userData.id ? await this.getUser(userData.id) : undefined;
+    const isNew = !existingUser;
+    
     const [user] = await db
       .insert(users)
       .values(userData)
@@ -144,7 +148,8 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
-    return user;
+    
+    return { user, isNew };
   }
 
   async getUsersByRole(role: string): Promise<User[]> {

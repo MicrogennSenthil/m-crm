@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
+import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail } from "./email";
 import { eq } from "drizzle-orm";
 import {
   insertLeadSchema,
@@ -192,6 +193,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const newQuote = await storage.createQuote(validatedData);
       
+      // Get lead details for email
+      const lead = await storage.getLead(req.params.id);
+      
+      if (lead && newQuote.validUntil) {
+        // Send quote email
+        await sendQuoteEmail(
+          lead.contactEmail,
+          lead.contactPerson,
+          lead.companyName,
+          newQuote.amount,
+          newQuote.validUntil
+        );
+      }
+      
       // Log activity
       await storage.logActivity({
         entityType: "lead",
@@ -338,6 +353,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         projectId: req.params.id,
       });
       const newTraining = await storage.createTrainingRecord(validatedData);
+      
+      // Send training confirmation email by deriving recipient email from project's lead
+      try {
+        const project = await storage.getProject(req.params.id);
+        
+        if (project && project.leadId) {
+          const lead = await storage.getLead(project.leadId);
+          const module = await storage.getModule(newTraining.moduleId);
+          
+          if (lead && lead.contactEmail && module) {
+            await sendTrainingConfirmationEmail(
+              lead.contactEmail,
+              lead.contactPerson,
+              project.clientName,
+              module.name,
+              newTraining.trainingDate,
+              newTraining.trainingHours
+            );
+          }
+        }
+      } catch (emailError) {
+        // Log error but don't block training record creation
+        console.error("Failed to send training confirmation email:", emailError);
+      }
       
       // Log activity
       await storage.logActivity({
@@ -568,8 +607,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
-      // Placeholder: In production, send feedback email here
-      console.log(`Feedback email would be sent to: ${updated.customerEmail}`);
+      // Send feedback email
+      if (updated.customerEmail && updated.customerName && updated.issueSummary) {
+        await sendTicketClosureFeedbackEmail(
+          updated.customerEmail,
+          updated.customerName,
+          updated.ticketNumber,
+          updated.issueSummary
+        );
+      }
       
       res.json(updated);
     } catch (error) {

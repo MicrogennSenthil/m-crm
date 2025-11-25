@@ -198,6 +198,7 @@ Comprehensive Customer Relationship Management platform for managing sales pipel
 - ✅ Activity logging and audit trail
 - ✅ **Real Analytics**: Replaced all placeholder report data with actual database calculations (sales funnel, lead sources, project status, ticket metrics, customer satisfaction)
 - ✅ **Auto-Initialize Project Modules**: New projects automatically create all 8 module records with transaction wrapping for atomicity
+- ✅ **Email Integration (Resend)**: Automated transactional emails for quote sending and ticket closure feedback requests; email service module with HTML templates; future: training confirmations and welcome emails
 
 ## Future Enhancements (Post-MVP)
 - **Role-Based Authorization**: Add server-side role checks on sensitive endpoints
@@ -213,7 +214,8 @@ Comprehensive Customer Relationship Management platform for managing sales pipel
 
 ## Known Limitations (MVP)
 - Escalation is manual (user-triggered) rather than time-based automatic
-- Email feedback system has placeholder (console.log) instead of actual email sending
+- Training confirmation emails not yet active (requires recipientEmail field in schema)
+- Welcome emails not integrated into user creation flow yet
 - No file attachment support yet
 - No real-time notifications (polling only)
 - Limited role-based authorization on API endpoints (authentication only)
