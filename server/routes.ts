@@ -676,6 +676,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Advanced analytics routes
+  app.get("/api/reports/timeseries", isAuthenticated, async (req, res) => {
+    try {
+      const analytics = await storage.getTimeSeriesAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching time series analytics:", error);
+      res.status(500).json({ message: "Failed to fetch time series analytics" });
+    }
+  });
+
+  app.get("/api/reports/productivity", isAuthenticated, async (req, res) => {
+    try {
+      const analytics = await storage.getEngineerProductivity();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching engineer productivity:", error);
+      res.status(500).json({ message: "Failed to fetch engineer productivity" });
+    }
+  });
+
+  app.get("/api/reports/export/:type", isAuthenticated, async (req, res) => {
+    try {
+      const data = await storage.getExportData(req.params.type);
+      res.json(data);
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

@@ -123,6 +123,11 @@ export interface IStorage {
   getSalesAnalytics(): Promise<any>;
   getProjectAnalytics(): Promise<any>;
   getTicketAnalytics(): Promise<any>;
+
+  // Advanced analytics
+  getTimeSeriesAnalytics(): Promise<any>;
+  getEngineerProductivity(): Promise<any>;
+  getExportData(type: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -679,6 +684,203 @@ export class DatabaseStorage implements IStorage {
       avgFirstResponseTime,
       customerSatisfaction: customerSatisfaction || 87,
     };
+  }
+
+  // Time Series Analytics (leads and tickets over time)
+  async getTimeSeriesAnalytics(): Promise<any> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get leads created over last 30 days grouped by date
+    const leadsOverTime = await db
+      .select({
+        date: sql<string>`DATE(${leads.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(leads)
+      .where(gte(leads.createdAt, thirtyDaysAgo))
+      .groupBy(sql`DATE(${leads.createdAt})`)
+      .orderBy(sql`DATE(${leads.createdAt})`);
+
+    // Get tickets created over last 30 days grouped by date
+    const ticketsOverTime = await db
+      .select({
+        date: sql<string>`DATE(${tickets.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(tickets)
+      .where(gte(tickets.createdAt, thirtyDaysAgo))
+      .groupBy(sql`DATE(${tickets.createdAt})`)
+      .orderBy(sql`DATE(${tickets.createdAt})`);
+
+    // Get closed deals over time
+    const dealsOverTime = await db
+      .select({
+        date: sql<string>`DATE(${leads.updatedAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(leads)
+      .where(and(
+        eq(leads.stage, "closed_won"),
+        gte(leads.updatedAt, thirtyDaysAgo)
+      ))
+      .groupBy(sql`DATE(${leads.updatedAt})`)
+      .orderBy(sql`DATE(${leads.updatedAt})`);
+
+    // Fill in missing dates with zero counts
+    const dates: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      dates.push(d.toISOString().split("T")[0]);
+    }
+
+    const leadsByDate = new Map(leadsOverTime.map((l) => [l.date, Number(l.count)]));
+    const ticketsByDate = new Map(ticketsOverTime.map((t) => [t.date, Number(t.count)]));
+    const dealsByDate = new Map(dealsOverTime.map((d) => [d.date, Number(d.count)]));
+
+    const timeSeriesData = dates.map((date) => ({
+      date: new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      leads: leadsByDate.get(date) || 0,
+      tickets: ticketsByDate.get(date) || 0,
+      deals: dealsByDate.get(date) || 0,
+    }));
+
+    return { timeSeriesData };
+  }
+
+  // Engineer Productivity Analytics
+  async getEngineerProductivity(): Promise<any> {
+    // Get all engineers (support and engineer roles)
+    const engineers = await db
+      .select()
+      .from(users)
+      .where(sql`${users.role} IN ('engineer', 'support')`);
+
+    const productivityData = await Promise.all(
+      engineers.map(async (engineer) => {
+        // Tickets resolved by this engineer
+        const ticketsResolved = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(tickets)
+          .where(and(
+            eq(tickets.assignedEngineerId, engineer.id),
+            eq(tickets.status, "closed")
+          ));
+
+        // Active tickets
+        const activeTickets = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(tickets)
+          .where(and(
+            eq(tickets.assignedEngineerId, engineer.id),
+            sql`${tickets.status} != 'closed'`
+          ));
+
+        // Projects completed
+        const projectsCompleted = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(projectEngineers)
+          .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
+          .where(and(
+            eq(projectEngineers.engineerId, engineer.id),
+            eq(projects.status, "completed")
+          ));
+
+        // Active projects
+        const activeProjects = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(projectEngineers)
+          .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
+          .where(and(
+            eq(projectEngineers.engineerId, engineer.id),
+            sql`${projects.status} != 'completed'`
+          ));
+
+        // Training hours delivered
+        const trainingHours = await db
+          .select({ total: sql<number>`COALESCE(SUM(${trainingRecords.trainingHours}), 0)` })
+          .from(trainingRecords)
+          .innerJoin(projects, eq(trainingRecords.projectId, projects.id))
+          .innerJoin(projectEngineers, eq(projectEngineers.projectId, projects.id))
+          .where(eq(projectEngineers.engineerId, engineer.id));
+
+        return {
+          id: engineer.id,
+          name: `${engineer.firstName || ""} ${engineer.lastName || ""}`.trim() || engineer.email || "Unknown",
+          role: engineer.role,
+          ticketsResolved: Number(ticketsResolved[0]?.count || 0),
+          activeTickets: Number(activeTickets[0]?.count || 0),
+          projectsCompleted: Number(projectsCompleted[0]?.count || 0),
+          activeProjects: Number(activeProjects[0]?.count || 0),
+          trainingHours: Number(trainingHours[0]?.total || 0),
+        };
+      })
+    );
+
+    // Sort by tickets resolved + projects completed
+    productivityData.sort((a, b) => 
+      (b.ticketsResolved + b.projectsCompleted) - (a.ticketsResolved + a.projectsCompleted)
+    );
+
+    return { productivityData };
+  }
+
+  // Export Data
+  async getExportData(type: string): Promise<any> {
+    switch (type) {
+      case "leads":
+        const allLeads = await db
+          .select({
+            id: leads.id,
+            companyName: leads.companyName,
+            contactPerson: leads.contactPerson,
+            contactEmail: leads.contactEmail,
+            contactPhone: leads.contactPhone,
+            leadSource: leads.leadSource,
+            stage: leads.stage,
+            estimatedValue: leads.estimatedValue,
+            createdAt: leads.createdAt,
+          })
+          .from(leads)
+          .orderBy(desc(leads.createdAt));
+        return allLeads;
+
+      case "projects":
+        const allProjects = await db
+          .select({
+            id: projects.id,
+            clientName: projects.clientName,
+            status: projects.status,
+            completionPercentage: projects.completionPercentage,
+            implementationDate: projects.implementationDate,
+            createdAt: projects.createdAt,
+          })
+          .from(projects)
+          .orderBy(desc(projects.createdAt));
+        return allProjects;
+
+      case "tickets":
+        const allTickets = await db
+          .select({
+            id: tickets.id,
+            ticketNumber: tickets.ticketNumber,
+            customerName: tickets.customerName,
+            customerEmail: tickets.customerEmail,
+            issueSummary: tickets.issueSummary,
+            priority: tickets.priority,
+            status: tickets.status,
+            escalationLevel: tickets.escalationLevel,
+            createdAt: tickets.createdAt,
+            closedAt: tickets.closedAt,
+          })
+          .from(tickets)
+          .orderBy(desc(tickets.createdAt));
+        return allTickets;
+
+      default:
+        return [];
+    }
   }
 }
 
