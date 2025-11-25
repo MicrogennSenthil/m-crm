@@ -44,8 +44,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Users, Package, Search } from "lucide-react";
-import type { Customer, Module } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog } from "lucide-react";
+import type { Customer, Module, User, UserRole, UserRoleRight } from "@shared/schema";
 
 export default function Masters() {
   const [activeTab, setActiveTab] = useState("customers");
@@ -55,12 +56,12 @@ export default function Masters() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Master Data</h1>
         <p className="text-sm text-muted-foreground">
-          Manage customers and implementation modules
+          Manage customers, modules, users, roles, and permissions
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-        <TabsList className="w-full sm:w-auto">
+        <TabsList className="w-full flex-wrap gap-1">
           <TabsTrigger value="customers" data-testid="tab-customers" className="flex-1 sm:flex-none">
             <Users className="w-4 h-4 mr-2" />
             Customers
@@ -68,6 +69,18 @@ export default function Masters() {
           <TabsTrigger value="modules" data-testid="tab-modules" className="flex-1 sm:flex-none">
             <Package className="w-4 h-4 mr-2" />
             Modules
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users" className="flex-1 sm:flex-none">
+            <UserCog className="w-4 h-4 mr-2" />
+            Users
+          </TabsTrigger>
+          <TabsTrigger value="roles" data-testid="tab-roles" className="flex-1 sm:flex-none">
+            <Shield className="w-4 h-4 mr-2" />
+            User Roles
+          </TabsTrigger>
+          <TabsTrigger value="rights" data-testid="tab-rights" className="flex-1 sm:flex-none">
+            <Key className="w-4 h-4 mr-2" />
+            Role Rights
           </TabsTrigger>
         </TabsList>
 
@@ -77,6 +90,18 @@ export default function Masters() {
 
         <TabsContent value="modules">
           <ModulesTab />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <UsersTab />
+        </TabsContent>
+
+        <TabsContent value="roles">
+          <UserRolesTab />
+        </TabsContent>
+
+        <TabsContent value="rights">
+          <RoleRightsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -681,6 +706,946 @@ function ModuleForm({
         </Button>
         <Button type="submit" disabled={isPending || !formData.name} data-testid="button-save-module">
           {isPending ? "Saving..." : module ? "Update" : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// =============================================
+// USERS TAB
+// =============================================
+
+function UsersTab() {
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+
+  const { data: usersList = [], isLoading } = useQuery<User[]>({
+    queryKey: ["/api/users/all"],
+  });
+
+  const { data: rolesList = [] } = useQuery<UserRole[]>({
+    queryKey: ["/api/user-roles"],
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => {
+      return await apiRequest("PATCH", `/api/users/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
+      setEditingUser(null);
+      toast({ title: "User updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update user", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
+      setDeletingUser(null);
+      toast({ title: "User deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete user", variant: "destructive" });
+    },
+  });
+
+  const filteredUsers = usersList.filter(
+    (user) =>
+      user.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getRoleDisplayName = (roleName: string) => {
+    const role = rolesList.find((r) => r.name === roleName);
+    return role?.displayName || roleName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle className="text-base sm:text-lg">Users</CardTitle>
+            <CardDescription>Manage system users and their roles</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0">
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-users"
+            />
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array(5).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {searchTerm ? "No users found matching your search" : "No users registered yet."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                    <TableCell className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{user.email || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {getRoleDisplayName(user.role)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingUser(user)}
+                          data-testid={`button-edit-user-${user.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingUser(user)}
+                          data-testid={`button-delete-user-${user.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
+        <DialogContent>
+          {editingUser && (
+            <UserForm
+              user={editingUser}
+              roles={rolesList}
+              onSubmit={(data) => updateMutation.mutate({ id: editingUser.id, data })}
+              isPending={updateMutation.isPending}
+              onCancel={() => setEditingUser(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingUser} onOpenChange={() => setDeletingUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingUser?.firstName} {deletingUser?.lastName}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingUser && deleteMutation.mutate(deletingUser.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function UserForm({
+  user,
+  roles,
+  onSubmit,
+  isPending,
+  onCancel,
+}: {
+  user: User;
+  roles: UserRole[];
+  onSubmit: (data: Partial<User>) => void;
+  isPending: boolean;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    email: user.email || "",
+    role: user.role || "sales_executive",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>Edit User</DialogTitle>
+        <DialogDescription>Update user information and role assignment</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="user-firstName">First Name</Label>
+            <Input
+              id="user-firstName"
+              value={formData.firstName}
+              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              data-testid="input-user-firstname"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="user-lastName">Last Name</Label>
+            <Input
+              id="user-lastName"
+              value={formData.lastName}
+              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              data-testid="input-user-lastname"
+            />
+          </div>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="user-email">Email</Label>
+          <Input
+            id="user-email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            data-testid="input-user-email"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="user-role">Role</Label>
+          <Select
+            value={formData.role}
+            onValueChange={(value) => setFormData({ ...formData, role: value })}
+          >
+            <SelectTrigger data-testid="select-user-role">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.length > 0 ? (
+                roles.map((role) => (
+                  <SelectItem key={role.id} value={role.name}>
+                    {role.displayName}
+                  </SelectItem>
+                ))
+              ) : (
+                <>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="sales_executive">Sales Executive</SelectItem>
+                  <SelectItem value="engineer">Engineer</SelectItem>
+                  <SelectItem value="support">Support</SelectItem>
+                </>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending} data-testid="button-save-user">
+          {isPending ? "Saving..." : "Update"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// =============================================
+// USER ROLES TAB
+// =============================================
+
+function UserRolesTab() {
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<UserRole | null>(null);
+  const [deletingRole, setDeletingRole] = useState<UserRole | null>(null);
+
+  const { data: rolesList = [], isLoading } = useQuery<UserRole[]>({
+    queryKey: ["/api/user-roles"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Partial<UserRole>) => {
+      return await apiRequest("POST", "/api/user-roles", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-roles"] });
+      setIsAddOpen(false);
+      toast({ title: "User role created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create user role", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UserRole> }) => {
+      return await apiRequest("PATCH", `/api/user-roles/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-roles"] });
+      setEditingRole(null);
+      toast({ title: "User role updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update user role", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/user-roles/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-roles"] });
+      setDeletingRole(null);
+      toast({ title: "User role deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete user role. It may be in use.", variant: "destructive" });
+    },
+  });
+
+  const filteredRoles = rolesList.filter(
+    (role) =>
+      role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle className="text-base sm:text-lg">User Roles</CardTitle>
+            <CardDescription>Define roles and their access levels</CardDescription>
+          </div>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-role" className="min-h-[44px] sm:min-h-0">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Role
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <UserRoleForm
+                onSubmit={(data) => createMutation.mutate(data)}
+                isPending={createMutation.isPending}
+                onCancel={() => setIsAddOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0">
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search roles..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-roles"
+            />
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array(5).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : filteredRoles.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {searchTerm ? "No roles found matching your search" : "No roles defined yet. Add your first role."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Display Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Description</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRoles.map((role) => (
+                  <TableRow key={role.id} data-testid={`row-role-${role.id}`}>
+                    <TableCell className="font-mono text-sm">{role.name}</TableCell>
+                    <TableCell className="font-medium">{role.displayName}</TableCell>
+                    <TableCell className="hidden sm:table-cell max-w-md truncate">
+                      {role.description || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={role.isActive ? "default" : "secondary"}>
+                        {role.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingRole(role)}
+                          data-testid={`button-edit-role-${role.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingRole(role)}
+                          data-testid={`button-delete-role-${role.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={!!editingRole} onOpenChange={() => setEditingRole(null)}>
+        <DialogContent>
+          {editingRole && (
+            <UserRoleForm
+              role={editingRole}
+              onSubmit={(data) => updateMutation.mutate({ id: editingRole.id, data })}
+              isPending={updateMutation.isPending}
+              onCancel={() => setEditingRole(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingRole} onOpenChange={() => setDeletingRole(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User Role</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingRole?.displayName}"? Users with this role may lose access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingRole && deleteMutation.mutate(deletingRole.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function UserRoleForm({
+  role,
+  onSubmit,
+  isPending,
+  onCancel,
+}: {
+  role?: UserRole;
+  onSubmit: (data: Partial<UserRole>) => void;
+  isPending: boolean;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    name: role?.name || "",
+    displayName: role?.displayName || "",
+    description: role?.description || "",
+    isActive: role?.isActive ?? true,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>{role ? "Edit User Role" : "Add User Role"}</DialogTitle>
+        <DialogDescription>
+          {role ? "Update role information" : "Define a new user role for the system"}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-4">
+        <div className="grid gap-2">
+          <Label htmlFor="role-name">Role Name (System ID) *</Label>
+          <Input
+            id="role-name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().replace(/\s+/g, "_") })}
+            placeholder="e.g., sales_manager"
+            required
+            data-testid="input-role-name"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="role-displayName">Display Name *</Label>
+          <Input
+            id="role-displayName"
+            value={formData.displayName}
+            onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+            placeholder="e.g., Sales Manager"
+            required
+            data-testid="input-role-displayname"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="role-description">Description</Label>
+          <Textarea
+            id="role-description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            placeholder="Describe the role's responsibilities"
+            rows={3}
+            data-testid="input-role-description"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="role-isActive"
+            checked={formData.isActive}
+            onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked === true })}
+            data-testid="checkbox-role-active"
+          />
+          <Label htmlFor="role-isActive">Active</Label>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending || !formData.name || !formData.displayName} data-testid="button-save-role">
+          {isPending ? "Saving..." : role ? "Update" : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// =============================================
+// ROLE RIGHTS TAB
+// =============================================
+
+const AVAILABLE_MODULES = [
+  "dashboard",
+  "sales",
+  "implementations",
+  "support",
+  "reports",
+  "masters",
+];
+
+function RoleRightsTab() {
+  const { toast } = useToast();
+  const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingRight, setEditingRight] = useState<UserRoleRight | null>(null);
+  const [deletingRight, setDeletingRight] = useState<UserRoleRight | null>(null);
+
+  const { data: rolesList = [] } = useQuery<UserRole[]>({
+    queryKey: ["/api/user-roles"],
+  });
+
+  const { data: rightsList = [], isLoading } = useQuery<UserRoleRight[]>({
+    queryKey: ["/api/user-role-rights", selectedRoleId],
+    queryFn: async () => {
+      const url = selectedRoleId && selectedRoleId !== "all"
+        ? `/api/user-role-rights?roleId=${selectedRoleId}` 
+        : "/api/user-role-rights";
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch role rights");
+      return response.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Partial<UserRoleRight>) => {
+      return await apiRequest("POST", "/api/user-role-rights", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-role-rights"] });
+      setIsAddOpen(false);
+      toast({ title: "Role right created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create role right", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UserRoleRight> }) => {
+      return await apiRequest("PATCH", `/api/user-role-rights/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-role-rights"] });
+      setEditingRight(null);
+      toast({ title: "Role right updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update role right", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/user-role-rights/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-role-rights"] });
+      setDeletingRight(null);
+      toast({ title: "Role right deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete role right", variant: "destructive" });
+    },
+  });
+
+  const getRoleName = (roleId: string) => {
+    const role = rolesList.find((r) => r.id === roleId);
+    return role?.displayName || roleId;
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle className="text-base sm:text-lg">Role Rights</CardTitle>
+            <CardDescription>Configure module permissions for each role</CardDescription>
+          </div>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-right" className="min-h-[44px] sm:min-h-0">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Permission
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <RoleRightForm
+                roles={rolesList}
+                onSubmit={(data) => createMutation.mutate(data)}
+                isPending={createMutation.isPending}
+                onCancel={() => setIsAddOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0">
+        <div className="mb-4">
+          <Label className="mb-2 block">Filter by Role</Label>
+          <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+            <SelectTrigger data-testid="select-filter-role">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              {rolesList.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array(5).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : rightsList.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No permissions configured yet. Add permissions to define role access.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Module</TableHead>
+                  <TableHead className="text-center">View</TableHead>
+                  <TableHead className="text-center">Create</TableHead>
+                  <TableHead className="text-center">Edit</TableHead>
+                  <TableHead className="text-center">Delete</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rightsList.map((right) => (
+                  <TableRow key={right.id} data-testid={`row-right-${right.id}`}>
+                    <TableCell className="font-medium">{getRoleName(right.roleId)}</TableCell>
+                    <TableCell className="capitalize">{right.module}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={right.canView ? "default" : "secondary"} className="w-12">
+                        {right.canView ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={right.canCreate ? "default" : "secondary"} className="w-12">
+                        {right.canCreate ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={right.canEdit ? "default" : "secondary"} className="w-12">
+                        {right.canEdit ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={right.canDelete ? "default" : "secondary"} className="w-12">
+                        {right.canDelete ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingRight(right)}
+                          data-testid={`button-edit-right-${right.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingRight(right)}
+                          data-testid={`button-delete-right-${right.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={!!editingRight} onOpenChange={() => setEditingRight(null)}>
+        <DialogContent>
+          {editingRight && (
+            <RoleRightForm
+              right={editingRight}
+              roles={rolesList}
+              onSubmit={(data) => updateMutation.mutate({ id: editingRight.id, data })}
+              isPending={updateMutation.isPending}
+              onCancel={() => setEditingRight(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingRight} onOpenChange={() => setDeletingRight(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Permission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this permission? Users with this role may lose access to the module.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingRight && deleteMutation.mutate(deletingRight.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function RoleRightForm({
+  right,
+  roles,
+  onSubmit,
+  isPending,
+  onCancel,
+}: {
+  right?: UserRoleRight;
+  roles: UserRole[];
+  onSubmit: (data: Partial<UserRoleRight>) => void;
+  isPending: boolean;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    roleId: right?.roleId || "",
+    module: right?.module || "",
+    canView: right?.canView ?? true,
+    canCreate: right?.canCreate ?? false,
+    canEdit: right?.canEdit ?? false,
+    canDelete: right?.canDelete ?? false,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>{right ? "Edit Permission" : "Add Permission"}</DialogTitle>
+        <DialogDescription>
+          {right ? "Update role permission settings" : "Configure module permissions for a role"}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-4">
+        <div className="grid gap-2">
+          <Label htmlFor="right-role">Role *</Label>
+          <Select
+            value={formData.roleId}
+            onValueChange={(value) => setFormData({ ...formData, roleId: value })}
+            disabled={!!right}
+          >
+            <SelectTrigger data-testid="select-right-role">
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="right-module">Module *</Label>
+          <Select
+            value={formData.module}
+            onValueChange={(value) => setFormData({ ...formData, module: value })}
+            disabled={!!right}
+          >
+            <SelectTrigger data-testid="select-right-module">
+              <SelectValue placeholder="Select a module" />
+            </SelectTrigger>
+            <SelectContent>
+              {AVAILABLE_MODULES.map((mod) => (
+                <SelectItem key={mod} value={mod}>
+                  {mod.charAt(0).toUpperCase() + mod.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-3">
+          <Label>Permissions</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="right-canView"
+                checked={formData.canView}
+                onCheckedChange={(checked) => setFormData({ ...formData, canView: checked === true })}
+                data-testid="checkbox-right-view"
+              />
+              <Label htmlFor="right-canView">Can View</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="right-canCreate"
+                checked={formData.canCreate}
+                onCheckedChange={(checked) => setFormData({ ...formData, canCreate: checked === true })}
+                data-testid="checkbox-right-create"
+              />
+              <Label htmlFor="right-canCreate">Can Create</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="right-canEdit"
+                checked={formData.canEdit}
+                onCheckedChange={(checked) => setFormData({ ...formData, canEdit: checked === true })}
+                data-testid="checkbox-right-edit"
+              />
+              <Label htmlFor="right-canEdit">Can Edit</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="right-canDelete"
+                checked={formData.canDelete}
+                onCheckedChange={(checked) => setFormData({ ...formData, canDelete: checked === true })}
+                data-testid="checkbox-right-delete"
+              />
+              <Label htmlFor="right-canDelete">Can Delete</Label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending || !formData.roleId || !formData.module} data-testid="button-save-right">
+          {isPending ? "Saving..." : right ? "Update" : "Create"}
         </Button>
       </DialogFooter>
     </form>
