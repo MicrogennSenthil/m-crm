@@ -847,8 +847,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leads/:id/follow-ups", isAuthenticated, async (req: any, res) => {
     try {
+      // Convert date string to Date object
+      const followUpDate = req.body.followUpDate ? new Date(req.body.followUpDate) : undefined;
       const validatedData = insertFollowUpSchema.parse({
         ...req.body,
+        followUpDate,
         leadId: req.params.id,
       });
       const newFollowUp = await storage.createFollowUp(validatedData);

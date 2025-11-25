@@ -53,6 +53,7 @@ interface LeadDetailModalProps {
 export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [followUpNote, setFollowUpNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState<Date>();
+  const [followUpTime, setFollowUpTime] = useState("09:00");
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<InsertLead>>({});
   const { toast } = useToast();
@@ -124,9 +125,14 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const addFollowUpMutation = useMutation({
     mutationFn: async () => {
       if (!followUpNote || !followUpDate) return;
+      // Combine date and time
+      const [hours, minutes] = followUpTime.split(":").map(Number);
+      const dateWithTime = new Date(followUpDate);
+      dateWithTime.setHours(hours, minutes, 0, 0);
+      
       await apiRequest("POST", `/api/leads/${lead.id}/follow-ups`, {
         notes: followUpNote,
-        followUpDate: followUpDate.toISOString(),
+        followUpDate: dateWithTime.toISOString(),
         completed: false,
       });
     },
@@ -135,6 +141,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       setFollowUpNote("");
       setFollowUpDate(undefined);
+      setFollowUpTime("09:00");
       toast({
         title: "Success",
         description: "Follow-up added successfully",
@@ -467,13 +474,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     className="min-h-20"
                     data-testid="textarea-follow-up-note"
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
                           className={cn(
-                            "justify-start text-left font-normal flex-1",
+                            "justify-start text-left font-normal flex-1 min-w-[180px]",
                             !followUpDate && "text-muted-foreground"
                           )}
                           data-testid="button-select-follow-up-date"
@@ -491,6 +498,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         />
                       </PopoverContent>
                     </Popover>
+                    <Input
+                      type="time"
+                      value={followUpTime}
+                      onChange={(e) => setFollowUpTime(e.target.value)}
+                      className="w-[100px]"
+                      data-testid="input-follow-up-time"
+                    />
                     <Button
                       onClick={() => addFollowUpMutation.mutate()}
                       disabled={!followUpNote || !followUpDate || addFollowUpMutation.isPending}
@@ -534,7 +548,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                             {followUp.notes}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {format(new Date(followUp.followUpDate), "PPP")}
+                            {format(new Date(followUp.followUpDate), "PPP 'at' h:mm a")}
                           </p>
                         </div>
                       </div>
