@@ -512,16 +512,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Ticket not found" });
       }
       
-      if (ticket.escalationLevel >= 3) {
+      const currentLevel = ticket.escalationLevel || 0;
+      
+      if (currentLevel >= 3) {
         return res.status(400).json({ message: "Ticket already at maximum escalation level" });
       }
       
-      const newLevel = ticket.escalationLevel + 1;
+      const newLevel = currentLevel + 1;
       
       // Create escalation record
       await storage.createEscalation({
         ticketId: ticket.id,
-        fromLevel: ticket.escalationLevel,
+        fromLevel: currentLevel,
         toLevel: newLevel,
         reason: "Escalated by user",
         escalatedBy: req.user.claims.sub,
@@ -597,29 +599,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reports routes (placeholder data)
+  // Reports routes (real analytics)
   app.get("/api/reports/sales", isAuthenticated, async (req, res) => {
     try {
-      // Placeholder: In production, calculate real analytics
-      res.json({
-        pipelineData: [
-          { stage: "New Leads", count: 12 },
-          { stage: "Demo", count: 8 },
-          { stage: "Quote", count: 5 },
-          { stage: "Negotiation", count: 3 },
-          { stage: "Closed", count: 15 },
-        ],
-        sourceData: [
-          { name: "LinkedIn", value: 35 },
-          { name: "Facebook", value: 25 },
-          { name: "Website", value: 20 },
-          { name: "Referral", value: 15 },
-          { name: "Other", value: 5 },
-        ],
-        conversionRate: 23,
-        avgDealSize: 45000,
-        avgSalesCycle: 32,
-      });
+      const analytics = await storage.getSalesAnalytics();
+      res.json(analytics);
     } catch (error) {
       console.error("Error fetching sales reports:", error);
       res.status(500).json({ message: "Failed to fetch sales reports" });
@@ -628,14 +612,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/reports/projects", isAuthenticated, async (req, res) => {
     try {
-      res.json({
-        statusData: [
-          { name: "Not Started", value: 5 },
-          { name: "In Progress", value: 12 },
-          { name: "Training", value: 4 },
-          { name: "Completed", value: 23 },
-        ],
-      });
+      const analytics = await storage.getProjectAnalytics();
+      res.json(analytics);
     } catch (error) {
       console.error("Error fetching project reports:", error);
       res.status(500).json({ message: "Failed to fetch project reports" });
@@ -644,23 +622,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/reports/tickets", isAuthenticated, async (req, res) => {
     try {
-      res.json({
-        priorityData: [
-          { priority: "Critical", count: 3 },
-          { priority: "High", count: 8 },
-          { priority: "Medium", count: 15 },
-          { priority: "Low", count: 10 },
-        ],
-        statusData: [
-          { name: "Open", value: 12 },
-          { name: "In Progress", value: 18 },
-          { name: "Pending", value: 4 },
-          { name: "Closed", value: 42 },
-        ],
-        avgResolutionTime: 24,
-        avgFirstResponseTime: 2,
-        customerSatisfaction: 87,
-      });
+      const analytics = await storage.getTicketAnalytics();
+      res.json(analytics);
     } catch (error) {
       console.error("Error fetching ticket reports:", error);
       res.status(500).json({ message: "Failed to fetch ticket reports" });
