@@ -109,6 +109,7 @@ export const customers = pgTable("customers", {
   pincode: text("pincode"),
   status: text("status").notNull().default("active"), // active, inactive
   customerType: text("customer_type").default("prospect"), // prospect, customer, partner
+  selectedModules: text("selected_modules").array(), // Modules the customer is interested in
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
