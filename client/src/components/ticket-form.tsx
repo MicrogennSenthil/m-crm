@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { insertTicketSchema, type InsertTicket, type Project, type Customer } from "@shared/schema";
+import { insertTicketSchema, type InsertTicket, type Project, type Customer, type Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -24,8 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus } from "lucide-react";
-import { useState } from "react";
+import { Building2, Plus, Camera, Upload, X, Image, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
 
 const PRIORITIES = [
   { value: "low", label: "Low" },
@@ -38,9 +38,19 @@ interface TicketFormProps {
   onSuccess?: () => void;
 }
 
+interface UploadedImage {
+  url: string;
+  name: string;
+  uploading?: boolean;
+}
+
 export function TicketForm({ onSuccess }: TicketFormProps) {
   const { toast } = useToast();
   const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -50,11 +60,16 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     queryKey: ["/api/customers"],
   });
 
+  const { data: modules } = useQuery<Module[]>({
+    queryKey: ["/api/modules"],
+  });
+
   const form = useForm<InsertTicket>({
     resolver: zodResolver(insertTicketSchema),
     defaultValues: {
       customerId: undefined,
       projectId: undefined,
+      moduleId: undefined,
       customerName: "",
       customerEmail: "",
       customerPhone: "",
@@ -64,6 +79,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
       status: "open",
       assignedEngineerId: undefined,
       escalationLevel: 1,
+      attachments: [],
     },
   });
 
@@ -103,9 +119,103 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     }
   };
 
+  const uploadImage = async (file: File) => {
+    const tempId = Date.now().toString();
+    setUploadedImages(prev => [...prev, { url: tempId, name: file.name, uploading: true }]);
+    setIsUploading(true);
+
+    try {
+      const uploadUrlResponse = await fetch("/api/objects/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fileName: file.name }),
+      });
+
+      if (!uploadUrlResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+
+      const { uploadURL, objectPath } = await uploadUrlResponse.json();
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload file");
+      }
+
+      setUploadedImages(prev => 
+        prev.map(img => 
+          img.url === tempId 
+            ? { url: objectPath, name: file.name, uploading: false }
+            : img
+        )
+      );
+
+      toast({
+        title: "Image uploaded",
+        description: file.name,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      setUploadedImages(prev => prev.filter(img => img.url !== tempId));
+      toast({
+        title: "Upload failed",
+        description: `Failed to upload ${file.name}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const maxFileSize = 10 * 1024 * 1024;
+
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid file type",
+          description: "Only images are allowed",
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      if (file.size > maxFileSize) {
+        toast({
+          title: "File too large",
+          description: `${file.name} exceeds the 10MB limit`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      await uploadImage(file);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const removeImage = (url: string) => {
+    setUploadedImages(prev => prev.filter(img => img.url !== url));
+  };
+
   const createTicketMutation = useMutation({
     mutationFn: async (data: InsertTicket) => {
-      await apiRequest("POST", "/api/tickets", data);
+      const attachmentUrls = uploadedImages.filter(img => !img.uploading).map(img => img.url);
+      await apiRequest("POST", "/api/tickets", {
+        ...data,
+        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
@@ -142,12 +252,12 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   };
 
   const activeCustomers = customers?.filter(c => c.status === "active") || [];
+  const activeModules = modules?.filter(m => m.isActive) || [];
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-4">
-          {/* Customer Selection */}
           <div className="p-4 border rounded-lg bg-muted/30">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-4 w-4 text-primary" />
@@ -259,6 +369,34 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
 
             <FormField
               control={form.control}
+              name="moduleId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Related Module</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-module">
+                        <SelectValue placeholder="Select module for the issue" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {activeModules.map((module) => (
+                        <SelectItem key={module.id} value={module.id}>
+                          {module.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Select the module related to this support query
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="priority"
               render={({ field }) => (
                 <FormItem>
@@ -315,12 +453,100 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               </FormItem>
             )}
           />
+
+          <div className="space-y-3">
+            <FormLabel>Attachments</FormLabel>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                data-testid="button-attach-image"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Attach Image
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isUploading}
+                data-testid="button-take-photo"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                Take Photo
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+                data-testid="input-file-attach"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelect}
+                data-testid="input-camera-capture"
+              />
+            </div>
+            <FormDescription>
+              Upload screenshots or photos to help describe the issue (max 10MB per image)
+            </FormDescription>
+
+            {uploadedImages.length > 0 && (
+              <div className="flex flex-wrap gap-3 mt-3">
+                {uploadedImages.map((img, index) => (
+                  <div
+                    key={img.url}
+                    className="relative group border rounded-lg overflow-hidden w-20 h-20 bg-muted"
+                    data-testid={`attachment-preview-${index}`}
+                  >
+                    {img.uploading ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Image className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
+                            onClick={() => removeImage(img.url)}
+                            data-testid={`button-remove-attachment-${index}`}
+                          >
+                            <X className="h-5 w-5" />
+                          </Button>
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 truncate">
+                          {img.name}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
           <Button
             type="submit"
-            disabled={createTicketMutation.isPending}
+            disabled={createTicketMutation.isPending || isUploading}
             data-testid="button-submit-ticket"
           >
             {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
