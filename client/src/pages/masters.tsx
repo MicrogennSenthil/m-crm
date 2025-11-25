@@ -64,7 +64,7 @@ export default function Masters() {
         <TabsList className="w-full flex-wrap gap-1">
           <TabsTrigger value="customers" data-testid="tab-customers" className="flex-1 sm:flex-none">
             <Users className="w-4 h-4 mr-2" />
-            Company Master
+            Customer Master
           </TabsTrigger>
           <TabsTrigger value="modules" data-testid="tab-modules" className="flex-1 sm:flex-none">
             <Package className="w-4 h-4 mr-2" />
@@ -176,14 +176,14 @@ function CustomersTab() {
       <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <CardTitle className="text-base sm:text-lg">Company Master</CardTitle>
-            <CardDescription>Manage companies and existing customers</CardDescription>
+            <CardTitle className="text-base sm:text-lg">Customer Master</CardTitle>
+            <CardDescription>Manage customers and their contact information</CardDescription>
           </div>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-customer" className="min-h-[44px] sm:min-h-0">
                 <Plus className="w-4 h-4 mr-2" />
-                Add Company
+                Add Customer
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -201,7 +201,7 @@ function CustomersTab() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search companies..."
+              placeholder="Search customers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -218,14 +218,14 @@ function CustomersTab() {
           </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            {searchTerm ? "No companies found matching your search" : "No companies yet. Add your first company."}
+            {searchTerm ? "No customers found matching your search" : "No customers yet. Add your first customer."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Company Name</TableHead>
+                  <TableHead>Customer Name</TableHead>
                   <TableHead className="hidden sm:table-cell">Contact Person</TableHead>
                   <TableHead className="hidden md:table-cell">Email</TableHead>
                   <TableHead className="hidden lg:table-cell">Phone</TableHead>
@@ -297,7 +297,7 @@ function CustomersTab() {
       <AlertDialog open={!!deletingCustomer} onOpenChange={() => setDeletingCustomer(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Company</AlertDialogTitle>
+            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deletingCustomer?.name}"? This action cannot be undone.
             </AlertDialogDescription>
@@ -358,20 +358,20 @@ function CustomerForm({
   return (
     <form onSubmit={handleSubmit}>
       <DialogHeader>
-        <DialogTitle>{customer ? "Edit Company" : "Add Company"}</DialogTitle>
+        <DialogTitle>{customer ? "Edit Customer" : "Add Customer"}</DialogTitle>
         <DialogDescription>
-          {customer ? "Update company information" : "Add a new company to the system"}
+          {customer ? "Update customer information" : "Add a new customer to the system"}
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
-          <Label htmlFor="name">Company Name *</Label>
+          <Label htmlFor="name">Customer Name *</Label>
           <Input
             id="name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
-            placeholder="Enter company name"
+            placeholder="Enter customer/company name"
             data-testid="input-customer-name"
           />
         </div>

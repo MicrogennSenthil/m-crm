@@ -146,18 +146,18 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
           <div className="p-4 border rounded-lg bg-muted/30">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-4 w-4 text-primary" />
-              <span className="font-medium text-sm">Select Company</span>
+              <span className="font-medium text-sm">Select Customer</span>
             </div>
             
             <Select onValueChange={handleCompanySelect} value={form.watch("customerId") || (isNewCompany ? "new" : undefined)}>
-              <SelectTrigger data-testid="select-company">
-                <SelectValue placeholder="Select from Company Master or add new" />
+              <SelectTrigger data-testid="select-customer">
+                <SelectValue placeholder="Select from Customer Master or add new" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="new">
                   <div className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
-                    <span>Add New Company</span>
+                    <span>Add New Customer</span>
                   </div>
                 </SelectItem>
                 {activeCompanies.map((company) => (
@@ -174,7 +174,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
             </Select>
             {!isNewCompany && form.watch("customerId") && (
               <FormDescription className="mt-2">
-                Contact details will be auto-filled from Company Master
+                Contact details will be auto-filled from Customer Master
               </FormDescription>
             )}
           </div>
@@ -185,10 +185,10 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
               name="companyName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Company Name</FormLabel>
+                  <FormLabel>Customer Name</FormLabel>
                   <FormControl>
                     <Input 
-                      placeholder="Acme Inc." 
+                      placeholder="Customer/Company name" 
                       {...field} 
                       disabled={!isNewCompany && !!form.watch("customerId")}
                       data-testid="input-company-name" 
