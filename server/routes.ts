@@ -1141,7 +1141,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/project-modules/:id", isAuthenticated, async (req, res) => {
     try {
-      const updated = await storage.updateProjectModule(req.params.id, req.body);
+      let updateData = { ...req.body };
+      
+      // Convert completedAt string to Date object
+      if (updateData.completedAt) {
+        updateData.completedAt = new Date(updateData.completedAt);
+      }
+      
+      const updated = await storage.updateProjectModule(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error("Error updating project module:", error);
