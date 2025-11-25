@@ -331,11 +331,13 @@ export const tickets = pgTable("tickets", {
   ticketNumber: text("ticket_number").notNull().unique(),
   customerId: varchar("customer_id").references(() => customers.id), // Link to Customer Master
   projectId: varchar("project_id").references(() => projects.id),
+  moduleId: varchar("module_id").references(() => modules.id), // Related module for the issue
   customerName: text("customer_name").notNull(), // Denormalized for display
   customerEmail: text("customer_email").notNull(),
   customerPhone: text("customer_phone"), // Contact phone
   issueSummary: text("issue_summary").notNull(),
   issueDescription: text("issue_description").notNull(),
+  attachments: text("attachments").array(), // Array of file URLs for images/attachments
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
   status: text("status").notNull().default("open"), // open, in_progress, pending_customer, escalated, closed
   assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
