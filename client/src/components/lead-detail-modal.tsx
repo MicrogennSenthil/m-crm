@@ -67,7 +67,6 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         leadSource: lead.leadSource,
         stage: lead.stage,
         estimatedValue: lead.estimatedValue || undefined,
-        notes: lead.notes || "",
         salesExecutiveId: lead.salesExecutiveId || undefined,
       });
     }
@@ -85,7 +84,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
 
   const { data: salesExecutives } = useQuery<User[]>({
     queryKey: ["/api/users", { role: "sales_executive" }],
-    enabled: open && isEditing,
+    enabled: open,
   });
 
   const updateLeadMutation = useMutation({
@@ -184,7 +183,6 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       leadSource: lead.leadSource,
       stage: lead.stage,
       estimatedValue: lead.estimatedValue || undefined,
-      notes: lead.notes || "",
       salesExecutiveId: lead.salesExecutiveId || undefined,
     });
   };
@@ -383,16 +381,6 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      value={editForm.notes || ""}
-                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                      className="min-h-20"
-                      data-testid="textarea-edit-notes"
-                    />
-                  </div>
                 </div>
               ) : (
                 <div className="space-y-2 text-sm">
@@ -413,12 +401,14 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <span className="text-muted-foreground">Days in stage:</span>
                     <span className="font-medium">{lead.daysInStage}</span>
                   </div>
-                  {lead.notes && (
-                    <div className="pt-2">
-                      <span className="text-muted-foreground">Notes:</span>
-                      <p className="mt-1 text-sm">{lead.notes}</p>
-                    </div>
-                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Assigned to:</span>
+                    <span className="font-medium">
+                      {lead.salesExecutiveId && salesExecutives
+                        ? salesExecutives.find(e => e.id === lead.salesExecutiveId)?.firstName + " " + salesExecutives.find(e => e.id === lead.salesExecutiveId)?.lastName
+                        : "Unassigned"}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
