@@ -169,6 +169,42 @@ export const insertFollowUpSchema = createInsertSchema(followUps).omit({
 export type InsertFollowUp = z.infer<typeof insertFollowUpSchema>;
 export type FollowUp = typeof followUps.$inferSelect;
 
+// Demo Date History table - Track all demo date changes
+export const demoDateHistory = pgTable("demo_date_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  demoDate: timestamp("demo_date").notNull(),
+  changedById: varchar("changed_by_id").references(() => users.id),
+  changeReason: text("change_reason"), // optional reason for reschedule
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDemoDateHistorySchema = createInsertSchema(demoDateHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDemoDateHistory = z.infer<typeof insertDemoDateHistorySchema>;
+export type DemoDateHistory = typeof demoDateHistory.$inferSelect;
+
+// Negotiation Date History table - Track all negotiation date changes
+export const negotiationDateHistory = pgTable("negotiation_date_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  negotiationDate: timestamp("negotiation_date").notNull(),
+  notes: text("notes"), // optional notes about this negotiation round
+  changedById: varchar("changed_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNegotiationDateHistorySchema = createInsertSchema(negotiationDateHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertNegotiationDateHistory = z.infer<typeof insertNegotiationDateHistorySchema>;
+export type NegotiationDateHistory = typeof negotiationDateHistory.$inferSelect;
+
 // Quotes table - Sales quotes sent to leads
 export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

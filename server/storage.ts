@@ -5,6 +5,8 @@ import {
   customers,
   leads,
   followUps,
+  demoDateHistory,
+  negotiationDateHistory,
   quotes,
   projects,
   projectEngineers,
@@ -30,6 +32,10 @@ import {
   type InsertLead,
   type FollowUp,
   type InsertFollowUp,
+  type DemoDateHistory,
+  type InsertDemoDateHistory,
+  type NegotiationDateHistory,
+  type InsertNegotiationDateHistory,
   type Quote,
   type InsertQuote,
   type Project,
@@ -101,6 +107,14 @@ export interface IStorage {
   getFollowUpsByLead(leadId: string): Promise<FollowUp[]>;
   createFollowUp(followUp: InsertFollowUp): Promise<FollowUp>;
   updateFollowUp(id: string, data: Partial<InsertFollowUp>): Promise<FollowUp>;
+
+  // Demo Date History operations
+  getDemoDateHistory(leadId: string): Promise<DemoDateHistory[]>;
+  createDemoDateHistory(history: InsertDemoDateHistory): Promise<DemoDateHistory>;
+
+  // Negotiation Date History operations
+  getNegotiationDateHistory(leadId: string): Promise<NegotiationDateHistory[]>;
+  createNegotiationDateHistory(history: InsertNegotiationDateHistory): Promise<NegotiationDateHistory>;
 
   // Quote operations
   getQuotesByLead(leadId: string): Promise<Quote[]>;
@@ -377,6 +391,34 @@ export class DatabaseStorage implements IStorage {
       .where(eq(followUps.id, id))
       .returning();
     return updated;
+  }
+
+  // Demo Date History operations
+  async getDemoDateHistory(leadId: string): Promise<DemoDateHistory[]> {
+    return await db
+      .select()
+      .from(demoDateHistory)
+      .where(eq(demoDateHistory.leadId, leadId))
+      .orderBy(desc(demoDateHistory.createdAt));
+  }
+
+  async createDemoDateHistory(history: InsertDemoDateHistory): Promise<DemoDateHistory> {
+    const [newHistory] = await db.insert(demoDateHistory).values(history).returning();
+    return newHistory;
+  }
+
+  // Negotiation Date History operations
+  async getNegotiationDateHistory(leadId: string): Promise<NegotiationDateHistory[]> {
+    return await db
+      .select()
+      .from(negotiationDateHistory)
+      .where(eq(negotiationDateHistory.leadId, leadId))
+      .orderBy(desc(negotiationDateHistory.createdAt));
+  }
+
+  async createNegotiationDateHistory(history: InsertNegotiationDateHistory): Promise<NegotiationDateHistory> {
+    const [newHistory] = await db.insert(negotiationDateHistory).values(history).returning();
+    return newHistory;
   }
 
   // Quote operations

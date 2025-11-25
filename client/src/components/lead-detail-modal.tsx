@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -110,6 +110,30 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
 
   const { data: salesExecutives } = useQuery<User[]>({
     queryKey: ["/api/users?role=sales_executive"],
+    enabled: open,
+  });
+
+  const { data: demoHistory } = useQuery<Array<{
+    id: string;
+    leadId: string;
+    demoDate: string;
+    changedById: string | null;
+    changeReason: string | null;
+    createdAt: string;
+  }>>({
+    queryKey: ["/api/leads", lead.id, "demo-history"],
+    enabled: open,
+  });
+
+  const { data: negotiationHistory } = useQuery<Array<{
+    id: string;
+    leadId: string;
+    negotiationDate: string;
+    notes: string | null;
+    changedById: string | null;
+    createdAt: string;
+  }>>({
+    queryKey: ["/api/leads", lead.id, "negotiation-history"],
     enabled: open,
   });
 
@@ -215,6 +239,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "demo-history"] });
       setDemoDate(undefined);
       setDemoTime("10:00");
       toast({
@@ -294,6 +319,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "negotiation-history"] });
       setNegotiationDate(undefined);
       toast({
         title: "Negotiation Started",
@@ -682,6 +708,32 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   </div>
                 )}
                 
+                {/* Demo Date History */}
+                {demoHistory && demoHistory.length > 0 && (
+                  <div className="mb-3 p-3 border rounded-md">
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                      <History className="h-3 w-3" />
+                      Demo Schedule History ({demoHistory.length} changes)
+                    </h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {demoHistory.map((item, index) => (
+                        <div key={item.id} className="flex items-center justify-between text-xs border-b last:border-b-0 pb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "w-2 h-2 rounded-full",
+                              index === 0 ? "bg-primary" : "bg-muted-foreground/30"
+                            )} />
+                            <span>{format(new Date(item.demoDate), "PPP 'at' h:mm a")}</span>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {item.changeReason || "Scheduled"} - {format(new Date(item.createdAt), "MMM d")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 {/* Schedule Demo Form - Only show if lead is in new_lead or to reschedule */}
                 <div className="p-4 border rounded-md space-y-3">
                   <p className="text-sm text-muted-foreground">
@@ -857,17 +909,45 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded-md">
                     <div className="flex items-center gap-2 text-sm">
                       <Handshake className="h-4 w-4 text-orange-600" />
-                      <span className="font-medium">Negotiation Started:</span>
+                      <span className="font-medium">Latest Negotiation:</span>
                       <span>{format(new Date(lead.negotiationDate), "PPP")}</span>
                     </div>
                   </div>
                 )}
                 
-                {/* Start Negotiation Form */}
-                {(lead.stage === "quote_sent" || lead.stage === "demo_scheduled") && !lead.negotiationDate && (
+                {/* Negotiation Date History */}
+                {negotiationHistory && negotiationHistory.length > 0 && (
+                  <div className="mb-3 p-3 border rounded-md">
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                      <History className="h-3 w-3" />
+                      Negotiation History ({negotiationHistory.length} rounds)
+                    </h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {negotiationHistory.map((item, index) => (
+                        <div key={item.id} className="flex items-center justify-between text-xs border-b last:border-b-0 pb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "w-2 h-2 rounded-full",
+                              index === 0 ? "bg-orange-500" : "bg-muted-foreground/30"
+                            )} />
+                            <span>{format(new Date(item.negotiationDate), "PPP")}</span>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {item.notes || "Negotiation"} - {format(new Date(item.createdAt), "MMM d")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Start Negotiation Form - Show for continuing negotiations or starting new ones */}
+                {(lead.stage === "quote_sent" || lead.stage === "demo_scheduled" || lead.stage === "negotiation") && (
                   <div className="p-4 border rounded-md space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      Start negotiation to move lead to Negotiation stage:
+                      {lead.negotiationDate 
+                        ? "Record a follow-up negotiation round:"
+                        : "Start negotiation to move lead to Negotiation stage:"}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <Popover>
@@ -899,7 +979,11 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         data-testid="button-start-negotiation"
                       >
                         <Handshake className="h-4 w-4 mr-2" />
-                        {startNegotiationMutation.isPending ? "Starting..." : "Start Negotiation"}
+                        {startNegotiationMutation.isPending 
+                          ? "Recording..." 
+                          : lead.negotiationDate 
+                            ? "Add Negotiation Round" 
+                            : "Start Negotiation"}
                       </Button>
                     </div>
                   </div>

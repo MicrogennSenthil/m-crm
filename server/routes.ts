@@ -587,6 +587,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activityDescription = `Demo scheduled for ${currentLead.companyName} on ${new Date(updateData.demoDate).toLocaleString()}`;
       }
       
+      // Track demo date changes in history
+      if (updateData.demoDate && currentLead) {
+        await storage.createDemoDateHistory({
+          leadId: req.params.id,
+          demoDate: updateData.demoDate,
+          changedById: req.user.claims.sub,
+          changeReason: currentLead.demoDate ? "Rescheduled" : "Initial scheduling",
+        });
+      }
+      
       // Auto-transition to quote_sent when quote is sent
       if (updateData.quoteSentDate && currentLead && 
           (currentLead.stage === "demo_scheduled" || currentLead.stage === "new_lead")) {
@@ -602,6 +612,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.stage = "negotiation";
         activityAction = "negotiation_started";
         activityDescription = `Negotiation started with ${currentLead.companyName} on ${new Date(updateData.negotiationDate).toLocaleString()}`;
+      }
+      
+      // Track negotiation date changes in history
+      if (updateData.negotiationDate && currentLead) {
+        await storage.createNegotiationDateHistory({
+          leadId: req.params.id,
+          negotiationDate: updateData.negotiationDate,
+          changedById: req.user.claims.sub,
+          notes: currentLead.negotiationDate ? "Follow-up negotiation" : "Initial negotiation",
+        });
       }
       
       // Handle deal closure (won or lost)
@@ -943,6 +963,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating follow-up:", error);
       res.status(400).json({ message: "Failed to update follow-up" });
+    }
+  });
+
+  // Demo Date History routes
+  app.get("/api/leads/:id/demo-history", isAuthenticated, async (req, res) => {
+    try {
+      const history = await storage.getDemoDateHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching demo date history:", error);
+      res.status(500).json({ message: "Failed to fetch demo date history" });
+    }
+  });
+
+  // Negotiation Date History routes
+  app.get("/api/leads/:id/negotiation-history", isAuthenticated, async (req, res) => {
+    try {
+      const history = await storage.getNegotiationDateHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching negotiation date history:", error);
+      res.status(500).json({ message: "Failed to fetch negotiation date history" });
     }
   });
 
