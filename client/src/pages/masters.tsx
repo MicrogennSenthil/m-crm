@@ -328,6 +328,10 @@ function CustomerForm({
   isPending: boolean;
   onCancel: () => void;
 }) {
+  const { data: modulesList = [] } = useQuery<Module[]>({
+    queryKey: ["/api/modules"],
+  });
+
   const [formData, setFormData] = useState({
     name: customer?.name || "",
     contactPerson: customer?.contactPerson || "",
@@ -347,8 +351,18 @@ function CustomerForm({
     pincode: customer?.pincode || "",
     status: customer?.status || "active",
     customerType: customer?.customerType || "prospect",
+    selectedModules: customer?.selectedModules || [] as string[],
     notes: customer?.notes || "",
   });
+
+  const handleModuleToggle = (moduleName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedModules: prev.selectedModules.includes(moduleName)
+        ? prev.selectedModules.filter(m => m !== moduleName)
+        : [...prev.selectedModules, moduleName]
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -593,6 +607,46 @@ function CustomerForm({
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Interested Modules</Label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Select the modules this customer is interested in
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 border rounded-md bg-muted/30">
+            {modulesList.length > 0 ? (
+              modulesList.map((module) => (
+                <div key={module.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`module-${module.id}`}
+                    checked={formData.selectedModules.includes(module.name)}
+                    onCheckedChange={() => handleModuleToggle(module.name)}
+                    data-testid={`checkbox-module-${module.id}`}
+                  />
+                  <Label 
+                    htmlFor={`module-${module.id}`} 
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    {module.name}
+                  </Label>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground col-span-full">
+                No modules available. Add modules in the Modules tab first.
+              </p>
+            )}
+          </div>
+          {formData.selectedModules.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {formData.selectedModules.map((moduleName) => (
+                <Badge key={moduleName} variant="secondary" className="text-xs">
+                  {moduleName}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-2">
