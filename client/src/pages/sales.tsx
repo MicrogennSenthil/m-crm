@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -203,6 +204,12 @@ export default function Sales() {
                         {lead.estimatedValue && (
                           <div className="text-sm font-medium">
                             ${lead.estimatedValue.toLocaleString()}
+                          </div>
+                        )}
+                        {lead.demoDate && (
+                          <div className="flex items-center gap-1 text-xs text-primary">
+                            <Clock className="h-3 w-3" />
+                            <span>{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
                           </div>
                         )}
                         <div className="flex items-center justify-between gap-2 text-xs flex-wrap">

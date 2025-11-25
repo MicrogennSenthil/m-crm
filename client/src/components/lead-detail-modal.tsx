@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video } from "lucide-react";
 import { format } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -54,6 +54,8 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [followUpNote, setFollowUpNote] = useState("");
   const [followUpDate, setFollowUpDate] = useState<Date>();
   const [followUpTime, setFollowUpTime] = useState("09:00");
+  const [demoDate, setDemoDate] = useState<Date>();
+  const [demoTime, setDemoTime] = useState("10:00");
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<InsertLead>>({});
   const { toast } = useToast();
@@ -173,6 +175,47 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "follow-ups"] });
+    },
+  });
+
+  const scheduleDemoMutation = useMutation({
+    mutationFn: async () => {
+      if (!demoDate) return;
+      const [hours, minutes] = demoTime.split(":").map(Number);
+      const dateWithTime = new Date(demoDate);
+      dateWithTime.setHours(hours, minutes, 0, 0);
+      
+      await apiRequest("PATCH", `/api/leads/${lead.id}`, {
+        demoDate: dateWithTime.toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      setDemoDate(undefined);
+      setDemoTime("10:00");
+      toast({
+        title: "Demo Scheduled",
+        description: "Demo has been scheduled and lead moved to Demo Scheduled stage",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to schedule demo",
+        variant: "destructive",
+      });
     },
   });
 
@@ -462,6 +505,77 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
           {/* Right: Activity Timeline & Follow-ups */}
           {!isEditing && (
             <div className="lg:col-span-2 space-y-4">
+              {/* Demo Scheduling Section */}
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  Demo Scheduling
+                </h3>
+                
+                {/* Current Demo Date Display */}
+                {lead.demoDate && (
+                  <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-md">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <span className="font-medium">Demo Scheduled:</span>
+                      <span>{format(new Date(lead.demoDate), "PPP 'at' h:mm a")}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Schedule Demo Form - Only show if lead is in new_lead or to reschedule */}
+                <div className="p-4 border rounded-md space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {lead.demoDate 
+                      ? "Reschedule demo to a different date/time:"
+                      : "Schedule a demo to automatically move this lead to Demo Scheduled stage:"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "justify-start text-left font-normal flex-1 min-w-[180px]",
+                            !demoDate && "text-muted-foreground"
+                          )}
+                          data-testid="button-select-demo-date"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {demoDate ? format(demoDate, "PPP") : "Pick demo date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={demoDate}
+                          onSelect={setDemoDate}
+                          initialFocus
+                          disabled={(date) => date < new Date()}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Input
+                      type="time"
+                      value={demoTime}
+                      onChange={(e) => setDemoTime(e.target.value)}
+                      className="w-[100px]"
+                      data-testid="input-demo-time"
+                    />
+                    <Button
+                      onClick={() => scheduleDemoMutation.mutate()}
+                      disabled={!demoDate || scheduleDemoMutation.isPending}
+                      data-testid="button-schedule-demo"
+                    >
+                      <Video className="h-4 w-4 mr-2" />
+                      {scheduleDemoMutation.isPending ? "Scheduling..." : lead.demoDate ? "Reschedule" : "Schedule Demo"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
               <div>
                 <h3 className="font-semibold mb-3">Follow-up Tracker</h3>
 

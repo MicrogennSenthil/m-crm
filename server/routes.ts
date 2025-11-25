@@ -558,14 +558,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/leads/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const updated = await storage.updateLead(req.params.id, req.body);
+      // Convert demoDate string to Date object if provided
+      let updateData = { ...req.body };
+      if (updateData.demoDate) {
+        updateData.demoDate = new Date(updateData.demoDate);
+      }
+      
+      // Get current lead to check stage
+      const currentLead = await storage.getLead(req.params.id);
+      
+      // Auto-transition to demo_scheduled when demo date is set and lead is in new_lead stage
+      if (updateData.demoDate && currentLead && currentLead.stage === "new_lead") {
+        updateData.stage = "demo_scheduled";
+      }
+      
+      const updated = await storage.updateLead(req.params.id, updateData);
       
       // Log activity
+      let activityDescription = `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`;
+      if (updateData.demoDate) {
+        const demoDateStr = new Date(updateData.demoDate).toLocaleString();
+        activityDescription = `Demo scheduled for ${updated.companyName} on ${demoDateStr}`;
+      }
+      
       await storage.logActivity({
         entityType: "lead",
         entityId: updated.id,
-        action: "updated",
-        description: `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`,
+        action: updateData.demoDate ? "demo_scheduled" : "updated",
+        description: activityDescription,
         userId: req.user.claims.sub,
       });
       

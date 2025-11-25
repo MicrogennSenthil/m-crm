@@ -125,6 +125,7 @@ export const leads = pgTable("leads", {
   estimatedValue: integer("estimated_value"), // in currency units
   stage: text("stage").notNull().default("new_lead"), // new_lead, demo_scheduled, quote_sent, negotiation, closed_won, closed_lost
   salesExecutiveId: varchar("sales_executive_id").references(() => users.id),
+  demoDate: timestamp("demo_date"), // Scheduled demo date and time
   daysInStage: integer("days_in_stage").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
