@@ -126,7 +126,8 @@ export type Customer = typeof customers.$inferSelect;
 // Leads table - Sales Pipeline
 export const leads = pgTable("leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyName: text("company_name").notNull(),
+  customerId: varchar("customer_id").references(() => customers.id), // Link to Company Master
+  companyName: text("company_name").notNull(), // Denormalized for display, auto-filled from customer
   contactPerson: text("contact_person").notNull(),
   contactEmail: text("contact_email").notNull(),
   contactPhone: text("contact_phone"),
