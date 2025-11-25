@@ -24,11 +24,12 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Building2, Plus } from "lucide-react";
+import { CalendarIcon, Building2, Plus, Package } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
 
 const STATUSES = [
   { value: "not_started", label: "Not Started" },
@@ -133,6 +134,31 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
   const activeCustomers = customers?.filter(c => c.status === "active") || [];
   const closedWonLeads = leads?.filter(l => l.stage === "closed_won") || [];
 
+  // Watch form values for module display
+  const watchedLeadId = form.watch("leadId");
+  const watchedCustomerId = form.watch("customerId");
+
+  // Get selected modules from customer or lead
+  const selectedModules = useMemo(() => {
+    // First check if there's a selected lead with modules
+    if (watchedLeadId) {
+      const selectedLead = leads?.find(l => l.id === watchedLeadId);
+      if (selectedLead?.selectedModules?.length) {
+        return selectedLead.selectedModules;
+      }
+    }
+    
+    // Fall back to customer's selected modules
+    if (watchedCustomerId) {
+      const selectedCustomer = customers?.find(c => c.id === watchedCustomerId);
+      if (selectedCustomer?.selectedModules?.length) {
+        return selectedCustomer.selectedModules;
+      }
+    }
+    
+    return [];
+  }, [watchedLeadId, watchedCustomerId, leads, customers]);
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -173,6 +199,26 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
               </FormDescription>
             )}
           </div>
+
+          {/* Display selected modules from customer/lead */}
+          {selectedModules.length > 0 && (
+            <div className="p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center gap-2 mb-3">
+                <Package className="h-4 w-4 text-primary" />
+                <span className="font-medium text-sm">Modules to Implement</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                These modules were selected during the sales process
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectedModules.map((moduleName) => (
+                  <Badge key={moduleName} variant="secondary">
+                    {moduleName}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
