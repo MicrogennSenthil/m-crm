@@ -719,6 +719,7 @@ function ModuleForm({
 function UsersTab() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
@@ -728,6 +729,20 @@ function UsersTab() {
 
   const { data: rolesList = [] } = useQuery<UserRole[]>({
     queryKey: ["/api/user-roles"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Partial<User>) => {
+      return await apiRequest("POST", "/api/users", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
+      setIsAddOpen(false);
+      toast({ title: "User created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create user", variant: "destructive" });
+    },
   });
 
   const updateMutation = useMutation({
@@ -778,6 +793,24 @@ function UsersTab() {
             <CardTitle className="text-base sm:text-lg">Users</CardTitle>
             <CardDescription>Manage system users and their roles</CardDescription>
           </div>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-user" className="min-h-[44px] sm:min-h-0">
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              {isAddOpen && (
+                <UserForm
+                  roles={rolesList}
+                  onSubmit={(data) => createMutation.mutate(data)}
+                  isPending={createMutation.isPending}
+                  onCancel={() => setIsAddOpen(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
       <CardContent className="p-4 sm:p-6 pt-0">
@@ -899,17 +932,18 @@ function UserForm({
   isPending,
   onCancel,
 }: {
-  user: User;
+  user?: User;
   roles: UserRole[];
   onSubmit: (data: Partial<User>) => void;
   isPending: boolean;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
-    firstName: user.firstName || "",
-    lastName: user.lastName || "",
-    email: user.email || "",
-    role: user.role || "sales_executive",
+    id: user?.id || crypto.randomUUID(),
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+    role: user?.role || "sales_executive",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -917,45 +951,52 @@ function UserForm({
     onSubmit(formData);
   };
 
+  const isEditing = !!user;
+
   return (
     <form onSubmit={handleSubmit}>
       <DialogHeader>
-        <DialogTitle>Edit User</DialogTitle>
-        <DialogDescription>Update user information and role assignment</DialogDescription>
+        <DialogTitle>{isEditing ? "Edit User" : "Add User"}</DialogTitle>
+        <DialogDescription>
+          {isEditing ? "Update user information and role assignment" : "Create a new user account"}
+        </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 py-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="user-firstName">First Name</Label>
+            <Label htmlFor="user-firstName">First Name *</Label>
             <Input
               id="user-firstName"
               value={formData.firstName}
               onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              required
               data-testid="input-user-firstname"
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="user-lastName">Last Name</Label>
+            <Label htmlFor="user-lastName">Last Name *</Label>
             <Input
               id="user-lastName"
               value={formData.lastName}
               onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              required
               data-testid="input-user-lastname"
             />
           </div>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="user-email">Email</Label>
+          <Label htmlFor="user-email">Email *</Label>
           <Input
             id="user-email"
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
             data-testid="input-user-email"
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="user-role">Role</Label>
+          <Label htmlFor="user-role">Role *</Label>
           <Select
             value={formData.role}
             onValueChange={(value) => setFormData({ ...formData, role: value })}
@@ -986,8 +1027,12 @@ function UserForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isPending} data-testid="button-save-user">
-          {isPending ? "Saving..." : "Update"}
+        <Button 
+          type="submit" 
+          disabled={isPending || !formData.firstName || !formData.lastName || !formData.email} 
+          data-testid="button-save-user"
+        >
+          {isPending ? "Saving..." : isEditing ? "Update" : "Create"}
         </Button>
       </DialogFooter>
     </form>

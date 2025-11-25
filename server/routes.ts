@@ -251,6 +251,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/users", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertUserSchema.parse(req.body);
+      const newUser = await storage.createUser(validatedData);
+      
+      await storage.logActivity({
+        entityType: "user",
+        entityId: newUser.id,
+        action: "created",
+        description: `New user created: ${newUser.firstName} ${newUser.lastName}`,
+        userId: req.user.claims.sub,
+      });
+
+      // Send welcome email to new user if email is provided
+      if (newUser.email) {
+        try {
+          await sendWelcomeEmail(newUser.email, newUser.firstName || "User", newUser.role || "user");
+        } catch (emailError) {
+          console.error("Failed to send welcome email:", emailError);
+        }
+      }
+      
+      res.json(newUser);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      res.status(400).json({ message: "Failed to create user" });
+    }
+  });
+
   app.patch("/api/users/:id", isAuthenticated, async (req: any, res) => {
     try {
       const updated = await storage.updateUser(req.params.id, req.body);
