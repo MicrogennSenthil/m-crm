@@ -198,12 +198,15 @@ Comprehensive Customer Relationship Management platform for managing sales pipel
 - ✅ Activity logging and audit trail
 - ✅ **Real Analytics**: Replaced all placeholder report data with actual database calculations (sales funnel, lead sources, project status, ticket metrics, customer satisfaction)
 - ✅ **Auto-Initialize Project Modules**: New projects automatically create all 8 module records with transaction wrapping for atomicity
-- ✅ **Email Integration (Resend)**: Automated transactional emails for quote sending and ticket closure feedback requests; email service module with HTML templates; future: training confirmations and welcome emails
+- ✅ **Email Integration (Resend)**: Complete email automation system with four email types:
+  - Quote emails: Sent when quotes are created for leads
+  - Ticket closure feedback: Customer satisfaction survey on ticket resolution with reopen capability
+  - Training confirmations: Automated emails derived from project→lead relationship with module details
+  - Welcome emails: Sent to new users on first login with role-specific feature highlights
 
 ## Future Enhancements (Post-MVP)
 - **Role-Based Authorization**: Add server-side role checks on sensitive endpoints
 - **Automated Escalation**: Time-based auto-escalation after SLA thresholds
-- **Email Integration**: Send actual feedback emails on ticket closure
 - **Notification System**: Real-time notifications for assignments and escalations
 - **Advanced Analytics**: Custom date ranges, export to CSV/PDF, drill-down reports
 - **File Attachments**: Support file uploads for leads, tickets, training records
@@ -214,8 +217,6 @@ Comprehensive Customer Relationship Management platform for managing sales pipel
 
 ## Known Limitations (MVP)
 - Escalation is manual (user-triggered) rather than time-based automatic
-- Training confirmation emails not yet active (requires recipientEmail field in schema)
-- Welcome emails not integrated into user creation flow yet
 - No file attachment support yet
 - No real-time notifications (polling only)
 - Limited role-based authorization on API endpoints (authentication only)
