@@ -253,8 +253,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProject(project: InsertProject): Promise<Project> {
-    const [newProject] = await db.insert(projects).values(project).returning();
-    return newProject;
+    // Wrap project creation and module initialization in a transaction
+    return await db.transaction(async (tx) => {
+      // Create the project
+      const [newProject] = await tx.insert(projects).values(project).returning();
+      
+      // Auto-initialize project modules for all available modules
+      const allModules = await tx.select().from(modules).orderBy(modules.name);
+      
+      if (allModules.length > 0) {
+        const projectModuleValues = allModules.map(module => ({
+          projectId: newProject.id,
+          moduleId: module.id,
+          completed: false,
+        }));
+        
+        await tx.insert(projectModules).values(projectModuleValues);
+      }
+      
+      return newProject;
+    });
   }
 
   async updateProject(id: string, data: Partial<InsertProject>): Promise<Project> {
