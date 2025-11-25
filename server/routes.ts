@@ -7,6 +7,7 @@ import { users, modules, projectModules, projectEngineers, tickets, ticketCommen
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail } from "./email";
 import { eq } from "drizzle-orm";
 import {
+  insertCustomerSchema,
   insertLeadSchema,
   insertFollowUpSchema,
   insertQuoteSchema,
@@ -57,6 +58,188 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
+
+  // =============================================
+  // MASTER DATA ROUTES
+  // =============================================
+
+  // Customer Master routes
+  app.get("/api/customers", isAuthenticated, async (req, res) => {
+    try {
+      const customersList = await storage.getCustomers();
+      res.json(customersList);
+    } catch (error) {
+      console.error("Error fetching customers:", error);
+      res.status(500).json({ message: "Failed to fetch customers" });
+    }
+  });
+
+  app.get("/api/customers/:id", isAuthenticated, async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.id);
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error) {
+      console.error("Error fetching customer:", error);
+      res.status(500).json({ message: "Failed to fetch customer" });
+    }
+  });
+
+  app.post("/api/customers", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertCustomerSchema.parse(req.body);
+      const newCustomer = await storage.createCustomer(validatedData);
+      
+      await storage.logActivity({
+        entityType: "customer",
+        entityId: newCustomer.id,
+        action: "created",
+        description: `New customer created: ${newCustomer.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newCustomer);
+    } catch (error) {
+      console.error("Error creating customer:", error);
+      res.status(400).json({ message: "Failed to create customer" });
+    }
+  });
+
+  app.patch("/api/customers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateCustomer(req.params.id, req.body);
+      
+      await storage.logActivity({
+        entityType: "customer",
+        entityId: updated.id,
+        action: "updated",
+        description: `Customer updated: ${updated.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating customer:", error);
+      res.status(400).json({ message: "Failed to update customer" });
+    }
+  });
+
+  app.delete("/api/customers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.id);
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+      
+      await storage.deleteCustomer(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "customer",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Customer deleted: ${customer.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Customer deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting customer:", error);
+      res.status(500).json({ message: "Failed to delete customer" });
+    }
+  });
+
+  // Module Master routes
+  app.get("/api/modules", isAuthenticated, async (req, res) => {
+    try {
+      const modulesList = await storage.getModules();
+      res.json(modulesList);
+    } catch (error) {
+      console.error("Error fetching modules:", error);
+      res.status(500).json({ message: "Failed to fetch modules" });
+    }
+  });
+
+  app.get("/api/modules/:id", isAuthenticated, async (req, res) => {
+    try {
+      const module = await storage.getModule(req.params.id);
+      if (!module) {
+        return res.status(404).json({ message: "Module not found" });
+      }
+      res.json(module);
+    } catch (error) {
+      console.error("Error fetching module:", error);
+      res.status(500).json({ message: "Failed to fetch module" });
+    }
+  });
+
+  app.post("/api/modules", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertModuleSchema.parse(req.body);
+      const newModule = await storage.createModule(validatedData);
+      
+      await storage.logActivity({
+        entityType: "module",
+        entityId: newModule.id,
+        action: "created",
+        description: `New module created: ${newModule.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newModule);
+    } catch (error) {
+      console.error("Error creating module:", error);
+      res.status(400).json({ message: "Failed to create module" });
+    }
+  });
+
+  app.patch("/api/modules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateModule(req.params.id, req.body);
+      
+      await storage.logActivity({
+        entityType: "module",
+        entityId: updated.id,
+        action: "updated",
+        description: `Module updated: ${updated.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating module:", error);
+      res.status(400).json({ message: "Failed to update module" });
+    }
+  });
+
+  app.delete("/api/modules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const module = await storage.getModule(req.params.id);
+      if (!module) {
+        return res.status(404).json({ message: "Module not found" });
+      }
+      
+      await storage.deleteModule(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "module",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Module deleted: ${module.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Module deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting module:", error);
+      res.status(500).json({ message: "Failed to delete module" });
+    }
+  });
+
+  // =============================================
+  // END MASTER DATA ROUTES
+  // =============================================
 
   // Lead routes
   app.get("/api/leads", isAuthenticated, async (req, res) => {

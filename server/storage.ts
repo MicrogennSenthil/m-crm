@@ -1,5 +1,6 @@
 import {
   users,
+  customers,
   leads,
   followUps,
   quotes,
@@ -16,6 +17,8 @@ import {
   attachments,
   type User,
   type UpsertUser,
+  type Customer,
+  type InsertCustomer,
   type Lead,
   type InsertLead,
   type FollowUp,
@@ -55,6 +58,13 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
   getUsersByRole(role: string): Promise<User[]>;
 
+  // Customer operations (Master data)
+  getCustomers(): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer>;
+  deleteCustomer(id: string): Promise<void>;
+
   // Lead operations
   getLeads(filters?: { stage?: string; salesExecutiveId?: string }): Promise<Lead[]>;
   getLead(id: string): Promise<Lead | undefined>;
@@ -83,10 +93,12 @@ export interface IStorage {
   assignEngineer(assignment: InsertProjectEngineer): Promise<ProjectEngineer>;
   removeEngineer(id: string): Promise<void>;
 
-  // Module operations
+  // Module operations (Master data)
   getModules(): Promise<Module[]>;
   getModule(id: string): Promise<Module | undefined>;
   createModule(module: InsertModule): Promise<Module>;
+  updateModule(id: string, data: Partial<InsertModule>): Promise<Module>;
+  deleteModule(id: string): Promise<void>;
 
   // Project Module operations
   getProjectModules(projectId: string): Promise<ProjectModule[]>;
@@ -167,6 +179,34 @@ export class DatabaseStorage implements IStorage {
 
   async getUsersByRole(role: string): Promise<User[]> {
     return await db.select().from(users).where(eq(users.role, role));
+  }
+
+  // Customer operations (Master data)
+  async getCustomers(): Promise<Customer[]> {
+    return await db.select().from(customers).orderBy(desc(customers.createdAt));
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+
+  async createCustomer(customer: InsertCustomer): Promise<Customer> {
+    const [newCustomer] = await db.insert(customers).values(customer).returning();
+    return newCustomer;
+  }
+
+  async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer> {
+    const [updated] = await db
+      .update(customers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(customers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCustomer(id: string): Promise<void> {
+    await db.delete(customers).where(eq(customers.id, id));
   }
 
   // Lead operations
@@ -332,6 +372,19 @@ export class DatabaseStorage implements IStorage {
   async createModule(module: InsertModule): Promise<Module> {
     const [newModule] = await db.insert(modules).values(module).returning();
     return newModule;
+  }
+
+  async updateModule(id: string, data: Partial<InsertModule>): Promise<Module> {
+    const [updated] = await db
+      .update(modules)
+      .set(data)
+      .where(eq(modules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteModule(id: string): Promise<void> {
+    await db.delete(modules).where(eq(modules.id, id));
   }
 
   // Project Module operations

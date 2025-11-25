@@ -15,6 +15,7 @@ import Sales from "@/pages/sales";
 import Implementations from "@/pages/implementations";
 import Support from "@/pages/support";
 import Reports from "@/pages/reports";
+import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 
 function Router() {
@@ -60,6 +61,7 @@ function Router() {
               <Route path="/implementations" component={Implementations} />
               <Route path="/support" component={Support} />
               <Route path="/reports" component={Reports} />
+              <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
             </Switch>

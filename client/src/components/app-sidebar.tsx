@@ -4,6 +4,7 @@ import {
   Wrench,
   Headphones,
   BarChart3,
+  Database,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -53,6 +54,12 @@ const mainMenuItems = [
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
+    roles: ["admin"],
+  },
+  {
+    title: "Masters",
+    url: "/masters",
+    icon: Database,
     roles: ["admin"],
   },
 ];
