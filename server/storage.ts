@@ -1,5 +1,7 @@
 import {
   users,
+  userRoles,
+  userRoleRights,
   customers,
   leads,
   followUps,
@@ -17,6 +19,11 @@ import {
   attachments,
   type User,
   type UpsertUser,
+  type InsertUser,
+  type UserRole,
+  type InsertUserRole,
+  type UserRoleRight,
+  type InsertUserRoleRight,
   type Customer,
   type InsertCustomer,
   type Lead,
@@ -55,8 +62,25 @@ import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 export interface IStorage {
   // User operations (required for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
+
+  // User Role operations (Master data)
+  getUserRoles(): Promise<UserRole[]>;
+  getUserRole(id: string): Promise<UserRole | undefined>;
+  createUserRole(role: InsertUserRole): Promise<UserRole>;
+  updateUserRole(id: string, data: Partial<InsertUserRole>): Promise<UserRole>;
+  deleteUserRole(id: string): Promise<void>;
+
+  // User Role Rights operations (Master data)
+  getUserRoleRights(roleId?: string): Promise<UserRoleRight[]>;
+  getUserRoleRight(id: string): Promise<UserRoleRight | undefined>;
+  createUserRoleRight(right: InsertUserRoleRight): Promise<UserRoleRight>;
+  updateUserRoleRight(id: string, data: Partial<InsertUserRoleRight>): Promise<UserRoleRight>;
+  deleteUserRoleRight(id: string): Promise<void>;
 
   // Customer operations (Master data)
   getCustomers(): Promise<Customer[]>;
@@ -179,6 +203,82 @@ export class DatabaseStorage implements IStorage {
 
   async getUsersByRole(role: string): Promise<User[]> {
     return await db.select().from(users).where(eq(users.role, role));
+  }
+
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  // User Role operations (Master data)
+  async getUserRoles(): Promise<UserRole[]> {
+    return await db.select().from(userRoles).orderBy(userRoles.name);
+  }
+
+  async getUserRole(id: string): Promise<UserRole | undefined> {
+    const [role] = await db.select().from(userRoles).where(eq(userRoles.id, id));
+    return role;
+  }
+
+  async createUserRole(role: InsertUserRole): Promise<UserRole> {
+    const [newRole] = await db.insert(userRoles).values(role).returning();
+    return newRole;
+  }
+
+  async updateUserRole(id: string, data: Partial<InsertUserRole>): Promise<UserRole> {
+    const [updated] = await db
+      .update(userRoles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userRoles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteUserRole(id: string): Promise<void> {
+    await db.delete(userRoles).where(eq(userRoles.id, id));
+  }
+
+  // User Role Rights operations (Master data)
+  async getUserRoleRights(roleId?: string): Promise<UserRoleRight[]> {
+    if (roleId) {
+      return await db.select().from(userRoleRights).where(eq(userRoleRights.roleId, roleId)).orderBy(userRoleRights.module);
+    }
+    return await db.select().from(userRoleRights).orderBy(userRoleRights.module);
+  }
+
+  async getUserRoleRight(id: string): Promise<UserRoleRight | undefined> {
+    const [right] = await db.select().from(userRoleRights).where(eq(userRoleRights.id, id));
+    return right;
+  }
+
+  async createUserRoleRight(right: InsertUserRoleRight): Promise<UserRoleRight> {
+    const [newRight] = await db.insert(userRoleRights).values(right).returning();
+    return newRight;
+  }
+
+  async updateUserRoleRight(id: string, data: Partial<InsertUserRoleRight>): Promise<UserRoleRight> {
+    const [updated] = await db
+      .update(userRoleRights)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userRoleRights.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteUserRoleRight(id: string): Promise<void> {
+    await db.delete(userRoleRights).where(eq(userRoleRights.id, id));
   }
 
   // Customer operations (Master data)
