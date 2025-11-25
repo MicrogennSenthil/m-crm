@@ -38,16 +38,18 @@ interface TicketFormProps {
   onSuccess?: () => void;
 }
 
-interface UploadedImage {
-  url: string;
-  name: string;
-  uploading?: boolean;
+interface PendingUpload {
+  id: string;
+  file: File;
+  objectPath?: string;
+  status: "pending" | "uploading" | "uploaded" | "error";
+  error?: string;
 }
 
 export function TicketForm({ onSuccess }: TicketFormProps) {
   const { toast } = useToast();
   const [isNewCustomer, setIsNewCustomer] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +81,6 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
       status: "open",
       assignedEngineerId: undefined,
       escalationLevel: 1,
-      attachments: [],
     },
   });
 
@@ -119,17 +120,13 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     }
   };
 
-  const uploadImage = async (file: File) => {
-    const tempId = Date.now().toString();
-    setUploadedImages(prev => [...prev, { url: tempId, name: file.name, uploading: true }]);
-    setIsUploading(true);
-
+  const uploadFile = async (upload: PendingUpload): Promise<PendingUpload> => {
     try {
       const uploadUrlResponse = await fetch("/api/objects/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ fileName: file.name }),
+        body: JSON.stringify({ fileName: upload.file.name }),
       });
 
       if (!uploadUrlResponse.ok) {
@@ -140,9 +137,9 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
 
       const uploadResponse = await fetch(uploadURL, {
         method: "PUT",
-        body: file,
+        body: upload.file,
         headers: {
-          "Content-Type": file.type || "application/octet-stream",
+          "Content-Type": upload.file.type || "application/octet-stream",
         },
       });
 
@@ -150,34 +147,18 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
         throw new Error("Failed to upload file");
       }
 
-      setUploadedImages(prev => 
-        prev.map(img => 
-          img.url === tempId 
-            ? { url: objectPath, name: file.name, uploading: false }
-            : img
-        )
-      );
-
-      toast({
-        title: "Image uploaded",
-        description: file.name,
-      });
+      return { ...upload, objectPath, status: "uploaded" };
     } catch (error) {
       console.error("Upload error:", error);
-      setUploadedImages(prev => prev.filter(img => img.url !== tempId));
-      toast({
-        title: "Upload failed",
-        description: `Failed to upload ${file.name}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
+      return { ...upload, status: "error", error: "Upload failed" };
     }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const maxFileSize = 10 * 1024 * 1024;
+
+    const newUploads: PendingUpload[] = [];
 
     for (const file of files) {
       if (!file.type.startsWith("image/")) {
@@ -198,29 +179,74 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
         continue;
       }
 
-      await uploadImage(file);
+      newUploads.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        status: "pending",
+      });
+    }
+
+    if (newUploads.length > 0) {
+      setPendingUploads(prev => [...prev, ...newUploads]);
+      setIsUploading(true);
+
+      for (const upload of newUploads) {
+        setPendingUploads(prev =>
+          prev.map(u => u.id === upload.id ? { ...u, status: "uploading" } : u)
+        );
+
+        const result = await uploadFile(upload);
+
+        setPendingUploads(prev =>
+          prev.map(u => u.id === upload.id ? result : u)
+        );
+      }
+
+      setIsUploading(false);
     }
 
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  const removeImage = (url: string) => {
-    setUploadedImages(prev => prev.filter(img => img.url !== url));
+  const removeUpload = (id: string) => {
+    setPendingUploads(prev => prev.filter(u => u.id !== id));
+  };
+
+  const registerAttachments = async (ticketId: string) => {
+    const uploadedFiles = pendingUploads.filter(u => u.status === "uploaded" && u.objectPath);
+    
+    for (const upload of uploadedFiles) {
+      try {
+        await apiRequest("POST", "/api/attachments", {
+          entityType: "ticket",
+          entityId: ticketId,
+          fileName: upload.file.name,
+          fileType: upload.file.type || "application/octet-stream",
+          fileSize: upload.file.size,
+          objectPath: upload.objectPath,
+        });
+      } catch (error) {
+        console.error("Failed to register attachment:", error);
+      }
+    }
   };
 
   const createTicketMutation = useMutation({
     mutationFn: async (data: InsertTicket) => {
-      const attachmentUrls = uploadedImages.filter(img => !img.uploading).map(img => img.url);
-      await apiRequest("POST", "/api/tickets", {
-        ...data,
-        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
-      });
+      const response = await apiRequest("POST", "/api/tickets", data);
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (ticket) => {
+      if (pendingUploads.some(u => u.status === "uploaded")) {
+        await registerAttachments(ticket.id);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/attachments/ticket/${ticket.id}`] });
+      
       toast({
         title: "Success",
         description: "Support ticket created successfully",
@@ -252,7 +278,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   };
 
   const activeCustomers = customers?.filter(c => c.status === "active") || [];
-  const activeModules = modules?.filter(m => m.isActive) || [];
+  const hasUploadingFiles = pendingUploads.some(u => u.status === "uploading");
 
   return (
     <Form {...form}>
@@ -380,7 +406,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {activeModules.map((module) => (
+                      {modules?.map((module) => (
                         <SelectItem key={module.id} value={module.id}>
                           {module.name}
                         </SelectItem>
@@ -462,7 +488,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
+                disabled={hasUploadingFiles}
                 data-testid="button-attach-image"
               >
                 <Upload className="h-4 w-4 mr-2" />
@@ -473,7 +499,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => cameraInputRef.current?.click()}
-                disabled={isUploading}
+                disabled={hasUploadingFiles}
                 data-testid="button-take-photo"
               >
                 <Camera className="h-4 w-4 mr-2" />
@@ -502,17 +528,22 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               Upload screenshots or photos to help describe the issue (max 10MB per image)
             </FormDescription>
 
-            {uploadedImages.length > 0 && (
+            {pendingUploads.length > 0 && (
               <div className="flex flex-wrap gap-3 mt-3">
-                {uploadedImages.map((img, index) => (
+                {pendingUploads.map((upload, index) => (
                   <div
-                    key={img.url}
+                    key={upload.id}
                     className="relative group border rounded-lg overflow-hidden w-20 h-20 bg-muted"
                     data-testid={`attachment-preview-${index}`}
                   >
-                    {img.uploading ? (
+                    {upload.status === "uploading" ? (
                       <div className="w-full h-full flex items-center justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : upload.status === "error" ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-1">
+                        <X className="h-5 w-5 text-destructive" />
+                        <span className="text-xs text-destructive text-center">Failed</span>
                       </div>
                     ) : (
                       <>
@@ -525,14 +556,14 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-white hover:text-white hover:bg-white/20"
-                            onClick={() => removeImage(img.url)}
+                            onClick={() => removeUpload(upload.id)}
                             data-testid={`button-remove-attachment-${index}`}
                           >
                             <X className="h-5 w-5" />
                           </Button>
                         </div>
                         <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 truncate">
-                          {img.name}
+                          {upload.file.name}
                         </div>
                       </>
                     )}
@@ -546,7 +577,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
         <div className="flex justify-end gap-2 pt-4">
           <Button
             type="submit"
-            disabled={createTicketMutation.isPending || isUploading}
+            disabled={createTicketMutation.isPending || hasUploadingFiles}
             data-testid="button-submit-ticket"
           >
             {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
