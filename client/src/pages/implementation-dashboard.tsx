@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface ProjectWithDetails extends Project {
   modules: (ProjectModule & { module?: Module; assignedEngineer?: UserType })[];
+  purchasedModules: string[];
   engineers: UserType[];
   trainingSessions: TrainingSession[];
   handoff: ProjectHandoff | null;
@@ -511,14 +512,27 @@ export default function ImplementationDashboard() {
 
           {/* Module Tracking Tab */}
           <TabsContent value="modules" className="space-y-4 mt-4">
-            {filteredProjects.map((project) => (
+            {filteredProjects.map((project) => {
+              const purchasedModulesList = project.purchasedModules || [];
+              const filteredModules = project.modules.filter(mod => 
+                purchasedModulesList.includes(mod.module?.name || '')
+              );
+              
+              return (
               <Card key={project.id} data-testid={`module-card-${project.id}`}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{project.clientName}</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {filteredModules.length} Purchased Module{filteredModules.length !== 1 ? 's' : ''}
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {project.modules.map((mod) => {
+                    {filteredModules.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No purchased modules found for this project
+                      </p>
+                    ) : filteredModules.map((mod) => {
                       const statusConfig = STATUS_CONFIG[mod.installationStatus || "not_started"] || STATUS_CONFIG.not_started;
                       return (
                         <div
@@ -576,7 +590,9 @@ export default function ImplementationDashboard() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })
+            }
           </TabsContent>
 
           {/* Engineer Assignments Tab */}
