@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { insertLeadSchema, type InsertLead, type User, type Customer } from "@shared/schema";
+import { insertLeadSchema, type InsertLead, type User, type Customer, type Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus } from "lucide-react";
+import { Building2, Plus, Package } from "lucide-react";
 import { useState } from "react";
 
 const LEAD_SOURCES = [
@@ -62,6 +63,10 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
     queryKey: ["/api/customers"],
   });
 
+  const { data: modules } = useQuery<Module[]>({
+    queryKey: ["/api/modules"],
+  });
+
   const form = useForm<InsertLead>({
     resolver: zodResolver(insertLeadSchema),
     defaultValues: defaultValues || {
@@ -74,6 +79,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       stage: "new_lead",
       estimatedValue: undefined,
       salesExecutiveId: undefined,
+      selectedModules: [],
     },
   });
 
@@ -332,6 +338,54 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          {/* Selected Modules - Modules the customer is interested in purchasing */}
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2 mb-3">
+              <Package className="h-4 w-4 text-primary" />
+              <span className="font-medium text-sm">Selected Modules</span>
+            </div>
+            <FormDescription className="mb-3">
+              Select the modules the customer is interested in purchasing
+            </FormDescription>
+            <FormField
+              control={form.control}
+              name="selectedModules"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {modules?.map((module) => (
+                      <div
+                        key={module.id}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`module-${module.id}`}
+                          data-testid={`checkbox-module-${module.name.toLowerCase().replace(/\s+/g, '-')}`}
+                          checked={field.value?.includes(module.name) || false}
+                          onCheckedChange={(checked) => {
+                            const currentModules = field.value || [];
+                            if (checked) {
+                              field.onChange([...currentModules, module.name]);
+                            } else {
+                              field.onChange(currentModules.filter((m) => m !== module.name));
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor={`module-${module.id}`}
+                          className="text-sm font-medium leading-none cursor-pointer"
+                        >
+                          {module.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
