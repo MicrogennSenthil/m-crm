@@ -1386,7 +1386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/projects", isAuthenticated, async (req: any, res) => {
     try {
       // Extract selectedModules before validation (it's not part of the project schema)
-      const { selectedModules, ...projectData } = req.body;
+      const { selectedModules: clientModules, ...projectData } = req.body;
       
       // Convert date string to Date object if present
       if (projectData.implementationDate) {
@@ -1395,8 +1395,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = insertProjectSchema.parse(projectData);
       
-      // Pass selectedModules to createProject to only initialize purchased modules
-      const newProject = await storage.createProject(validatedData, selectedModules);
+      // Server-side derivation of selectedModules from lead or customer
+      // This is the source of truth - don't trust client-provided modules
+      let selectedModules: string[] = [];
+      
+      // First try to get modules from the associated lead
+      if (validatedData.leadId) {
+        const lead = await storage.getLead(validatedData.leadId);
+        if (lead?.selectedModules?.length) {
+          selectedModules = lead.selectedModules;
+        }
+      }
+      
+      // Fall back to customer's selected modules if no lead modules
+      if (selectedModules.length === 0 && validatedData.customerId) {
+        const customer = await storage.getCustomer(validatedData.customerId);
+        if (customer?.selectedModules?.length) {
+          selectedModules = customer.selectedModules;
+        }
+      }
+      
+      // Pass server-derived selectedModules to createProject
+      const newProject = await storage.createProject(
+        validatedData, 
+        selectedModules.length > 0 ? selectedModules : undefined
+      );
       
       // Log activity
       await storage.logActivity({

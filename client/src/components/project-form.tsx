@@ -94,7 +94,7 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
   };
 
   const createProjectMutation = useMutation({
-    mutationFn: async (data: InsertProject) => {
+    mutationFn: async (data: InsertProject & { selectedModules?: string[] }) => {
       await apiRequest("POST", "/api/projects", data);
     },
     onSuccess: () => {
@@ -128,7 +128,11 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
   });
 
   const onSubmit = (data: InsertProject) => {
-    createProjectMutation.mutate(data);
+    // Include selectedModules so the backend only creates project_modules for purchased modules
+    createProjectMutation.mutate({
+      ...data,
+      selectedModules: selectedModules.length > 0 ? selectedModules : undefined,
+    });
   };
 
   const activeCustomers = customers?.filter(c => c.status === "active") || [];
