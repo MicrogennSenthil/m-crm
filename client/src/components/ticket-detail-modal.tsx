@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { Ticket, TicketComment, User, EscalationHistory } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -22,11 +23,11 @@ interface TicketDetailModalProps {
   onClose: () => void;
 }
 
-const PRIORITY_CONFIG = {
-  critical: { variant: "destructive" as const, label: "Critical", icon: AlertTriangle },
-  high: { variant: "default" as const, label: "High", className: "bg-orange-600", icon: AlertTriangle },
-  medium: { variant: "secondary" as const, label: "Medium", icon: AlertTriangle },
-  low: { variant: "outline" as const, label: "Low", icon: AlertTriangle },
+const PRIORITY_CONFIG: Record<string, { variant: "destructive" | "default" | "secondary" | "outline"; label: string; className?: string; icon: typeof AlertTriangle }> = {
+  critical: { variant: "destructive", label: "Critical", icon: AlertTriangle },
+  high: { variant: "default", label: "High", className: "bg-orange-600", icon: AlertTriangle },
+  medium: { variant: "secondary", label: "Medium", icon: AlertTriangle },
+  low: { variant: "outline", label: "Low", icon: AlertTriangle },
 };
 
 const STATUS_OPTIONS = [
@@ -40,6 +41,8 @@ const STATUS_OPTIONS = [
 export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalProps) {
   const [newComment, setNewComment] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+  const [showReopenDialog, setShowReopenDialog] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
   const { toast } = useToast();
 
   const { data: comments } = useQuery<(TicketComment & { user?: User })[]>({
@@ -191,6 +194,52 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
     },
   });
 
+  const reopenTicketMutation = useMutation({
+    mutationFn: async () => {
+      if (!reopenReason.trim()) {
+        throw new Error("Reopen reason is required");
+      }
+      await apiRequest("POST", `/api/tickets/${ticket.id}/reopen`, {
+        reopenReason: reopenReason.trim(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setShowReopenDialog(false);
+      setReopenReason("");
+      toast({
+        title: "Success",
+        description: "Ticket reopened with a new ticket number.",
+      });
+      onClose();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reopen ticket",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Query for original ticket if this was reopened
+  const { data: originalTicket } = useQuery<Ticket>({
+    queryKey: ["/api/tickets", ticket.reopenedFromTicketId],
+    enabled: open && !!ticket.reopenedFromTicketId,
+  });
+
   const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
 
   return (
@@ -214,6 +263,31 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left & Center: Issue Description & Conversation */}
           <div className="lg:col-span-2 space-y-4">
+            {/* Reopened From Info */}
+            {ticket.reopenedFromTicketId && (
+              <div className="p-3 border rounded-md bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 text-sm">
+                  <Link2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-blue-800 dark:text-blue-200">
+                    Reopened from ticket:{" "}
+                    <span className="font-mono font-medium">
+                      {originalTicket?.ticketNumber || ticket.reopenedFromTicketId}
+                    </span>
+                  </span>
+                </div>
+                {ticket.reopenReason && (
+                  <p className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+                    <span className="font-medium">Reason:</span> {ticket.reopenReason}
+                  </p>
+                )}
+                {ticket.reopenedAt && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Reopened on {format(new Date(ticket.reopenedAt), "PPP")}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Issue Description */}
             <div className="p-4 border rounded-md bg-muted/30">
               <h3 className="font-semibold mb-2">Issue Description</h3>
@@ -400,17 +474,17 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
             />
 
             {/* Actions */}
-            {ticket.status !== "closed" && (
+            {ticket.status !== "closed" ? (
               <div className="space-y-2">
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={() => escalateTicketMutation.mutate()}
-                  disabled={escalateTicketMutation.isPending || ticket.escalationLevel >= 3}
+                  disabled={escalateTicketMutation.isPending || (ticket.escalationLevel ?? 1) >= 3}
                   data-testid="button-escalate-ticket"
                 >
                   <ArrowUp className="h-4 w-4 mr-2" />
-                  Escalate to L{ticket.escalationLevel + 1}
+                  Escalate to L{(ticket.escalationLevel ?? 1) + 1}
                 </Button>
                 <Button
                   variant="default"
@@ -423,9 +497,64 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                   Close Ticket
                 </Button>
               </div>
+            ) : (
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowReopenDialog(true)}
+                  data-testid="button-reopen-ticket"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reopen Ticket
+                </Button>
+              </div>
             )}
           </div>
         </div>
+
+        {/* Reopen Ticket Dialog */}
+        <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reopen Ticket</DialogTitle>
+              <DialogDescription>
+                This will create a new ticket linked to the original closed ticket. Please provide a reason for reopening.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="reopen-reason">Reason for Reopening</Label>
+                <Textarea
+                  id="reopen-reason"
+                  placeholder="Describe why this ticket needs to be reopened..."
+                  value={reopenReason}
+                  onChange={(e) => setReopenReason(e.target.value)}
+                  className="min-h-24"
+                  data-testid="textarea-reopen-reason"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowReopenDialog(false);
+                  setReopenReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => reopenTicketMutation.mutate()}
+                disabled={!reopenReason.trim() || reopenTicketMutation.isPending}
+                data-testid="button-confirm-reopen"
+              >
+                {reopenTicketMutation.isPending ? "Reopening..." : "Reopen Ticket"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
