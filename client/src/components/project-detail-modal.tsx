@@ -387,7 +387,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                       <CardDescription>{pm.module?.description}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs flex items-center gap-1">
                             <User className="h-3 w-3" /> Assigned Engineer
@@ -438,38 +438,44 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
 
                         <div className="space-y-2">
                           <Label className="text-xs flex items-center gap-1">
-                            <Calendar className="h-3 w-3" /> Schedule
+                            <Calendar className="h-3 w-3" /> Start Date
                           </Label>
-                          <div className="flex gap-2">
-                            <Input
-                              type="date"
-                              className="h-9 text-xs"
-                              value={pm.scheduledStartDate?.toString().split('T')[0] || ""}
-                              onChange={(e) => 
-                                updateModuleMutation.mutate({ 
-                                  id: pm.id, 
-                                  scheduledStartDate: e.target.value ? new Date(e.target.value).toISOString() : null 
-                                })
-                              }
-                              data-testid={`input-start-date-${pm.id}`}
-                            />
-                            <Input
-                              type="date"
-                              className="h-9 text-xs"
-                              value={pm.scheduledEndDate?.toString().split('T')[0] || ""}
-                              onChange={(e) => 
-                                updateModuleMutation.mutate({ 
-                                  id: pm.id, 
-                                  scheduledEndDate: e.target.value ? new Date(e.target.value).toISOString() : null 
-                                })
-                              }
-                              data-testid={`input-end-date-${pm.id}`}
-                            />
-                          </div>
+                          <Input
+                            type="date"
+                            className="h-9 text-xs"
+                            value={pm.scheduledStartDate?.toString().split('T')[0] || ""}
+                            onChange={(e) => 
+                              updateModuleMutation.mutate({ 
+                                id: pm.id, 
+                                scheduledStartDate: e.target.value ? new Date(e.target.value).toISOString() : null 
+                              })
+                            }
+                            data-testid={`input-start-date-${pm.id}`}
+                          />
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-xs">Status</Label>
+                          <Label className="text-xs flex items-center gap-1">
+                            <Calendar className="h-3 w-3" /> End Date
+                          </Label>
+                          <Input
+                            type="date"
+                            className="h-9 text-xs"
+                            value={pm.scheduledEndDate?.toString().split('T')[0] || ""}
+                            onChange={(e) => 
+                              updateModuleMutation.mutate({ 
+                                id: pm.id, 
+                                scheduledEndDate: e.target.value ? new Date(e.target.value).toISOString() : null 
+                              })
+                            }
+                            data-testid={`input-end-date-${pm.id}`}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            Status
+                          </Label>
                           <Select
                             value={pm.installationStatus || "not_started"}
                             onValueChange={(value) => 
