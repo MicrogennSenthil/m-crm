@@ -1494,11 +1494,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updated = await storage.updateProjectModule(req.params.id, updateData);
       
-      // Recalculate project completion percentage
+      // Recalculate project completion percentage based on purchased modules only
       if (updated.projectId) {
+        const project = await storage.getProject(updated.projectId);
+        const lead = project?.leadId ? await storage.getLead(project.leadId) : null;
+        const purchasedModuleNames = lead?.selectedModules || [];
+        
         const allModules = await storage.getProjectModules(updated.projectId);
-        const completedCount = allModules.filter(m => m.completed).length;
-        const totalCount = allModules.length;
+        
+        // Get module names for filtering
+        const modulesWithNames = await Promise.all(
+          allModules.map(async (pm) => {
+            const module = await storage.getModule(pm.moduleId);
+            return { ...pm, moduleName: module?.name || '' };
+          })
+        );
+        
+        // Filter to purchased modules only
+        const purchasedModules = modulesWithNames.filter(m => 
+          purchasedModuleNames.includes(m.moduleName)
+        );
+        
+        const completedCount = purchasedModules.filter(m => m.completed).length;
+        const totalCount = purchasedModules.length;
         const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
         
         await storage.updateProject(updated.projectId, { completionPercentage });
@@ -1803,16 +1821,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const trainingSessions = await storage.getTrainingSessions(project.id);
           const handoff = await storage.getProjectHandoff(project.id);
           
-          // Recalculate completion percentage from actual module data
-          const completedModules = modulesList.filter(m => m.completed).length;
-          const totalModules = modulesList.length;
-          const calculatedPercentage = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
-          
-          // Update project if stored percentage differs from calculated
-          if (project.completionPercentage !== calculatedPercentage) {
-            await storage.updateProject(project.id, { completionPercentage: calculatedPercentage });
-            project.completionPercentage = calculatedPercentage;
-          }
+          // Get lead to find purchased modules
+          const lead = project.leadId ? await storage.getLead(project.leadId) : null;
+          const purchasedModuleNames = lead?.selectedModules || [];
           
           // Get module details with assigned engineers
           const modulesWithDetails = await Promise.all(
@@ -1825,6 +1836,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             })
           );
           
+          // Filter to only purchased modules for progress calculation
+          const purchasedModules = modulesWithDetails.filter(m => 
+            purchasedModuleNames.includes(m.module?.name || '')
+          );
+          
+          // Recalculate completion percentage based on purchased modules only
+          const completedPurchasedModules = purchasedModules.filter(m => m.completed).length;
+          const totalPurchasedModules = purchasedModules.length;
+          const calculatedPercentage = totalPurchasedModules > 0 
+            ? Math.round((completedPurchasedModules / totalPurchasedModules) * 100) 
+            : 0;
+          
+          // Update project if stored percentage differs from calculated
+          if (project.completionPercentage !== calculatedPercentage) {
+            await storage.updateProject(project.id, { completionPercentage: calculatedPercentage });
+            project.completionPercentage = calculatedPercentage;
+          }
+          
           // Get engineer details
           const engineers = await Promise.all(
             engineerAssignments.map(async (a) => storage.getUser(a.engineerId))
@@ -1834,6 +1863,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...project,
             completionPercentage: calculatedPercentage,
             modules: modulesWithDetails,
+            purchasedModules: purchasedModuleNames,
             engineers: engineers.filter(Boolean),
             trainingSessions,
             handoff,
