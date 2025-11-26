@@ -131,7 +131,6 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "modules"] });
-      toast({ title: "Success", description: "Module schedule updated" });
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
