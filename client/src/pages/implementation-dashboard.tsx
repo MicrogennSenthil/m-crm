@@ -1,0 +1,493 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Search, FolderKanban, Users, CheckCircle2, Clock, AlertTriangle, 
+  Calendar, Building2, User, Settings, GraduationCap, Send 
+} from "lucide-react";
+import { format } from "date-fns";
+import type { Project, ProjectModule, Module, User as UserType, TrainingSession, ProjectHandoff } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
+
+interface ProjectWithDetails extends Project {
+  modules: (ProjectModule & { module?: Module; assignedEngineer?: UserType })[];
+  engineers: UserType[];
+  trainingSessions: TrainingSession[];
+  handoff: ProjectHandoff | null;
+}
+
+interface DashboardStats {
+  totalProjects: number;
+  inProgress: number;
+  inTraining: number;
+  completed: number;
+  pendingHandoff: number;
+}
+
+interface ImplementationDashboardData {
+  projects: ProjectWithDetails[];
+  stats: DashboardStats;
+}
+
+const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
+  not_started: { color: "bg-gray-200 text-gray-700", label: "Not Started" },
+  scheduled: { color: "bg-blue-100 text-blue-700", label: "Scheduled" },
+  in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In Progress" },
+  testing: { color: "bg-purple-100 text-purple-700", label: "Testing" },
+  completed: { color: "bg-green-100 text-green-700", label: "Completed" },
+};
+
+const PROJECT_STATUS_CONFIG: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+  not_started: { variant: "outline", label: "Not Started" },
+  in_progress: { variant: "default", label: "In Progress" },
+  training: { variant: "secondary", label: "Training" },
+  completed: { variant: "default", label: "Completed" },
+  on_hold: { variant: "destructive", label: "On Hold" },
+};
+
+export default function ImplementationDashboard() {
+  const { user } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const { data: dashboardData, isLoading } = useQuery<ImplementationDashboardData>({
+    queryKey: ["/api/dashboard/implementation"],
+  });
+
+  const filteredProjects = dashboardData?.projects.filter((project) => {
+    const matchesSearch = project.clientName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || project.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }) || [];
+
+  const getModuleStatusCount = (project: ProjectWithDetails) => {
+    const counts = { not_started: 0, scheduled: 0, in_progress: 0, testing: 0, completed: 0 };
+    project.modules.forEach((m) => {
+      const status = m.installationStatus || "not_started";
+      if (counts[status as keyof typeof counts] !== undefined) {
+        counts[status as keyof typeof counts]++;
+      }
+    });
+    return counts;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full" data-testid="loading-state">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-48 bg-muted rounded"></div>
+          <div className="h-32 w-64 bg-muted rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = dashboardData?.stats || {
+    totalProjects: 0,
+    inProgress: 0,
+    inTraining: 0,
+    completed: 0,
+    pendingHandoff: 0,
+  };
+
+  return (
+      <div className="space-y-6 p-6" data-testid="implementation-dashboard">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Implementation Dashboard</h1>
+            <p className="text-muted-foreground">Track work progress, schedules, and handoffs</p>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <Card data-testid="stat-total">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <FolderKanban className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.totalProjects}</p>
+                  <p className="text-xs text-muted-foreground">Total Projects</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="stat-in-progress">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+                  <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.inProgress}</p>
+                  <p className="text-xs text-muted-foreground">In Progress</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="stat-training">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                  <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.inTraining}</p>
+                  <p className="text-xs text-muted-foreground">In Training</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="stat-pending-handoff">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                  <Send className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.pendingHandoff}</p>
+                  <p className="text-xs text-muted-foreground">Pending Handoff</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="stat-completed">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.completed}</p>
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+              data-testid="input-search"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter} data-testid="select-status-filter">
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="training">Training</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="on_hold">On Hold</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList data-testid="dashboard-tabs">
+            <TabsTrigger value="overview">Projects Overview</TabsTrigger>
+            <TabsTrigger value="modules">Module Tracking</TabsTrigger>
+            <TabsTrigger value="engineers">Engineer Assignments</TabsTrigger>
+          </TabsList>
+
+          {/* Projects Overview Tab */}
+          <TabsContent value="overview" className="space-y-4 mt-4">
+            {filteredProjects.length === 0 ? (
+              <Card className="p-8 text-center text-muted-foreground">
+                No projects found matching your criteria
+              </Card>
+            ) : (
+              filteredProjects.map((project) => {
+                const statusCounts = getModuleStatusCount(project);
+                const projectStatus = PROJECT_STATUS_CONFIG[project.status] || PROJECT_STATUS_CONFIG.not_started;
+
+                return (
+                  <Card key={project.id} data-testid={`project-card-${project.id}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <CardTitle className="text-lg">{project.clientName}</CardTitle>
+                            <Badge variant={projectStatus.variant}>{projectStatus.label}</Badge>
+                            {project.handoff?.status === 'handed_off' && (
+                              <Badge className="bg-green-500">Handed Off</Badge>
+                            )}
+                          </div>
+                          <CardDescription className="flex flex-wrap gap-4 mt-1">
+                            {project.implementationDate && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Due: {format(new Date(project.implementationDate), "MMM d, yyyy")}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Settings className="h-3 w-3" />
+                              {project.modules.length} Modules
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              {project.engineers.length} Engineers
+                            </span>
+                          </CardDescription>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold">{project.completionPercentage || 0}%</p>
+                          <p className="text-xs text-muted-foreground">Complete</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Progress value={project.completionPercentage || 0} className="h-2 mb-4" />
+
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+                          <span>Not Started: {statusCounts.not_started}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                          <span>Scheduled: {statusCounts.scheduled}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                          <span>In Progress: {statusCounts.in_progress}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full bg-purple-400"></div>
+                          <span>Testing: {statusCounts.testing}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                          <span>Completed: {statusCounts.completed}</span>
+                        </div>
+                      </div>
+
+                      {/* Engineers */}
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-muted-foreground">Assigned:</span>
+                        <div className="flex -space-x-2">
+                          {project.engineers.slice(0, 5).map((eng) => (
+                            <Avatar key={eng.id} className="h-8 w-8 border-2 border-background">
+                              <AvatarImage src={eng.profileImageUrl || undefined} />
+                              <AvatarFallback className="text-xs">
+                                {eng.firstName?.[0]}{eng.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                          ))}
+                          {project.engineers.length > 5 && (
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs border-2 border-background">
+                              +{project.engineers.length - 5}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </TabsContent>
+
+          {/* Module Tracking Tab */}
+          <TabsContent value="modules" className="space-y-4 mt-4">
+            {filteredProjects.map((project) => (
+              <Card key={project.id} data-testid={`module-card-${project.id}`}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{project.clientName}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {project.modules.map((mod) => {
+                      const statusConfig = STATUS_CONFIG[mod.installationStatus || "not_started"];
+                      return (
+                        <div
+                          key={mod.id}
+                          className="flex items-center justify-between p-3 border rounded-md"
+                          data-testid={`module-row-${mod.id}`}
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className={`w-2 h-8 rounded-full ${
+                              mod.completed ? "bg-green-500" : 
+                              mod.installationStatus === "in_progress" ? "bg-yellow-500" :
+                              mod.installationStatus === "scheduled" ? "bg-blue-500" : "bg-gray-300"
+                            }`}></div>
+                            <div>
+                              <p className="font-medium">{mod.module?.name || "Module"}</p>
+                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
+                                {mod.departmentName && (
+                                  <span className="flex items-center gap-1">
+                                    <Building2 className="h-3 w-3" />
+                                    {mod.departmentName.replace(/_/g, " ")}
+                                  </span>
+                                )}
+                                {mod.scheduledStartDate && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {format(new Date(mod.scheduledStartDate), "MMM d")}
+                                    {mod.scheduledEndDate && ` - ${format(new Date(mod.scheduledEndDate), "MMM d")}`}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            {mod.assignedEngineer && (
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={mod.assignedEngineer.profileImageUrl || undefined} />
+                                  <AvatarFallback className="text-xs">
+                                    {mod.assignedEngineer.firstName?.[0]}{mod.assignedEngineer.lastName?.[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm hidden md:inline">
+                                  {mod.assignedEngineer.firstName} {mod.assignedEngineer.lastName}
+                                </span>
+                              </div>
+                            )}
+                            <Badge className={statusConfig.color}>
+                              {statusConfig.label}
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </TabsContent>
+
+          {/* Engineer Assignments Tab */}
+          <TabsContent value="engineers" className="space-y-4 mt-4">
+            <EngineerAssignmentsView projects={filteredProjects} />
+          </TabsContent>
+        </Tabs>
+      </div>
+  );
+}
+
+function EngineerAssignmentsView({ projects }: { projects: ProjectWithDetails[] }) {
+  const engineerWorkload: Record<string, { 
+    engineer: UserType; 
+    modules: { project: Project; module: ProjectModule & { module?: Module } }[];
+  }> = {};
+
+  projects.forEach((project) => {
+    project.modules.forEach((mod) => {
+      if (mod.assignedEngineerId && mod.assignedEngineer) {
+        if (!engineerWorkload[mod.assignedEngineerId]) {
+          engineerWorkload[mod.assignedEngineerId] = {
+            engineer: mod.assignedEngineer,
+            modules: [],
+          };
+        }
+        engineerWorkload[mod.assignedEngineerId].modules.push({ project, module: mod });
+      }
+    });
+  });
+
+  const engineers = Object.values(engineerWorkload);
+
+  if (engineers.length === 0) {
+    return (
+      <Card className="p-8 text-center text-muted-foreground">
+        No engineer assignments found
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {engineers.map(({ engineer, modules }) => {
+        const completedCount = modules.filter((m) => m.module.completed).length;
+        const inProgressCount = modules.filter((m) => m.module.installationStatus === "in_progress").length;
+
+        return (
+          <Card key={engineer.id} data-testid={`engineer-card-${engineer.id}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={engineer.profileImageUrl || undefined} />
+                  <AvatarFallback>
+                    {engineer.firstName?.[0]}{engineer.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <CardTitle className="text-base">
+                    {engineer.firstName} {engineer.lastName}
+                  </CardTitle>
+                  <CardDescription>{engineer.email}</CardDescription>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold">{modules.length}</p>
+                  <p className="text-xs text-muted-foreground">Modules Assigned</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                  <span>Completed: {completedCount}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                  <span>In Progress: {inProgressCount}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+                  <span>Pending: {modules.length - completedCount - inProgressCount}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {modules.map(({ project, module }) => (
+                  <div
+                    key={module.id}
+                    className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium">{module.module?.name}</p>
+                      <p className="text-xs text-muted-foreground">{project.clientName}</p>
+                    </div>
+                    <Badge 
+                      variant={module.completed ? "default" : "outline"}
+                      className="capitalize"
+                    >
+                      {module.installationStatus?.replace(/_/g, " ") || "Not Started"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}

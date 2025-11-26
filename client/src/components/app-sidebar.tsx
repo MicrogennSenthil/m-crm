@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   TrendingUp,
   Wrench,
+  ClipboardCheck,
   Headphones,
   BarChart3,
   Database,
@@ -42,6 +43,12 @@ const mainMenuItems = [
     title: "Implementations",
     url: "/implementations",
     icon: Wrench,
+    roles: ["engineer", "admin"],
+  },
+  {
+    title: "Work Tracking",
+    url: "/implementation-dashboard",
+    icon: ClipboardCheck,
     roles: ["engineer", "admin"],
   },
   {

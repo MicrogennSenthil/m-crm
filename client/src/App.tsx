@@ -13,6 +13,7 @@ import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Sales from "@/pages/sales";
 import Implementations from "@/pages/implementations";
+import ImplementationDashboard from "@/pages/implementation-dashboard";
 import Support from "@/pages/support";
 import Reports from "@/pages/reports";
 import Masters from "@/pages/masters";
@@ -59,6 +60,7 @@ function Router() {
               <Route path="/" component={Home} />
               <Route path="/sales" component={Sales} />
               <Route path="/implementations" component={Implementations} />
+              <Route path="/implementation-dashboard" component={ImplementationDashboard} />
               <Route path="/support" component={Support} />
               <Route path="/reports" component={Reports} />
               <Route path="/masters" component={Masters} />
