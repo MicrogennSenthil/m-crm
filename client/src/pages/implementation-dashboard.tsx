@@ -322,7 +322,7 @@ export default function ImplementationDashboard() {
                 <CardContent>
                   <div className="space-y-3">
                     {project.modules.map((mod) => {
-                      const statusConfig = STATUS_CONFIG[mod.installationStatus || "not_started"];
+                      const statusConfig = STATUS_CONFIG[mod.installationStatus || "not_started"] || STATUS_CONFIG.not_started;
                       return (
                         <div
                           key={mod.id}
