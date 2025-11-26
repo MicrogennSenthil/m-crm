@@ -12,7 +12,9 @@ import {
   projectEngineers,
   modules,
   projectModules,
+  trainingSessions,
   trainingRecords,
+  projectHandoffs,
   tickets,
   ticketComments,
   escalationHistory,
@@ -46,8 +48,12 @@ import {
   type InsertModule,
   type ProjectModule,
   type InsertProjectModule,
+  type TrainingSession,
+  type InsertTrainingSession,
   type TrainingRecord,
   type InsertTrainingRecord,
+  type ProjectHandoff,
+  type InsertProjectHandoff,
   type Ticket,
   type InsertTicket,
   type TicketComment,
@@ -582,6 +588,58 @@ export class DatabaseStorage implements IStorage {
   async createTrainingRecord(training: InsertTrainingRecord): Promise<TrainingRecord> {
     const [newTraining] = await db.insert(trainingRecords).values(training).returning();
     return newTraining;
+  }
+
+  // Training Session operations (scheduled training)
+  async getTrainingSessions(projectId: string): Promise<TrainingSession[]> {
+    return await db
+      .select()
+      .from(trainingSessions)
+      .where(eq(trainingSessions.projectId, projectId))
+      .orderBy(trainingSessions.scheduledDate);
+  }
+
+  async getTrainingSession(id: string): Promise<TrainingSession | undefined> {
+    const [session] = await db.select().from(trainingSessions).where(eq(trainingSessions.id, id));
+    return session;
+  }
+
+  async createTrainingSession(session: InsertTrainingSession): Promise<TrainingSession> {
+    const [newSession] = await db.insert(trainingSessions).values(session).returning();
+    return newSession;
+  }
+
+  async updateTrainingSession(id: string, data: Partial<InsertTrainingSession>): Promise<TrainingSession> {
+    const [updated] = await db
+      .update(trainingSessions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(trainingSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTrainingSession(id: string): Promise<void> {
+    await db.delete(trainingSessions).where(eq(trainingSessions.id, id));
+  }
+
+  // Project Handoff operations
+  async getProjectHandoff(projectId: string): Promise<ProjectHandoff | undefined> {
+    const [handoff] = await db.select().from(projectHandoffs).where(eq(projectHandoffs.projectId, projectId));
+    return handoff;
+  }
+
+  async createProjectHandoff(handoff: InsertProjectHandoff): Promise<ProjectHandoff> {
+    const [newHandoff] = await db.insert(projectHandoffs).values(handoff).returning();
+    return newHandoff;
+  }
+
+  async updateProjectHandoff(id: string, data: Partial<InsertProjectHandoff>): Promise<ProjectHandoff> {
+    const [updated] = await db
+      .update(projectHandoffs)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(projectHandoffs.id, id))
+      .returning();
+    return updated;
   }
 
   // Ticket operations

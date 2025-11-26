@@ -1553,6 +1553,281 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Training Session routes (scheduled training)
+  app.get("/api/projects/:id/training-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const sessions = await storage.getTrainingSessions(req.params.id);
+      
+      // Attach module and engineer details
+      const withDetails = await Promise.all(
+        sessions.map(async (session) => {
+          const module = await storage.getModule(session.moduleId);
+          const engineer = session.assignedEngineerId 
+            ? await storage.getUser(session.assignedEngineerId) 
+            : undefined;
+          return { ...session, module, engineer };
+        })
+      );
+      
+      res.json(withDetails);
+    } catch (error) {
+      console.error("Error fetching training sessions:", error);
+      res.status(500).json({ message: "Failed to fetch training sessions" });
+    }
+  });
+
+  app.post("/api/projects/:id/training-sessions", isAuthenticated, async (req: any, res) => {
+    try {
+      const sessionData = {
+        ...req.body,
+        projectId: req.params.id,
+        scheduledDate: new Date(req.body.scheduledDate),
+      };
+      
+      const newSession = await storage.createTrainingSession(sessionData);
+      
+      // Send training confirmation email
+      try {
+        const project = await storage.getProject(req.params.id);
+        const module = await storage.getModule(newSession.moduleId);
+        
+        if (sessionData.recipientEmail && module && project) {
+          await sendTrainingConfirmationEmail(
+            sessionData.recipientEmail,
+            sessionData.recipientName,
+            project.clientName,
+            module.name,
+            newSession.scheduledDate,
+            newSession.scheduledHours
+          );
+        }
+      } catch (emailError) {
+        console.error("Failed to send training confirmation email:", emailError);
+      }
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "project",
+        entityId: req.params.id,
+        action: "training_scheduled",
+        description: `Training scheduled for ${newSession.recipientName} on ${new Date(newSession.scheduledDate).toLocaleDateString()}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newSession);
+    } catch (error) {
+      console.error("Error creating training session:", error);
+      res.status(400).json({ message: "Failed to create training session" });
+    }
+  });
+
+  app.patch("/api/training-sessions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updateData = { ...req.body };
+      if (updateData.scheduledDate) {
+        updateData.scheduledDate = new Date(updateData.scheduledDate);
+      }
+      if (updateData.completedAt) {
+        updateData.completedAt = new Date(updateData.completedAt);
+      }
+      
+      const updated = await storage.updateTrainingSession(req.params.id, updateData);
+      
+      // If completed, create a training record
+      if (updateData.status === 'completed' && updateData.completedAt) {
+        const session = await storage.getTrainingSession(req.params.id);
+        if (session) {
+          await storage.createTrainingRecord({
+            projectId: session.projectId,
+            moduleId: session.moduleId,
+            trainingSessionId: session.id,
+            recipientName: session.recipientName,
+            trainingHours: session.scheduledHours,
+            trainingDate: updateData.completedAt,
+            notes: session.notes,
+          });
+        }
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating training session:", error);
+      res.status(400).json({ message: "Failed to update training session" });
+    }
+  });
+
+  app.delete("/api/training-sessions/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTrainingSession(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting training session:", error);
+      res.status(400).json({ message: "Failed to delete training session" });
+    }
+  });
+
+  // Project Handoff routes
+  app.get("/api/projects/:id/handoff", isAuthenticated, async (req, res) => {
+    try {
+      const handoff = await storage.getProjectHandoff(req.params.id);
+      res.json(handoff || null);
+    } catch (error) {
+      console.error("Error fetching project handoff:", error);
+      res.status(500).json({ message: "Failed to fetch project handoff" });
+    }
+  });
+
+  app.post("/api/projects/:id/handoff", isAuthenticated, async (req: any, res) => {
+    try {
+      const handoffData = {
+        ...req.body,
+        projectId: req.params.id,
+        handoffById: req.user.claims.sub,
+      };
+      
+      // Check if handoff already exists
+      const existing = await storage.getProjectHandoff(req.params.id);
+      
+      let handoff;
+      if (existing) {
+        handoff = await storage.updateProjectHandoff(existing.id, handoffData);
+      } else {
+        handoff = await storage.createProjectHandoff(handoffData);
+      }
+      
+      // Update project status if handed off
+      if (handoffData.status === 'handed_off') {
+        await storage.updateProject(req.params.id, { 
+          status: 'completed',
+          completionPercentage: 100,
+        });
+      }
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "project",
+        entityId: req.params.id,
+        action: handoffData.status === 'handed_off' ? "handed_off" : "handoff_updated",
+        description: handoffData.status === 'handed_off' 
+          ? `Project handed off to ${handoffData.handoffToTeam} team`
+          : `Project handoff status updated`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(handoff);
+    } catch (error) {
+      console.error("Error creating/updating project handoff:", error);
+      res.status(400).json({ message: "Failed to create/update project handoff" });
+    }
+  });
+
+  // Ticket reopen route
+  app.post("/api/tickets/:id/reopen", isAuthenticated, async (req: any, res) => {
+    try {
+      const originalTicket = await storage.getTicket(req.params.id);
+      if (!originalTicket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Create new ticket as reopened from original
+      const newTicketData = {
+        customerId: originalTicket.customerId,
+        projectId: originalTicket.projectId,
+        moduleId: originalTicket.moduleId,
+        customerName: originalTicket.customerName,
+        customerEmail: originalTicket.customerEmail,
+        customerPhone: originalTicket.customerPhone,
+        issueSummary: `[REOPENED] ${originalTicket.issueSummary}`,
+        issueDescription: req.body.reopenReason || originalTicket.issueDescription,
+        priority: originalTicket.priority,
+        status: 'open',
+        reopenedFromTicketId: originalTicket.id,
+        reopenReason: req.body.reopenReason,
+        reopenedAt: new Date(),
+      };
+      
+      const newTicket = await storage.createTicket(newTicketData);
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "ticket",
+        entityId: newTicket.id,
+        action: "reopened",
+        description: `Ticket reopened from ${originalTicket.ticketNumber}: ${req.body.reopenReason || 'No reason provided'}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newTicket);
+    } catch (error) {
+      console.error("Error reopening ticket:", error);
+      res.status(400).json({ message: "Failed to reopen ticket" });
+    }
+  });
+
+  // Implementation Dashboard stats
+  app.get("/api/dashboard/implementation", isAuthenticated, async (req, res) => {
+    try {
+      // Get all projects with modules and engineers
+      const projectsList = await storage.getProjects({});
+      
+      const projectsWithDetails = await Promise.all(
+        projectsList.map(async (project) => {
+          const modulesList = await storage.getProjectModules(project.id);
+          const engineerAssignments = await storage.getProjectEngineers(project.id);
+          const trainingSessions = await storage.getTrainingSessions(project.id);
+          const handoff = await storage.getProjectHandoff(project.id);
+          
+          // Get module details with assigned engineers
+          const modulesWithDetails = await Promise.all(
+            modulesList.map(async (pm) => {
+              const module = await storage.getModule(pm.moduleId);
+              const assignedEngineer = pm.assignedEngineerId 
+                ? await storage.getUser(pm.assignedEngineerId) 
+                : undefined;
+              return { ...pm, module, assignedEngineer };
+            })
+          );
+          
+          // Get engineer details
+          const engineers = await Promise.all(
+            engineerAssignments.map(async (a) => storage.getUser(a.engineerId))
+          );
+          
+          return {
+            ...project,
+            modules: modulesWithDetails,
+            engineers: engineers.filter(Boolean),
+            trainingSessions,
+            handoff,
+          };
+        })
+      );
+      
+      // Calculate summary stats
+      const totalProjects = projectsList.length;
+      const inProgress = projectsList.filter(p => p.status === 'in_progress').length;
+      const inTraining = projectsList.filter(p => p.status === 'training').length;
+      const completed = projectsList.filter(p => p.status === 'completed').length;
+      const pendingHandoff = projectsWithDetails.filter(p => 
+        p.completionPercentage === 100 && (!p.handoff || p.handoff.status !== 'handed_off')
+      ).length;
+      
+      res.json({
+        projects: projectsWithDetails,
+        stats: {
+          totalProjects,
+          inProgress,
+          inTraining,
+          completed,
+          pendingHandoff,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching implementation dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch implementation dashboard" });
+    }
+  });
+
   // Ticket routes
   app.get("/api/tickets", isAuthenticated, async (req, res) => {
     try {

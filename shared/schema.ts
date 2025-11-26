@@ -289,11 +289,20 @@ export const insertModuleSchema = createInsertSchema(modules).omit({
 export type InsertModule = z.infer<typeof insertModuleSchema>;
 export type Module = typeof modules.$inferSelect;
 
-// Project Modules table - Track module completion per project
+// Project Modules table - Track module completion per project with scheduling
 export const projectModules = pgTable("project_modules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   moduleId: varchar("module_id").notNull().references(() => modules.id),
+  // Installation scheduling fields
+  assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
+  scheduledStartDate: timestamp("scheduled_start_date"),
+  scheduledEndDate: timestamp("scheduled_end_date"),
+  departmentName: text("department_name"), // Client department for this module installation
+  departmentContact: text("department_contact"), // Contact person at the department
+  installationStatus: text("installation_status").default("pending"), // pending, scheduled, in_progress, completed
+  installationNotes: text("installation_notes"),
+  // Completion tracking
   completed: boolean("completed").default(false),
   completedAt: timestamp("completed_at"),
 });
@@ -305,11 +314,39 @@ export const insertProjectModuleSchema = createInsertSchema(projectModules).omit
 export type InsertProjectModule = z.infer<typeof insertProjectModuleSchema>;
 export type ProjectModule = typeof projectModules.$inferSelect;
 
-// Training Records table
+// Training Sessions table - Schedule future training sessions
+export const trainingSessions = pgTable("training_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  moduleId: varchar("module_id").notNull().references(() => modules.id),
+  assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
+  recipientName: text("recipient_name").notNull(),
+  recipientEmail: text("recipient_email"),
+  recipientDepartment: text("recipient_department"),
+  scheduledDate: timestamp("scheduled_date").notNull(),
+  scheduledHours: integer("scheduled_hours").notNull(),
+  status: text("status").default("scheduled"), // scheduled, in_progress, completed, cancelled
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTrainingSessionSchema = createInsertSchema(trainingSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTrainingSession = z.infer<typeof insertTrainingSessionSchema>;
+export type TrainingSession = typeof trainingSessions.$inferSelect;
+
+// Training Records table - Log completed training sessions
 export const trainingRecords = pgTable("training_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   moduleId: varchar("module_id").notNull().references(() => modules.id),
+  trainingSessionId: varchar("training_session_id").references(() => trainingSessions.id), // Link to scheduled session
   recipientName: text("recipient_name").notNull(),
   trainingHours: integer("training_hours").notNull(),
   trainingDate: timestamp("training_date").notNull(),
@@ -325,6 +362,32 @@ export const insertTrainingRecordSchema = createInsertSchema(trainingRecords).om
 export type InsertTrainingRecord = z.infer<typeof insertTrainingRecordSchema>;
 export type TrainingRecord = typeof trainingRecords.$inferSelect;
 
+// Project Handoffs table - Track project completion and support transition
+export const projectHandoffs = pgTable("project_handoffs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  completionCertificateIssued: boolean("completion_certificate_issued").default(false),
+  completionCertificateDate: timestamp("completion_certificate_date"),
+  trainingCertificateIssued: boolean("training_certificate_issued").default(false),
+  trainingCertificateDate: timestamp("training_certificate_date"),
+  handoffDate: timestamp("handoff_date"),
+  handoffToTeam: text("handoff_to_team").default("support"), // support, maintenance
+  handoffById: varchar("handoff_by_id").references(() => users.id),
+  notes: text("notes"),
+  status: text("status").default("pending"), // pending, certificates_issued, handed_off
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProjectHandoffSchema = createInsertSchema(projectHandoffs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProjectHandoff = z.infer<typeof insertProjectHandoffSchema>;
+export type ProjectHandoff = typeof projectHandoffs.$inferSelect;
+
 // Support Tickets table
 export const tickets = pgTable("tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -339,11 +402,18 @@ export const tickets = pgTable("tickets", {
   issueDescription: text("issue_description").notNull(),
   attachments: text("attachments").array(), // Array of file URLs for images/attachments
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
-  status: text("status").notNull().default("open"), // open, in_progress, pending_customer, escalated, closed
+  status: text("status").notNull().default("open"), // open, in_progress, pending_customer, escalated, closed, reopened
   assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
   escalationLevel: integer("escalation_level").default(1), // 1: Support Engineer, 2: Senior Support, 3: Development Team
   escalatedAt: timestamp("escalated_at"),
   closedAt: timestamp("closed_at"),
+  // Reopen tracking
+  reopenedFromTicketId: varchar("reopened_from_ticket_id"), // Reference to original closed ticket
+  reopenReason: text("reopen_reason"),
+  reopenedAt: timestamp("reopened_at"),
+  // Feedback tracking
+  feedbackStatus: text("feedback_status").default("pending"), // pending, sent, responded
+  feedbackSentAt: timestamp("feedback_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
