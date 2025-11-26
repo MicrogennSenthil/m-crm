@@ -1493,6 +1493,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updated = await storage.updateProjectModule(req.params.id, updateData);
+      
+      // Recalculate project completion percentage
+      if (updated.projectId) {
+        const allModules = await storage.getProjectModules(updated.projectId);
+        const completedCount = allModules.filter(m => m.completed).length;
+        const totalCount = allModules.length;
+        const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        
+        await storage.updateProject(updated.projectId, { completionPercentage });
+      }
+      
       res.json(updated);
     } catch (error) {
       console.error("Error updating project module:", error);
@@ -1792,6 +1803,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const trainingSessions = await storage.getTrainingSessions(project.id);
           const handoff = await storage.getProjectHandoff(project.id);
           
+          // Recalculate completion percentage from actual module data
+          const completedModules = modulesList.filter(m => m.completed).length;
+          const totalModules = modulesList.length;
+          const calculatedPercentage = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
+          
+          // Update project if stored percentage differs from calculated
+          if (project.completionPercentage !== calculatedPercentage) {
+            await storage.updateProject(project.id, { completionPercentage: calculatedPercentage });
+            project.completionPercentage = calculatedPercentage;
+          }
+          
           // Get module details with assigned engineers
           const modulesWithDetails = await Promise.all(
             modulesList.map(async (pm) => {
@@ -1810,6 +1832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           return {
             ...project,
+            completionPercentage: calculatedPercentage,
             modules: modulesWithDetails,
             engineers: engineers.filter(Boolean),
             trainingSessions,
