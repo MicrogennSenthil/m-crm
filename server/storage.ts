@@ -1106,6 +1106,89 @@ export class DatabaseStorage implements IStorage {
     return { productivityData };
   }
 
+  // Detailed Implementation Report for Export/Email
+  async getImplementationDetailReport(): Promise<any> {
+    // Get all projects with their modules and engineers
+    const allProjects = await db.select().from(projects).orderBy(desc(projects.createdAt));
+    
+    // Get summary counts
+    const stats = {
+      totalProjects: allProjects.length,
+      inProgress: allProjects.filter(p => p.status === 'in_progress').length,
+      inTraining: allProjects.filter(p => p.status === 'training').length,
+      completed: allProjects.filter(p => p.status === 'completed').length,
+      pendingHandoff: allProjects.filter(p => p.completionPercentage === 100 && p.status !== 'completed').length,
+    };
+
+    // Get detailed project data
+    const projectDetails = await Promise.all(
+      allProjects.map(async (project) => {
+        // Get project modules
+        const modules = await db
+          .select()
+          .from(projectModules)
+          .where(eq(projectModules.projectId, project.id));
+        
+        const modulesCompleted = modules.filter(m => m.completed).length;
+        
+        // Get assigned engineers
+        const engineerAssignments = await db
+          .select({ user: users })
+          .from(projectEngineers)
+          .innerJoin(users, eq(projectEngineers.engineerId, users.id))
+          .where(eq(projectEngineers.projectId, project.id));
+        
+        const engineerNames = engineerAssignments
+          .map(e => `${e.user.firstName || ''} ${e.user.lastName || ''}`.trim())
+          .filter(n => n)
+          .join(', ') || 'Unassigned';
+
+        // Get module details
+        const moduleDetails = await Promise.all(
+          modules.map(async (mod) => {
+            const moduleInfo = await this.getModule(mod.moduleId);
+            const engineer = mod.assignedEngineerId 
+              ? await this.getUser(mod.assignedEngineerId)
+              : null;
+            
+            return {
+              moduleName: moduleInfo?.name || 'Unknown',
+              status: mod.installationStatus || 'not_started',
+              completed: mod.completed,
+              assignedEngineer: engineer ? `${engineer.firstName} ${engineer.lastName}` : 'Unassigned',
+              department: mod.departmentName || '-',
+              startDate: mod.scheduledStartDate ? new Date(mod.scheduledStartDate).toLocaleDateString() : '-',
+              endDate: mod.scheduledEndDate ? new Date(mod.scheduledEndDate).toLocaleDateString() : '-',
+            };
+          })
+        );
+
+        return {
+          id: project.id,
+          clientName: project.clientName,
+          status: project.status,
+          completionPercentage: project.completionPercentage || 0,
+          modulesCompleted,
+          totalModules: modules.length,
+          assignedEngineers: engineerNames,
+          dueDate: project.implementationDate 
+            ? new Date(project.implementationDate).toLocaleDateString() 
+            : null,
+          createdAt: project.createdAt 
+            ? new Date(project.createdAt).toLocaleDateString() 
+            : null,
+          modules: moduleDetails,
+        };
+      })
+    );
+
+    return {
+      summary: stats,
+      projects: projectDetails,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   // Export Data
   async getExportData(type: string): Promise<any> {
     switch (type) {

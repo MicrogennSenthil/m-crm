@@ -264,3 +264,27 @@ export async function sendWelcomeEmail(
     return { success: false, error };
   }
 }
+
+// Generic email sender for custom emails
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  try {
+    const { client, fromEmail } = await getUncachableResendClient();
+    
+    await client.emails.send({
+      from: fromEmail,
+      to: params.to,
+      subject: params.subject,
+      html: params.html
+    });
+    
+    console.log(`✅ Email sent to ${params.to}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    throw error;
+  }
+}

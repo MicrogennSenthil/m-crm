@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,13 +7,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { 
   Search, FolderKanban, Users, CheckCircle2, Clock, AlertTriangle, 
-  Calendar, Building2, User, Settings, GraduationCap, Send 
+  Calendar, Building2, User, Settings, GraduationCap, Send, Download, Mail, FileText
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Project, ProjectModule, Module, User as UserType, TrainingSession, ProjectHandoff } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProjectWithDetails extends Project {
   modules: (ProjectModule & { module?: Module; assignedEngineer?: UserType })[];
@@ -51,15 +56,131 @@ const PROJECT_STATUS_CONFIG: Record<string, { variant: "default" | "secondary" |
   on_hold: { variant: "destructive", label: "On Hold" },
 };
 
+interface ReportData {
+  summary: DashboardStats;
+  projects: {
+    id: string;
+    clientName: string;
+    status: string;
+    completionPercentage: number;
+    modulesCompleted: number;
+    totalModules: number;
+    assignedEngineers: string;
+    dueDate: string | null;
+    modules: any[];
+  }[];
+  generatedAt: string;
+}
+
 export default function ImplementationDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("overview");
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailName, setEmailName] = useState("");
 
   const { data: dashboardData, isLoading } = useQuery<ImplementationDashboardData>({
     queryKey: ["/api/dashboard/implementation"],
   });
+
+  const { data: reportData, refetch: fetchReportData } = useQuery<ReportData>({
+    queryKey: ["/api/reports/implementation-detail"],
+    enabled: false,
+  });
+
+  const emailReportMutation = useMutation({
+    mutationFn: async (data: { recipientEmail: string; recipientName: string; reportData: ReportData }) => {
+      await apiRequest("POST", "/api/reports/implementation/email", data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Report sent successfully!" });
+      setEmailDialogOpen(false);
+      setEmailTo("");
+      setEmailName("");
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to send report", variant: "destructive" });
+    },
+  });
+
+  const exportToCSV = async () => {
+    const { data } = await fetchReportData();
+    if (!data) return;
+
+    const headers = ["Client Name", "Status", "Progress %", "Modules Completed", "Total Modules", "Engineers", "Due Date"];
+    const rows = data.projects.map(p => [
+      p.clientName,
+      p.status,
+      p.completionPercentage,
+      p.modulesCompleted,
+      p.totalModules,
+      p.assignedEngineers,
+      p.dueDate || "Not set"
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `implementation_report_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    toast({ title: "Success", description: "CSV downloaded successfully!" });
+  };
+
+  const exportDetailedCSV = async () => {
+    const { data } = await fetchReportData();
+    if (!data) return;
+
+    const headers = ["Client", "Module", "Status", "Engineer", "Department", "Start Date", "End Date", "Completed"];
+    const rows: string[][] = [];
+    
+    data.projects.forEach(project => {
+      project.modules.forEach(mod => {
+        rows.push([
+          project.clientName,
+          mod.moduleName,
+          mod.status,
+          mod.assignedEngineer,
+          mod.department,
+          mod.startDate,
+          mod.endDate,
+          mod.completed ? "Yes" : "No"
+        ]);
+      });
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `implementation_detailed_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    toast({ title: "Success", description: "Detailed CSV downloaded!" });
+  };
+
+  const handleEmailReport = async () => {
+    const { data } = await fetchReportData();
+    if (!data) {
+      toast({ title: "Error", description: "Failed to fetch report data", variant: "destructive" });
+      return;
+    }
+    emailReportMutation.mutate({
+      recipientEmail: emailTo,
+      recipientName: emailName,
+      reportData: data,
+    });
+  };
 
   const filteredProjects = dashboardData?.projects.filter((project) => {
     const matchesSearch = project.clientName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -104,7 +225,83 @@ export default function ImplementationDashboard() {
             <h1 className="text-2xl font-bold">Implementation Dashboard</h1>
             <p className="text-muted-foreground">Track work progress, schedules, and handoffs</p>
           </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              data-testid="button-export-summary"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export Summary
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportDetailedCSV}
+              data-testid="button-export-detailed"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Export Detailed
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setEmailDialogOpen(true)}
+              data-testid="button-email-report"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Email Report
+            </Button>
+          </div>
         </div>
+
+        {/* Email Report Dialog */}
+        <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Email Implementation Report</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="recipientName">Recipient Name</Label>
+                <Input
+                  id="recipientName"
+                  value={emailName}
+                  onChange={(e) => setEmailName(e.target.value)}
+                  placeholder="Enter recipient name"
+                  data-testid="input-email-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recipientEmail">Email Address</Label>
+                <Input
+                  id="recipientEmail"
+                  type="email"
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="Enter email address"
+                  data-testid="input-email-address"
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                The report will include a summary of all implementation projects with their current status, progress, and assigned engineers.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleEmailReport}
+                disabled={!emailTo || !emailName || emailReportMutation.isPending}
+                data-testid="button-send-email"
+              >
+                {emailReportMutation.isPending ? "Sending..." : "Send Report"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
