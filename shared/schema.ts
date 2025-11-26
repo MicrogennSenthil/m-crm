@@ -523,3 +523,56 @@ export const insertAttachmentSchema = createInsertSchema(attachments).omit({
 
 export type InsertAttachment = z.infer<typeof insertAttachmentSchema>;
 export type Attachment = typeof attachments.$inferSelect;
+
+// Tasks table - Task/Followup management system
+export const tasks = pgTable("tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("pending"), // pending, followup, completed, get_information
+  priority: text("priority").default("medium"), // low, medium, high, urgent
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  mentionedUsers: text("mentioned_users").array(), // User IDs mentioned in the task
+  reminderDate: timestamp("reminder_date"),
+  dueDate: timestamp("due_date"),
+  voiceNoteUrl: text("voice_note_url"), // Object storage path for voice recording
+  voiceNoteDuration: integer("voice_note_duration"), // Duration in seconds
+  relatedEntityType: text("related_entity_type"), // lead, project, ticket, customer
+  relatedEntityId: varchar("related_entity_id"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type Task = typeof tasks.$inferSelect;
+
+// Task Comments table - Comments on tasks
+export const taskComments = pgTable("task_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  voiceNoteUrl: text("voice_note_url"), // Optional voice note for comment
+  voiceNoteDuration: integer("voice_note_duration"),
+  mentionedUsers: text("mentioned_users").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
+export type TaskComment = typeof taskComments.$inferSelect;
