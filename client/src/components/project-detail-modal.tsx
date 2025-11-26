@@ -98,7 +98,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
   });
 
   const { data: engineers } = useQuery<UserType[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/all"],
     enabled: open,
     select: (users) => users.filter((u) => u.role?.toLowerCase() === "engineer"),
   });
