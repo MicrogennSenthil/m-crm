@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp,
   Wrench,
@@ -10,9 +13,20 @@ import {
   ArrowUp,
   ArrowDown,
   Clock,
+  ListTodo,
+  RotateCcw,
+  Circle,
+  CheckCircle2,
+  AlertCircle,
+  Users,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import type { Lead, Project, Ticket, ActivityLog } from "@shared/schema";
+import type { Lead, Project, Ticket, ActivityLog, Task, User } from "@shared/schema";
+
+type TaskWithDetails = Task & {
+  creator?: User;
+  assignee?: User;
+};
 
 interface DashboardStats {
   activeLeads: number;
@@ -26,6 +40,8 @@ interface DashboardStats {
 }
 
 export default function Home() {
+  const { toast } = useToast();
+  
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
   });
@@ -45,6 +61,60 @@ export default function Home() {
   const { data: openTickets, isLoading: ticketsLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets?status=open&limit=5"],
   });
+
+  // Fetch current user to check if admin
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/auth/user"],
+  });
+
+  const isAdmin = currentUser?.role === "admin";
+
+  // Fetch user's tasks for dashboard display (no view param = user's own tasks)
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskWithDetails[]>({
+    queryKey: ["/api/tasks"],
+  });
+
+  // Mutation to revoke (revert) a completed task back to pending
+  const revokeTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      await apiRequest("PATCH", `/api/tasks/${taskId}`, { status: "pending" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      toast({ title: "Task revoked", description: "Task status changed back to pending" });
+    },
+    onError: () => {
+      toast({ title: "Failed to revoke task", variant: "destructive" });
+    },
+  });
+
+  const getTaskStatusIcon = (status: string) => {
+    switch (status) {
+      case "completed":
+        return CheckCircle2;
+      case "followup":
+        return Clock;
+      case "get_information":
+        return Users;
+      default:
+        return Circle;
+    }
+  };
+
+  const getTaskStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "text-green-600";
+      case "followup":
+        return "text-blue-600";
+      case "get_information":
+        return "text-purple-600";
+      case "pending":
+        return "text-yellow-600";
+      default:
+        return "text-muted-foreground";
+    }
+  };
 
   const metricCards = [
     {
@@ -196,8 +266,82 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions Panel - 1/3 width */}
-        <div className="space-y-3 sm:space-y-6">
+        {/* Right Column - Tasks and Quick Panels */}
+        <div className="space-y-3 sm:space-y-4">
+          {/* My Tasks Panel */}
+          <Card>
+            <CardHeader className="p-4 sm:p-6 flex flex-row items-center justify-between gap-2">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <ListTodo className="h-4 w-4" />
+                My Tasks
+              </CardTitle>
+              <Badge variant="secondary" className="text-xs">
+                {tasks.filter(t => t.status !== "completed").length} pending
+              </Badge>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              {tasksLoading ? (
+                <div className="space-y-2">
+                  {Array(4)
+                    .fill(0)
+                    .map((_, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full flex-shrink-0" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))}
+                </div>
+              ) : tasks && tasks.length > 0 ? (
+                <div className="space-y-2" data-testid="dashboard-tasks">
+                  {tasks.slice(0, 6).map((task) => {
+                    const StatusIcon = getTaskStatusIcon(task.status);
+                    const isCompleted = task.status === "completed";
+                    return (
+                      <div 
+                        key={task.id} 
+                        className="flex gap-2 items-center group"
+                        data-testid={`dashboard-task-${task.id}`}
+                      >
+                        <div className={`h-4 w-4 flex-shrink-0 ${getTaskStatusColor(task.status)}`}>
+                          <StatusIcon className="h-4 w-4" />
+                        </div>
+                        <p 
+                          className={`text-sm flex-1 truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}
+                        >
+                          {task.title}
+                        </p>
+                        {/* Admin revoke button for completed tasks */}
+                        {isAdmin && isCompleted && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                            onClick={() => revokeTaskMutation.mutate(task.id)}
+                            disabled={revokeTaskMutation.isPending}
+                            title="Revoke completion"
+                            data-testid={`button-revoke-task-${task.id}`}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {tasks.length > 6 && (
+                    <p className="text-xs text-muted-foreground text-center pt-1">
+                      +{tasks.length - 6} more
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No tasks yet
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent Leads */}
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-sm sm:text-base">Recent Leads</CardTitle>
