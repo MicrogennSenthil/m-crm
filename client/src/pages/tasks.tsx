@@ -84,7 +84,15 @@ export default function TasksPage() {
 
   // Fetch tasks based on view mode
   const { data: tasks = [], isLoading } = useQuery<TaskWithDetails[]>({
-    queryKey: ["/api/tasks", viewMode === "all" ? "?view=all" : ""],
+    queryKey: ["/api/tasks", { view: viewMode }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (viewMode === "all") params.set("view", "all");
+      const url = `/api/tasks${params.toString() ? `?${params.toString()}` : ""}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      return res.json();
+    },
   });
 
   // Delete task mutation

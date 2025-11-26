@@ -2435,8 +2435,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(userId);
       const { status, assignedTo, createdBy, view } = req.query;
       
-      // Admin can see all tasks with includeAll=true
+      // Role-based access control for view=all
       const isAdmin = user?.role === 'admin';
+      
+      // Only admins can request view=all (all tasks)
+      if (view === 'all' && !isAdmin) {
+        return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
+      }
+      
       const includeAll = isAdmin && view === 'all';
       
       const taskList = await storage.getTasks({

@@ -361,14 +361,17 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Assign To</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <Select 
+                    onValueChange={(value) => field.onChange(value === "_unassigned" ? undefined : value)} 
+                    value={field.value || "_unassigned"}
+                  >
                     <FormControl>
                       <SelectTrigger data-testid="select-task-assignee">
                         <SelectValue placeholder="Select team member" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Unassigned</SelectItem>
+                      <SelectItem value="_unassigned">Unassigned</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           <div className="flex items-center gap-2">
