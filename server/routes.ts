@@ -1273,6 +1273,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get next followup date for a lead (for task integration)
+  app.get("/api/leads/:id/next-followup", isAuthenticated, async (req, res) => {
+    try {
+      const followUps = await storage.getFollowUpsByLead(req.params.id);
+      const now = new Date();
+      
+      // Only consider uncompleted followups
+      const uncompletedFollowUps = followUps.filter(f => !f.completed);
+      
+      if (uncompletedFollowUps.length === 0) {
+        // No uncompleted followups exist
+        return res.json({ nextFollowUpDate: null, message: "No pending followups" });
+      }
+      
+      // Find the next upcoming uncompleted followup (future dates)
+      const futureFollowUp = uncompletedFollowUps
+        .filter(f => new Date(f.followUpDate) >= now)
+        .sort((a, b) => new Date(a.followUpDate).getTime() - new Date(b.followUpDate).getTime())[0];
+      
+      if (futureFollowUp) {
+        return res.json({ nextFollowUpDate: futureFollowUp.followUpDate, notes: futureFollowUp.notes });
+      }
+      
+      // If no future uncompleted followups, return the most recent past uncompleted one
+      const pastFollowUp = uncompletedFollowUps
+        .sort((a, b) => new Date(b.followUpDate).getTime() - new Date(a.followUpDate).getTime())[0];
+      
+      if (pastFollowUp) {
+        return res.json({ nextFollowUpDate: pastFollowUp.followUpDate, notes: pastFollowUp.notes, isPast: true });
+      }
+      
+      res.json({ nextFollowUpDate: null });
+    } catch (error) {
+      console.error("Error fetching next follow-up:", error);
+      res.status(500).json({ message: "Failed to fetch next follow-up" });
+    }
+  });
+
   // Demo Date History routes
   app.get("/api/leads/:id/demo-history", isAuthenticated, async (req, res) => {
     try {

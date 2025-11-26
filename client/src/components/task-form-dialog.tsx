@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Task, User } from "@shared/schema";
+import type { Task, User, Lead } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +58,8 @@ const taskFormSchema = z.object({
   mentionedUsers: z.array(z.string()).optional(),
   reminderDate: z.date().optional().nullable(),
   dueDate: z.date().optional().nullable(),
+  relatedEntityType: z.string().optional(),
+  relatedEntityId: z.string().optional(),
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -83,6 +85,8 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -91,6 +95,11 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   // Fetch all users for assignment and mentions
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users/all"],
+  });
+
+  // Fetch all leads for linking tasks
+  const { data: leads = [] } = useQuery<Lead[]>({
+    queryKey: ["/api/leads"],
   });
 
   const form = useForm<TaskFormValues>({
@@ -104,8 +113,64 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       mentionedUsers: [],
       reminderDate: null,
       dueDate: null,
+      relatedEntityType: undefined,
+      relatedEntityId: undefined,
     },
   });
+
+  // Fetch next followup date when lead is selected
+  const handleLeadSelect = async (leadId: string | null) => {
+    setSelectedLeadId(leadId);
+    form.setValue("relatedEntityType", leadId ? "lead" : undefined);
+    form.setValue("relatedEntityId", leadId || undefined);
+    
+    if (leadId) {
+      try {
+        const response = await fetch(`/api/leads/${leadId}/next-followup`, {
+          credentials: "include",
+        });
+        const data = await response.json();
+        
+        // Find the lead to pre-populate title
+        const selectedLead = leads.find(l => l.id === leadId);
+        
+        if (data.nextFollowUpDate) {
+          const followUpDate = new Date(data.nextFollowUpDate);
+          form.setValue("reminderDate", followUpDate);
+          
+          if (selectedLead && !form.getValues("title")) {
+            form.setValue("title", `Follow up: ${selectedLead.companyName}`);
+            form.setValue("status", "followup");
+          }
+          
+          if (data.isPast) {
+            toast({ 
+              title: "Note: Latest followup date was in the past",
+              description: "The reminder date has been set but you may want to update it.",
+            });
+          } else {
+            toast({ 
+              title: "Followup date loaded",
+              description: `Reminder set to ${followUpDate.toLocaleDateString()}`,
+            });
+          }
+        } else {
+          // No pending followups for this lead
+          if (selectedLead && !form.getValues("title")) {
+            form.setValue("title", `Follow up: ${selectedLead.companyName}`);
+            form.setValue("status", "followup");
+          }
+          toast({ 
+            title: "No pending followups",
+            description: "This lead has no scheduled followup dates. Please set a reminder manually.",
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching lead followup:", error);
+      }
+    }
+    setLeadOpen(false);
+  };
 
   // Reset form when task changes
   useEffect(() => {
@@ -119,9 +184,17 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         mentionedUsers: task.mentionedUsers || [],
         reminderDate: task.reminderDate ? new Date(task.reminderDate) : null,
         dueDate: task.dueDate ? new Date(task.dueDate) : null,
+        relatedEntityType: task.relatedEntityType || undefined,
+        relatedEntityId: task.relatedEntityId || undefined,
       });
       if (task.voiceNoteUrl) {
         setAudioUrl(task.voiceNoteUrl);
+      }
+      // Set selected lead if task is linked to a lead
+      if (task.relatedEntityType === "lead" && task.relatedEntityId) {
+        setSelectedLeadId(task.relatedEntityId);
+      } else {
+        setSelectedLeadId(null);
       }
     } else {
       form.reset({
@@ -133,10 +206,13 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         mentionedUsers: [],
         reminderDate: null,
         dueDate: null,
+        relatedEntityType: undefined,
+        relatedEntityId: undefined,
       });
       setAudioBlob(null);
       setAudioUrl(null);
       setRecordingDuration(0);
+      setSelectedLeadId(null);
     }
   }, [task, form, open]);
 
@@ -272,6 +348,65 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Link to Sales Lead - Auto-populates reminder date from lead's followup */}
+            <div className="space-y-2">
+              <FormLabel>Link to Sales Lead (Optional)</FormLabel>
+              <Popover open={leadOpen} onOpenChange={setLeadOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                    data-testid="select-related-lead"
+                  >
+                    {selectedLeadId 
+                      ? leads.find(l => l.id === selectedLeadId)?.companyName || "Select lead..."
+                      : "Select lead to link..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search leads..." />
+                    <CommandList>
+                      <CommandEmpty>No leads found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => handleLeadSelect(null)}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${!selectedLeadId ? "opacity-100" : "opacity-0"}`}
+                          />
+                          <span className="text-muted-foreground">No lead linked</span>
+                        </CommandItem>
+                        {leads.map((lead) => (
+                          <CommandItem
+                            key={lead.id}
+                            onSelect={() => handleLeadSelect(lead.id)}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selectedLeadId === lead.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <div className="flex flex-col">
+                              <span>{lead.companyName}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {lead.contactPerson} - {lead.stage?.replace("_", " ")}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedLeadId && (
+                <p className="text-xs text-muted-foreground">
+                  Reminder date will be auto-filled from the lead's next followup date
+                </p>
+              )}
+            </div>
+            
             <FormField
               control={form.control}
               name="title"
