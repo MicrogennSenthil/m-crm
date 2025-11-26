@@ -21,6 +21,8 @@ import {
   feedback,
   activityLog,
   attachments,
+  tasks,
+  taskComments,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -66,6 +68,10 @@ import {
   type InsertActivityLog,
   type Attachment,
   type InsertAttachment,
+  type Task,
+  type InsertTask,
+  type TaskComment,
+  type InsertTaskComment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -193,6 +199,34 @@ export interface IStorage {
   getAttachments(entityType: string, entityId: string): Promise<Attachment[]>;
   createAttachment(attachment: InsertAttachment): Promise<Attachment>;
   deleteAttachment(id: string): Promise<Attachment | undefined>;
+
+  // Task operations
+  getTasks(filters?: { 
+    userId?: string; 
+    assignedTo?: string; 
+    createdBy?: string; 
+    status?: string;
+    includeAll?: boolean; // For super admin to see all tasks
+  }): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User; 
+    mentionedUserDetails?: User[];
+    commentsCount?: number;
+  })[]>;
+  getTask(id: string): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User; 
+    mentionedUserDetails?: User[];
+  }) | undefined>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, data: Partial<InsertTask>): Promise<Task>;
+  deleteTask(id: string): Promise<void>;
+
+  // Task Comment operations
+  getTaskComments(taskId: string): Promise<(TaskComment & { user?: User })[]>;
+  createTaskComment(comment: InsertTaskComment): Promise<TaskComment>;
+  updateTaskComment(id: string, data: Partial<InsertTaskComment>): Promise<TaskComment>;
+  deleteTaskComment(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1263,6 +1297,179 @@ export class DatabaseStorage implements IStorage {
   async deleteAttachment(id: string): Promise<Attachment | undefined> {
     const [deleted] = await db.delete(attachments).where(eq(attachments.id, id)).returning();
     return deleted;
+  }
+
+  // Task operations
+  async getTasks(filters?: { 
+    userId?: string; 
+    assignedTo?: string; 
+    createdBy?: string; 
+    status?: string;
+    includeAll?: boolean;
+  }): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User; 
+    mentionedUserDetails?: User[];
+    commentsCount?: number;
+  })[]> {
+    const conditions: any[] = [];
+    
+    if (filters?.status) {
+      conditions.push(eq(tasks.status, filters.status));
+    }
+    
+    if (!filters?.includeAll) {
+      // If not admin viewing all, filter by user involvement
+      if (filters?.userId) {
+        // Show tasks where user is creator, assignee, or mentioned
+        conditions.push(
+          sql`(${tasks.createdBy} = ${filters.userId} OR ${tasks.assignedTo} = ${filters.userId} OR ${filters.userId} = ANY(${tasks.mentionedUsers}))`
+        );
+      }
+      if (filters?.assignedTo) {
+        conditions.push(eq(tasks.assignedTo, filters.assignedTo));
+      }
+      if (filters?.createdBy) {
+        conditions.push(eq(tasks.createdBy, filters.createdBy));
+      }
+    }
+
+    const taskList = await db
+      .select()
+      .from(tasks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(tasks.createdAt));
+
+    // Enrich with user details and comment counts
+    const enrichedTasks = await Promise.all(
+      taskList.map(async (task) => {
+        const [creator] = task.createdBy 
+          ? await db.select().from(users).where(eq(users.id, task.createdBy))
+          : [undefined];
+        
+        const [assignee] = task.assignedTo 
+          ? await db.select().from(users).where(eq(users.id, task.assignedTo))
+          : [undefined];
+
+        let mentionedUserDetails: User[] = [];
+        if (task.mentionedUsers && task.mentionedUsers.length > 0) {
+          mentionedUserDetails = await db
+            .select()
+            .from(users)
+            .where(sql`${users.id} = ANY(${task.mentionedUsers})`);
+        }
+
+        const [commentCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(taskComments)
+          .where(eq(taskComments.taskId, task.id));
+
+        return {
+          ...task,
+          creator,
+          assignee,
+          mentionedUserDetails,
+          commentsCount: Number(commentCount?.count || 0),
+        };
+      })
+    );
+
+    return enrichedTasks;
+  }
+
+  async getTask(id: string): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User; 
+    mentionedUserDetails?: User[];
+  }) | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    if (!task) return undefined;
+
+    const [creator] = task.createdBy 
+      ? await db.select().from(users).where(eq(users.id, task.createdBy))
+      : [undefined];
+    
+    const [assignee] = task.assignedTo 
+      ? await db.select().from(users).where(eq(users.id, task.assignedTo))
+      : [undefined];
+
+    let mentionedUserDetails: User[] = [];
+    if (task.mentionedUsers && task.mentionedUsers.length > 0) {
+      mentionedUserDetails = await db
+        .select()
+        .from(users)
+        .where(sql`${users.id} = ANY(${task.mentionedUsers})`);
+    }
+
+    return {
+      ...task,
+      creator,
+      assignee,
+      mentionedUserDetails,
+    };
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const [newTask] = await db.insert(tasks).values(task).returning();
+    return newTask;
+  }
+
+  async updateTask(id: string, data: Partial<InsertTask>): Promise<Task> {
+    const updateData: any = { ...data, updatedAt: new Date() };
+    
+    // Set completedAt when status changes to completed
+    if (data.status === 'completed') {
+      updateData.completedAt = new Date();
+    }
+    
+    const [updated] = await db
+      .update(tasks)
+      .set(updateData)
+      .where(eq(tasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    await db.delete(tasks).where(eq(tasks.id, id));
+  }
+
+  // Task Comment operations
+  async getTaskComments(taskId: string): Promise<(TaskComment & { user?: User })[]> {
+    const comments = await db
+      .select()
+      .from(taskComments)
+      .where(eq(taskComments.taskId, taskId))
+      .orderBy(desc(taskComments.createdAt));
+
+    const enrichedComments = await Promise.all(
+      comments.map(async (comment) => {
+        const [user] = comment.userId 
+          ? await db.select().from(users).where(eq(users.id, comment.userId))
+          : [undefined];
+        return { ...comment, user };
+      })
+    );
+
+    return enrichedComments;
+  }
+
+  async createTaskComment(comment: InsertTaskComment): Promise<TaskComment> {
+    const [newComment] = await db.insert(taskComments).values(comment).returning();
+    return newComment;
+  }
+
+  async updateTaskComment(id: string, data: Partial<InsertTaskComment>): Promise<TaskComment> {
+    const [updated] = await db
+      .update(taskComments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(taskComments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskComment(id: string): Promise<void> {
+    await db.delete(taskComments).where(eq(taskComments.id, id));
   }
 }
 
