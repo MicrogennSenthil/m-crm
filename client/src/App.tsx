@@ -18,6 +18,7 @@ import Support from "@/pages/support";
 import Reports from "@/pages/reports";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
+import Tasks from "@/pages/tasks";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -58,6 +59,7 @@ function Router() {
           <main className="flex-1 overflow-auto p-3 sm:p-6">
             <Switch>
               <Route path="/" component={Home} />
+              <Route path="/tasks" component={Tasks} />
               <Route path="/sales" component={Sales} />
               <Route path="/implementations" component={Implementations} />
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />

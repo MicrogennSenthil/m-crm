@@ -8,6 +8,7 @@ import {
   Database,
   Settings,
   LogOut,
+  ListTodo,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -31,6 +32,12 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
+    roles: ["sales_executive", "engineer", "support", "admin"],
+  },
+  {
+    title: "Tasks",
+    url: "/tasks",
+    icon: ListTodo,
     roles: ["sales_executive", "engineer", "support", "admin"],
   },
   {

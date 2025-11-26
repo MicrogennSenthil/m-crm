@@ -2693,19 +2693,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tasks/voice-upload", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { taskId, duration } = req.body;
+      const { taskId } = req.body;
       
-      // Generate a unique file path for the voice note
+      // Generate a unique file name for the voice note
       const timestamp = Date.now();
-      const objectPath = `.private/voice-notes/${userId}/${taskId || 'new'}_${timestamp}.webm`;
+      const fileName = `voice_${userId}_${taskId || 'new'}_${timestamp}.webm`;
       
-      // Get signed URL for upload
-      const { signedUrl, objectPath: finalPath } = await objectStorageService.getSignedUploadUrl(objectPath);
+      // Get upload URL using the object storage service
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName);
       
       res.json({ 
-        signedUrl, 
-        objectPath: finalPath,
-        voiceNoteUrl: `/objects/${finalPath}`,
+        uploadURL, 
+        objectPath,
+        voiceNoteUrl: `/objects/${objectPath}`,
       });
     } catch (error) {
       console.error("Error getting voice upload URL:", error);
