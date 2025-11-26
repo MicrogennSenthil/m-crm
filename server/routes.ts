@@ -884,6 +884,295 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Google Ads Lead Form Extension Webhook
+  app.post("/api/webhooks/google", async (req, res) => {
+    try {
+      const { lead_id, campaign_id, adgroup_id, form_id, gcl_id, google_key, is_test, user_column_data } = req.body;
+      
+      // Parse Google's user_column_data array format
+      const fieldMap = new Map();
+      if (Array.isArray(user_column_data)) {
+        user_column_data.forEach((field: { column_id: string; column_name: string; string_value: string }) => {
+          fieldMap.set(field.column_id, field.string_value || "");
+        });
+      }
+      
+      // Skip test leads but return success
+      if (is_test) {
+        return res.json({ success: true, message: "Test lead received" });
+      }
+      
+      const leadData = {
+        companyName: fieldMap.get("COMPANY_NAME") || fieldMap.get("COMPANY") || "Google Ads Lead",
+        contactPerson: fieldMap.get("FULL_NAME") || `${fieldMap.get("FIRST_NAME") || ""} ${fieldMap.get("LAST_NAME") || ""}`.trim() || "Unknown",
+        contactEmail: fieldMap.get("EMAIL") || "",
+        contactPhone: fieldMap.get("PHONE_NUMBER") || "",
+        leadSource: "google_ads",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Google Ads Lead Form - Campaign ID: ${campaign_id || "N/A"}, Form ID: ${form_id || "N/A"}, Lead ID: ${lead_id || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Google Ads: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Google Ads webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // YouTube Lead Form Webhook (via Google Ads infrastructure)
+  app.post("/api/webhooks/youtube", async (req, res) => {
+    try {
+      const { lead_id, campaign_id, video_id, form_id, user_column_data } = req.body;
+      
+      const fieldMap = new Map();
+      if (Array.isArray(user_column_data)) {
+        user_column_data.forEach((field: { column_id: string; string_value: string }) => {
+          fieldMap.set(field.column_id, field.string_value || "");
+        });
+      }
+      
+      const leadData = {
+        companyName: fieldMap.get("COMPANY_NAME") || fieldMap.get("COMPANY") || "YouTube Lead",
+        contactPerson: fieldMap.get("FULL_NAME") || `${fieldMap.get("FIRST_NAME") || ""} ${fieldMap.get("LAST_NAME") || ""}`.trim() || "Unknown",
+        contactEmail: fieldMap.get("EMAIL") || "",
+        contactPhone: fieldMap.get("PHONE_NUMBER") || "",
+        leadSource: "youtube",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `YouTube Lead Form - Video ID: ${video_id || "N/A"}, Campaign: ${campaign_id || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from YouTube: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("YouTube webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // TikTok Lead Generation Webhook
+  app.post("/api/webhooks/tiktok", async (req, res) => {
+    try {
+      const { event, lead_info, page_info, ad_info } = req.body;
+      
+      const leadData = {
+        companyName: lead_info?.company || lead_info?.business_name || "TikTok Lead",
+        contactPerson: lead_info?.name || lead_info?.full_name || `${lead_info?.first_name || ""} ${lead_info?.last_name || ""}`.trim() || "Unknown",
+        contactEmail: lead_info?.email || "",
+        contactPhone: lead_info?.phone_number || lead_info?.phone || "",
+        leadSource: "tiktok",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `TikTok Lead Ad - Page: ${page_info?.page_name || "N/A"}, Ad: ${ad_info?.ad_name || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from TikTok: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("TikTok webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Pinterest Lead Ads Webhook
+  app.post("/api/webhooks/pinterest", async (req, res) => {
+    try {
+      const { lead_data, pin_info, campaign_info } = req.body;
+      
+      const leadData = {
+        companyName: lead_data?.company || lead_data?.business || "Pinterest Lead",
+        contactPerson: lead_data?.full_name || lead_data?.name || `${lead_data?.first_name || ""} ${lead_data?.last_name || ""}`.trim() || "Unknown",
+        contactEmail: lead_data?.email || "",
+        contactPhone: lead_data?.phone || "",
+        leadSource: "pinterest",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Pinterest Lead Ad - Pin: ${pin_info?.pin_id || "N/A"}, Campaign: ${campaign_info?.name || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Pinterest: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Pinterest webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Snapchat Lead Ads Webhook
+  app.post("/api/webhooks/snapchat", async (req, res) => {
+    try {
+      const { lead, campaign, ad_squad } = req.body;
+      
+      const leadData = {
+        companyName: lead?.company || lead?.organization || "Snapchat Lead",
+        contactPerson: lead?.full_name || lead?.name || `${lead?.first_name || ""} ${lead?.last_name || ""}`.trim() || "Unknown",
+        contactEmail: lead?.email || "",
+        contactPhone: lead?.phone_number || lead?.phone || "",
+        leadSource: "snapchat",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Snapchat Lead Ad - Campaign: ${campaign?.name || "N/A"}, Ad Squad: ${ad_squad?.name || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Snapchat: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Snapchat webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // WhatsApp Click-to-Message Webhook (via Facebook Business API)
+  app.post("/api/webhooks/whatsapp", async (req, res) => {
+    try {
+      const { entry } = req.body;
+      
+      // Parse WhatsApp message format (Facebook Webhook structure)
+      const message = entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+      const contact = entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
+      
+      if (!message || !contact) {
+        return res.json({ success: true, message: "No lead data in webhook" });
+      }
+      
+      const leadData = {
+        companyName: contact?.profile?.name || "WhatsApp Lead",
+        contactPerson: contact?.profile?.name || "Unknown",
+        contactEmail: "",
+        contactPhone: contact?.wa_id || message?.from || "",
+        leadSource: "whatsapp",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `WhatsApp Lead - Message: ${message?.text?.body || "Click-to-WhatsApp inquiry"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from WhatsApp: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("WhatsApp webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // WhatsApp Webhook Verification (GET request for initial setup)
+  app.get("/api/webhooks/whatsapp", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+    
+    const verifyToken = process.env.WA_WEBHOOK_VERIFY_TOKEN || "microgenn_crm_webhook";
+    
+    if (mode === "subscribe" && token === verifyToken) {
+      res.status(200).send(challenge);
+    } else {
+      res.status(403).send("Verification failed");
+    }
+  });
+
+  // Microsoft/Bing Ads Lead Form Extension Webhook
+  app.post("/api/webhooks/microsoft", async (req, res) => {
+    try {
+      const { leadFormId, campaignId, adGroupId, leadId, formData } = req.body;
+      
+      // Parse Microsoft Ads form data
+      const fieldMap = new Map();
+      if (Array.isArray(formData)) {
+        formData.forEach((field: { fieldName: string; value: string }) => {
+          fieldMap.set(field.fieldName?.toLowerCase(), field.value || "");
+        });
+      }
+      
+      const leadData = {
+        companyName: fieldMap.get("company") || fieldMap.get("companyname") || "Microsoft Ads Lead",
+        contactPerson: fieldMap.get("fullname") || fieldMap.get("name") || `${fieldMap.get("firstname") || ""} ${fieldMap.get("lastname") || ""}`.trim() || "Unknown",
+        contactEmail: fieldMap.get("email") || "",
+        contactPhone: fieldMap.get("phone") || fieldMap.get("phonenumber") || "",
+        leadSource: "microsoft_ads",
+        stage: "new_lead" as const,
+        estimatedValue: 0,
+        notes: `Microsoft/Bing Ads Lead Form - Campaign ID: ${campaignId || "N/A"}, Lead Form ID: ${leadFormId || "N/A"}`,
+      };
+      
+      const validatedData = insertLeadSchema.parse(leadData);
+      const newLead = await storage.createLead(validatedData);
+      
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: newLead.id,
+        action: "webhook_created",
+        description: `Lead captured from Microsoft/Bing Ads: ${newLead.companyName}`,
+        userId: null,
+      });
+      
+      res.json({ success: true, leadId: newLead.id });
+    } catch (error) {
+      console.error("Microsoft Ads webhook error:", error);
+      res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
   // Generic Website Form Webhook (for custom integrations)
   app.post("/api/webhooks/website", async (req, res) => {
     try {

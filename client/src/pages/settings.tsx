@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, Facebook, Linkedin, Instagram, Globe, CheckCircle2, AlertCircle } from "lucide-react";
+import { Copy, ExternalLink, Globe, CheckCircle2, MessageCircle, Monitor } from "lucide-react";
+import { SiFacebook, SiLinkedin, SiInstagram, SiX, SiGoogle, SiYoutube, SiTiktok, SiPinterest, SiSnapchat, SiWhatsapp } from "react-icons/si";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useState, useEffect } from "react";
 
 function WebhookUrlField({ label, url, description }: { label: string; url: string; description?: string }) {
@@ -204,36 +206,106 @@ export default function Settings() {
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                Social Media Lead Integrations
+                Social Media & Advertising Lead Integrations
               </CardTitle>
               <CardDescription>
-                Connect your social media accounts to automatically capture leads from Facebook, LinkedIn, and Instagram ads
+                Connect your advertising platforms to automatically capture leads from Google, Facebook, LinkedIn, YouTube, TikTok, and more
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              <Tabs defaultValue="facebook" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-                  <TabsTrigger value="facebook" className="gap-1" data-testid="tab-facebook">
-                    <Facebook className="h-4 w-4" />
-                    <span className="hidden sm:inline">Facebook</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="linkedin" className="gap-1" data-testid="tab-linkedin">
-                    <Linkedin className="h-4 w-4" />
-                    <span className="hidden sm:inline">LinkedIn</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="instagram" className="gap-1" data-testid="tab-instagram">
-                    <Instagram className="h-4 w-4" />
-                    <span className="hidden sm:inline">Instagram</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="website" className="gap-1" data-testid="tab-website">
-                    <Globe className="h-4 w-4" />
-                    <span className="hidden sm:inline">Website</span>
-                  </TabsTrigger>
-                </TabsList>
+              <Tabs defaultValue="google" className="space-y-4">
+                <ScrollArea className="w-full whitespace-nowrap">
+                  <TabsList className="inline-flex w-max">
+                    <TabsTrigger value="google" className="gap-1" data-testid="tab-google">
+                      <SiGoogle className="h-4 w-4" />
+                      <span className="hidden sm:inline">Google</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="youtube" className="gap-1" data-testid="tab-youtube">
+                      <SiYoutube className="h-4 w-4" />
+                      <span className="hidden sm:inline">YouTube</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="facebook" className="gap-1" data-testid="tab-facebook">
+                      <SiFacebook className="h-4 w-4" />
+                      <span className="hidden sm:inline">Facebook</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="instagram" className="gap-1" data-testid="tab-instagram">
+                      <SiInstagram className="h-4 w-4" />
+                      <span className="hidden sm:inline">Instagram</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="linkedin" className="gap-1" data-testid="tab-linkedin">
+                      <SiLinkedin className="h-4 w-4" />
+                      <span className="hidden sm:inline">LinkedIn</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="twitter" className="gap-1" data-testid="tab-twitter">
+                      <SiX className="h-4 w-4" />
+                      <span className="hidden sm:inline">X/Twitter</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="tiktok" className="gap-1" data-testid="tab-tiktok">
+                      <SiTiktok className="h-4 w-4" />
+                      <span className="hidden sm:inline">TikTok</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="pinterest" className="gap-1" data-testid="tab-pinterest">
+                      <SiPinterest className="h-4 w-4" />
+                      <span className="hidden sm:inline">Pinterest</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="snapchat" className="gap-1" data-testid="tab-snapchat">
+                      <SiSnapchat className="h-4 w-4" />
+                      <span className="hidden sm:inline">Snapchat</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="whatsapp" className="gap-1" data-testid="tab-whatsapp">
+                      <SiWhatsapp className="h-4 w-4" />
+                      <span className="hidden sm:inline">WhatsApp</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="microsoft" className="gap-1" data-testid="tab-microsoft">
+                      <Monitor className="h-4 w-4" />
+                      <span className="hidden sm:inline">Bing</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="website" className="gap-1" data-testid="tab-website">
+                      <Globe className="h-4 w-4" />
+                      <span className="hidden sm:inline">Website</span>
+                    </TabsTrigger>
+                  </TabsList>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+
+                <TabsContent value="google" className="mt-4">
+                  <IntegrationCard
+                    icon={SiGoogle}
+                    title="Google Ads Lead Forms"
+                    description="Capture leads from Google Search and Display Lead Form Extensions"
+                    webhookUrl={`${baseUrl}/api/webhooks/google`}
+                    steps={[
+                      "Sign into Google Ads and go to Campaigns > Ads & Assets > Extensions",
+                      "Select your Lead Form Extension",
+                      "Under 'Lead Delivery Option', expand 'Manage your leads with a webhook'",
+                      "Enter the Webhook URL and a verification key",
+                      "Click 'Send test data' to verify the connection",
+                      "Save and add the extension to your campaign"
+                    ]}
+                    docsUrl="https://developers.google.com/google-ads/webhook/docs/implementation"
+                  />
+                </TabsContent>
+
+                <TabsContent value="youtube" className="mt-4">
+                  <IntegrationCard
+                    icon={SiYoutube}
+                    title="YouTube Lead Forms"
+                    description="Capture leads from YouTube video ad campaigns via Google Ads"
+                    webhookUrl={`${baseUrl}/api/webhooks/youtube`}
+                    steps={[
+                      "YouTube Lead Forms are managed through Google Ads",
+                      "Create a Video campaign in Google Ads with Lead Form extension",
+                      "Configure the Lead Form Extension with webhook delivery",
+                      "Enter the Webhook URL shown above",
+                      "Test the integration before launching your campaign"
+                    ]}
+                    docsUrl="https://support.google.com/google-ads/answer/9423234"
+                  />
+                </TabsContent>
 
                 <TabsContent value="facebook" className="mt-4">
                   <IntegrationCard
-                    icon={Facebook}
+                    icon={SiFacebook}
                     title="Facebook Lead Ads"
                     description="Automatically capture leads from your Facebook Lead Ad campaigns"
                     webhookUrl={`${baseUrl}/api/webhooks/facebook`}
@@ -250,9 +322,28 @@ export default function Settings() {
                   />
                 </TabsContent>
 
+                <TabsContent value="instagram" className="mt-4">
+                  <IntegrationCard
+                    icon={SiInstagram}
+                    title="Instagram Lead Ads"
+                    description="Capture leads from Instagram Lead Ad campaigns (via Facebook Business)"
+                    webhookUrl={`${baseUrl}/api/webhooks/instagram`}
+                    verifyToken={verifyToken}
+                    steps={[
+                      "Instagram Lead Ads are managed through Facebook Business Suite",
+                      "Go to Facebook Events Manager and select your Instagram Business Account",
+                      "Under 'Subscriptions', add a webhook for Leadgen",
+                      "Paste the Webhook URL and Verify Token shown above",
+                      "Verify and save the webhook subscription",
+                      "Create Lead Ads in Instagram through Facebook Ads Manager"
+                    ]}
+                    docsUrl="https://www.facebook.com/business/help/1462876307360828"
+                  />
+                </TabsContent>
+
                 <TabsContent value="linkedin" className="mt-4">
                   <IntegrationCard
-                    icon={Linkedin}
+                    icon={SiLinkedin}
                     title="LinkedIn Lead Gen Forms"
                     description="Capture leads from LinkedIn Lead Gen Form campaigns"
                     webhookUrl={`${baseUrl}/api/webhooks/linkedin`}
@@ -268,22 +359,110 @@ export default function Settings() {
                   />
                 </TabsContent>
 
-                <TabsContent value="instagram" className="mt-4">
+                <TabsContent value="twitter" className="mt-4">
                   <IntegrationCard
-                    icon={Instagram}
-                    title="Instagram Lead Ads"
-                    description="Capture leads from Instagram Lead Ad campaigns (via Facebook Business)"
-                    webhookUrl={`${baseUrl}/api/webhooks/instagram`}
+                    icon={SiX}
+                    title="X (Twitter) Lead Generation"
+                    description="Capture leads from X/Twitter Lead Generation Cards and ads"
+                    webhookUrl={`${baseUrl}/api/webhooks/twitter`}
+                    steps={[
+                      "Go to X Ads Manager (ads.twitter.com)",
+                      "Create or select a Lead Generation Card campaign",
+                      "Navigate to your Lead Gen Card settings",
+                      "Configure webhook integration with the URL shown above",
+                      "Map the form fields and save the settings"
+                    ]}
+                    docsUrl="https://developer.twitter.com/en/docs/twitter-ads-api/creatives/api-reference/cards"
+                  />
+                </TabsContent>
+
+                <TabsContent value="tiktok" className="mt-4">
+                  <IntegrationCard
+                    icon={SiTiktok}
+                    title="TikTok Lead Generation"
+                    description="Capture leads from TikTok In-Feed and TopView Lead Ads"
+                    webhookUrl={`${baseUrl}/api/webhooks/tiktok`}
+                    steps={[
+                      "Go to TikTok Ads Manager",
+                      "Navigate to Assets > Instant Forms",
+                      "Create or select your Lead Form",
+                      "Under CRM Integration, choose 'Webhook'",
+                      "Paste the Webhook URL shown above",
+                      "Test the connection and save"
+                    ]}
+                    docsUrl="https://ads.tiktok.com/help/article/lead-generation"
+                  />
+                </TabsContent>
+
+                <TabsContent value="pinterest" className="mt-4">
+                  <IntegrationCard
+                    icon={SiPinterest}
+                    title="Pinterest Lead Ads"
+                    description="Capture leads from Pinterest Lead Generation campaigns"
+                    webhookUrl={`${baseUrl}/api/webhooks/pinterest`}
+                    steps={[
+                      "Go to Pinterest Business Hub",
+                      "Navigate to Ads > Conversions",
+                      "Set up Lead Ads conversion tracking",
+                      "Configure webhook delivery with the URL shown above",
+                      "Test the integration before launching"
+                    ]}
+                    docsUrl="https://help.pinterest.com/en/business/article/lead-ads"
+                  />
+                </TabsContent>
+
+                <TabsContent value="snapchat" className="mt-4">
+                  <IntegrationCard
+                    icon={SiSnapchat}
+                    title="Snapchat Lead Ads"
+                    description="Capture leads from Snapchat Lead Generation ads"
+                    webhookUrl={`${baseUrl}/api/webhooks/snapchat`}
+                    steps={[
+                      "Go to Snapchat Ads Manager",
+                      "Navigate to Lead Forms under Creative Assets",
+                      "Create or edit your Lead Form",
+                      "Under CRM Integration, select 'Webhook'",
+                      "Enter the Webhook URL shown above",
+                      "Save and attach to your campaign"
+                    ]}
+                    docsUrl="https://businesshelp.snapchat.com/s/article/lead-gen-forms"
+                  />
+                </TabsContent>
+
+                <TabsContent value="whatsapp" className="mt-4">
+                  <IntegrationCard
+                    icon={SiWhatsapp}
+                    title="WhatsApp Business"
+                    description="Capture leads from WhatsApp Click-to-Message ads and inquiries"
+                    webhookUrl={`${baseUrl}/api/webhooks/whatsapp`}
                     verifyToken={verifyToken}
                     steps={[
-                      "Instagram Lead Ads are managed through Facebook Business Suite",
-                      "Go to Facebook Events Manager and select your Instagram Business Account",
-                      "Under 'Subscriptions', add a webhook for Leadgen",
-                      "Paste the Webhook URL and Verify Token shown above",
-                      "Verify and save the webhook subscription",
-                      "Create Lead Ads in Instagram through Facebook Ads Manager"
+                      "WhatsApp webhooks are configured through Facebook Business API",
+                      "Go to Meta for Developers and select your WhatsApp Business App",
+                      "Navigate to WhatsApp > Configuration > Webhooks",
+                      "Enter the Webhook URL and Verify Token shown above",
+                      "Subscribe to 'messages' webhook field",
+                      "Incoming messages will create leads automatically"
                     ]}
-                    docsUrl="https://www.facebook.com/business/help/1462876307360828"
+                    docsUrl="https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/set-up"
+                  />
+                </TabsContent>
+
+                <TabsContent value="microsoft" className="mt-4">
+                  <IntegrationCard
+                    icon={Monitor}
+                    title="Microsoft/Bing Ads"
+                    description="Capture leads from Microsoft Advertising Lead Form Extensions"
+                    webhookUrl={`${baseUrl}/api/webhooks/microsoft`}
+                    steps={[
+                      "Sign into Microsoft Advertising",
+                      "Go to All Campaigns > Ad Extensions > Lead Form Extensions",
+                      "Create or edit a Lead Form Extension",
+                      "Under 'Lead delivery', choose 'Webhook'",
+                      "Enter the Webhook URL shown above",
+                      "Save and associate with your campaigns"
+                    ]}
+                    docsUrl="https://help.ads.microsoft.com/apex/index/3/en/60038"
                   />
                 </TabsContent>
 
@@ -326,23 +505,31 @@ Content-Type: application/json
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">Integration Status</CardTitle>
-              <CardDescription>Recent lead captures from connected platforms</CardDescription>
+              <CardDescription>All platforms are ready to receive leads</CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                 {[
-                  { icon: Facebook, name: "Facebook", color: "text-blue-600" },
-                  { icon: Linkedin, name: "LinkedIn", color: "text-blue-700" },
-                  { icon: Instagram, name: "Instagram", color: "text-pink-600" },
+                  { icon: SiGoogle, name: "Google Ads", color: "text-blue-500" },
+                  { icon: SiYoutube, name: "YouTube", color: "text-red-600" },
+                  { icon: SiFacebook, name: "Facebook", color: "text-blue-600" },
+                  { icon: SiInstagram, name: "Instagram", color: "text-pink-600" },
+                  { icon: SiLinkedin, name: "LinkedIn", color: "text-blue-700" },
+                  { icon: SiX, name: "X/Twitter", color: "text-foreground" },
+                  { icon: SiTiktok, name: "TikTok", color: "text-foreground" },
+                  { icon: SiPinterest, name: "Pinterest", color: "text-red-700" },
+                  { icon: SiSnapchat, name: "Snapchat", color: "text-yellow-400" },
+                  { icon: SiWhatsapp, name: "WhatsApp", color: "text-green-500" },
+                  { icon: Monitor, name: "Bing Ads", color: "text-cyan-600" },
                   { icon: Globe, name: "Website", color: "text-green-600" },
                 ].map((platform) => (
-                  <div key={platform.name} className="flex items-center gap-3 p-3 rounded-lg border">
-                    <platform.icon className={`h-5 w-5 ${platform.color}`} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{platform.name}</p>
-                      <p className="text-xs text-muted-foreground">Ready to receive leads</p>
+                  <div key={platform.name} className="flex items-center gap-2 p-2 sm:p-3 rounded-lg border">
+                    <platform.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${platform.color}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium truncate">{platform.name}</p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Ready</p>
                     </div>
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 flex-shrink-0" />
                   </div>
                 ))}
               </div>
