@@ -1385,14 +1385,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/projects", isAuthenticated, async (req: any, res) => {
     try {
+      // Extract selectedModules before validation (it's not part of the project schema)
+      const { selectedModules, ...projectData } = req.body;
+      
       // Convert date string to Date object if present
-      let projectData = { ...req.body };
       if (projectData.implementationDate) {
         projectData.implementationDate = new Date(projectData.implementationDate);
       }
       
       const validatedData = insertProjectSchema.parse(projectData);
-      const newProject = await storage.createProject(validatedData);
+      
+      // Pass selectedModules to createProject to only initialize purchased modules
+      const newProject = await storage.createProject(validatedData, selectedModules);
       
       // Log activity
       await storage.logActivity({

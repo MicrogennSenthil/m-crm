@@ -124,7 +124,7 @@ export interface IStorage {
   // Project operations
   getProjects(filters?: { status?: string }): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
-  createProject(project: InsertProject): Promise<Project>;
+  createProject(project: InsertProject, selectedModuleNames?: string[]): Promise<Project>;
   updateProject(id: string, data: Partial<InsertProject>): Promise<Project>;
 
   // Project Engineer operations
@@ -461,17 +461,27 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
-  async createProject(project: InsertProject): Promise<Project> {
+  async createProject(project: InsertProject, selectedModuleNames?: string[]): Promise<Project> {
     // Wrap project creation and module initialization in a transaction
     return await db.transaction(async (tx) => {
       // Create the project
       const [newProject] = await tx.insert(projects).values(project).returning();
       
-      // Auto-initialize project modules for all available modules
+      // Get all available modules
       const allModules = await tx.select().from(modules).orderBy(modules.name);
       
-      if (allModules.length > 0) {
-        const projectModuleValues = allModules.map(module => ({
+      // Filter modules based on selected module names (purchased modules)
+      // If selectedModuleNames is provided, only create project modules for those
+      // Otherwise fall back to all modules for backward compatibility
+      let modulesToCreate = allModules;
+      if (selectedModuleNames && selectedModuleNames.length > 0) {
+        modulesToCreate = allModules.filter(module => 
+          selectedModuleNames.includes(module.name)
+        );
+      }
+      
+      if (modulesToCreate.length > 0) {
+        const projectModuleValues = modulesToCreate.map(module => ({
           projectId: newProject.id,
           moduleId: module.id,
           completed: false,
