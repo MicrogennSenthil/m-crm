@@ -100,7 +100,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
   const { data: engineers } = useQuery<UserType[]>({
     queryKey: ["/api/users"],
     enabled: open,
-    select: (users) => users.filter((u) => u.role === "engineer"),
+    select: (users) => users.filter((u) => u.role?.toLowerCase() === "engineer"),
   });
 
   const toggleModuleMutation = useMutation({
