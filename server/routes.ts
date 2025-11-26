@@ -1481,9 +1481,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let updateData = { ...req.body };
       
-      // Convert completedAt string to Date object
+      // Convert date strings to Date objects
       if (updateData.completedAt) {
         updateData.completedAt = new Date(updateData.completedAt);
+      }
+      if (updateData.scheduledStartDate) {
+        updateData.scheduledStartDate = new Date(updateData.scheduledStartDate);
+      }
+      if (updateData.scheduledEndDate) {
+        updateData.scheduledEndDate = new Date(updateData.scheduledEndDate);
       }
       
       const updated = await storage.updateProjectModule(req.params.id, updateData);
