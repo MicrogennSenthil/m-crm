@@ -1685,8 +1685,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/projects/:id/handoff", isAuthenticated, async (req: any, res) => {
     try {
+      // Convert date strings to Date objects
+      const requestData = { ...req.body };
+      if (requestData.completionCertificateDate) {
+        requestData.completionCertificateDate = new Date(requestData.completionCertificateDate);
+      }
+      if (requestData.handoffDate) {
+        requestData.handoffDate = new Date(requestData.handoffDate);
+      }
+      
       const handoffData = {
-        ...req.body,
+        ...requestData,
         projectId: req.params.id,
         handoffById: req.user.claims.sub,
       };
