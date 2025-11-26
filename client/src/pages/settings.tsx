@@ -87,11 +87,20 @@ function IntegrationCard({
       />
       
       {verifyToken && (
-        <WebhookUrlField 
-          label="Verify Token" 
-          url={verifyToken}
-          description="Required for Facebook/Instagram webhook verification"
-        />
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Verify Token</Label>
+          <div className="p-3 rounded-md bg-muted border">
+            <p className="text-xs text-muted-foreground mb-2">
+              Set this environment variable on your server:
+            </p>
+            <code className="font-mono text-xs bg-background px-2 py-1 rounded">
+              {verifyToken}
+            </code>
+            <p className="text-xs text-muted-foreground mt-2">
+              Configure this token in your platform's webhook settings. The server will validate incoming webhooks against this secret.
+            </p>
+          </div>
+        </div>
       )}
 
       <Separator />
@@ -121,7 +130,6 @@ export default function Settings() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("profile");
   const [baseUrl, setBaseUrl] = useState("");
-  const verifyToken = "microgenn_crm_webhook";
   
   useEffect(() => {
     setBaseUrl(window.location.origin);
@@ -309,12 +317,13 @@ export default function Settings() {
                     title="Facebook Lead Ads"
                     description="Automatically capture leads from your Facebook Lead Ad campaigns"
                     webhookUrl={`${baseUrl}/api/webhooks/facebook`}
-                    verifyToken={verifyToken}
+                    verifyToken="FB_WEBHOOK_VERIFY_TOKEN"
                     steps={[
                       "Go to Facebook Business Suite > All Tools > Events Manager",
                       "Select your Facebook Page and go to 'Subscriptions'",
                       "Click 'Add Webhook' under the Leadgen section",
-                      "Paste the Webhook URL and Verify Token shown above",
+                      "Paste the Webhook URL shown above",
+                      "Set the verify token in your server environment variables",
                       "Click 'Verify and Save' to complete the setup",
                       "Test by submitting a lead through your Facebook Lead Ad"
                     ]}
@@ -328,12 +337,13 @@ export default function Settings() {
                     title="Instagram Lead Ads"
                     description="Capture leads from Instagram Lead Ad campaigns (via Facebook Business)"
                     webhookUrl={`${baseUrl}/api/webhooks/instagram`}
-                    verifyToken={verifyToken}
+                    verifyToken="FB_WEBHOOK_VERIFY_TOKEN"
                     steps={[
                       "Instagram Lead Ads are managed through Facebook Business Suite",
                       "Go to Facebook Events Manager and select your Instagram Business Account",
                       "Under 'Subscriptions', add a webhook for Leadgen",
-                      "Paste the Webhook URL and Verify Token shown above",
+                      "Paste the Webhook URL shown above",
+                      "Use the same FB_WEBHOOK_VERIFY_TOKEN as Facebook (shared Meta API)",
                       "Verify and save the webhook subscription",
                       "Create Lead Ads in Instagram through Facebook Ads Manager"
                     ]}
@@ -435,12 +445,13 @@ export default function Settings() {
                     title="WhatsApp Business"
                     description="Capture leads from WhatsApp Click-to-Message ads and inquiries"
                     webhookUrl={`${baseUrl}/api/webhooks/whatsapp`}
-                    verifyToken={verifyToken}
+                    verifyToken="WA_WEBHOOK_VERIFY_TOKEN"
                     steps={[
                       "WhatsApp webhooks are configured through Facebook Business API",
                       "Go to Meta for Developers and select your WhatsApp Business App",
                       "Navigate to WhatsApp > Configuration > Webhooks",
-                      "Enter the Webhook URL and Verify Token shown above",
+                      "Enter the Webhook URL shown above",
+                      "Set the verify token in your server environment variables",
                       "Subscribe to 'messages' webhook field",
                       "Incoming messages will create leads automatically"
                     ]}

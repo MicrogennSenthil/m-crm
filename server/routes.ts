@@ -766,7 +766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const challenge = req.query["hub.challenge"];
     
     // Verify token should be configured in environment
-    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN || "microgenn_crm_webhook";
+    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
     
     if (mode === "subscribe" && token === verifyToken) {
       res.status(200).send(challenge);
@@ -806,6 +806,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("LinkedIn webhook error:", error);
       res.status(200).json({ success: false, error: "Failed to process lead" });
+    }
+  });
+
+  // Instagram Lead Ads Webhook Verification (uses Facebook's API)
+  app.get("/api/webhooks/instagram", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+    
+    // Instagram uses the same Meta/Facebook API, so shares the same verify token
+    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    
+    if (mode === "subscribe" && token === verifyToken) {
+      res.status(200).send(challenge);
+    } else {
+      res.status(403).json({ error: "Verification failed" });
     }
   });
 
@@ -1122,7 +1138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
     
-    const verifyToken = process.env.WA_WEBHOOK_VERIFY_TOKEN || "microgenn_crm_webhook";
+    const verifyToken = process.env.WA_WEBHOOK_VERIFY_TOKEN;
     
     if (mode === "subscribe" && token === verifyToken) {
       res.status(200).send(challenge);
