@@ -19,7 +19,7 @@ import {
   Calendar, Clock, User, Building2, CheckCircle2, AlertCircle, 
   GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings
 } from "lucide-react";
-import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff } from "@shared/schema";
+import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -81,6 +81,26 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     queryKey: ["/api/projects", project.id, "modules"],
     enabled: open,
   });
+
+  // Fetch lead data to get purchased modules
+  const { data: leadData } = useQuery<Lead>({
+    queryKey: ["/api/leads", project.leadId],
+    enabled: open && !!project.leadId,
+  });
+
+  // Fetch customer data if no lead (fallback for purchased modules)
+  const { data: customerData } = useQuery<Customer>({
+    queryKey: ["/api/customers", project.customerId],
+    enabled: open && !!project.customerId && !project.leadId,
+  });
+
+  // Get purchased module names from lead or customer
+  const purchasedModuleNames = leadData?.selectedModules || customerData?.selectedModules || [];
+
+  // Filter project modules to only show purchased modules
+  const purchasedProjectModules = projectModules?.filter(pm => 
+    purchasedModuleNames.length === 0 || purchasedModuleNames.includes(pm.module?.name || "")
+  );
 
   const { data: trainingRecords } = useQuery<TrainingRecord[]>({
     queryKey: ["/api/projects", project.id, "training"],
@@ -207,8 +227,9 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     },
   });
 
-  const completedModules = projectModules?.filter((pm) => pm.completed).length || 0;
-  const totalModules = projectModules?.length || 0;
+  // Use purchased modules for calculations (only modules customer bought)
+  const completedModules = purchasedProjectModules?.filter((pm) => pm.completed).length || 0;
+  const totalModules = purchasedProjectModules?.length || 0;
   const completionPercentage = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
   const getStatusBadge = (status: string) => {
@@ -303,10 +324,10 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
             )}
 
             <div>
-              <h3 className="font-semibold mb-3">Implementation Modules</h3>
-              {projectModules && projectModules.length > 0 ? (
+              <h3 className="font-semibold mb-3">Purchased Modules</h3>
+              {purchasedProjectModules && purchasedProjectModules.length > 0 ? (
                 <Accordion type="single" collapsible className="space-y-2">
-                  {projectModules.map((pm) => (
+                  {purchasedProjectModules.map((pm) => (
                     <AccordionItem key={pm.id} value={pm.id} className="border rounded-md px-4">
                       <AccordionTrigger className="hover:no-underline">
                         <div className="flex items-center gap-3 flex-1">
@@ -352,7 +373,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                   ))}
                 </Accordion>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">No modules assigned to this project</p>
+                <p className="text-sm text-muted-foreground text-center py-8">No purchased modules found for this project</p>
               )}
             </div>
 
@@ -368,9 +389,9 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
               <Badge variant="outline">{completedModules}/{totalModules} Complete</Badge>
             </div>
 
-            {projectModules && projectModules.length > 0 ? (
+            {purchasedProjectModules && purchasedProjectModules.length > 0 ? (
               <div className="space-y-4">
-                {projectModules.map((pm) => (
+                {purchasedProjectModules.map((pm) => (
                   <Card key={pm.id} className={pm.completed ? "bg-muted/50" : ""}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between gap-2">
@@ -516,7 +537,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
               </div>
             ) : (
               <Card className="p-8 text-center text-muted-foreground">
-                No modules assigned to this project
+                No purchased modules found for this project
               </Card>
             )}
           </TabsContent>
@@ -550,7 +571,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                         <SelectValue placeholder="Select module" />
                       </SelectTrigger>
                       <SelectContent>
-                        {projectModules?.map((pm) => (
+                        {purchasedProjectModules?.map((pm) => (
                           <SelectItem key={pm.moduleId} value={pm.moduleId}>
                             {pm.module?.name || "Module"}
                           </SelectItem>
