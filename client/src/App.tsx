@@ -19,6 +19,7 @@ import Reports from "@/pages/reports";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
+import TaskDetail from "@/pages/task-detail";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -60,6 +61,7 @@ function Router() {
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/tasks" component={Tasks} />
+              <Route path="/tasks/:id" component={TaskDetail} />
               <Route path="/sales" component={Sales} />
               <Route path="/implementations" component={Implementations} />
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />

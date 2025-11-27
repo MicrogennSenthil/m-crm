@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -42,6 +43,7 @@ import {
   FileIcon,
   Paperclip,
   ExternalLink,
+  Maximize2,
 } from "lucide-react";
 
 type TaskWithDetails = Task & {
@@ -77,6 +79,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 
 export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate }: TaskDetailModalProps) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [newComment, setNewComment] = useState("");
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
@@ -158,19 +161,33 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                 <Badge className={priorityConfig.color}>{priorityConfig.label}</Badge>
               </div>
             </div>
-            {canEdit && (
-              <Select value={task.status} onValueChange={(value) => updateStatusMutation.mutate(value)}>
-                <SelectTrigger className="w-[140px]" data-testid="select-update-status">
-                  <SelectValue placeholder="Update status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="followup">Follow Up</SelectItem>
-                  <SelectItem value="get_information">Get Info</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/tasks/${task.id}`);
+                }}
+                title="View Full Page"
+                data-testid="button-view-full-page"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+              {canEdit && (
+                <Select value={task.status} onValueChange={(value) => updateStatusMutation.mutate(value)}>
+                  <SelectTrigger className="w-[140px]" data-testid="select-update-status">
+                    <SelectValue placeholder="Update status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="followup">Follow Up</SelectItem>
+                    <SelectItem value="get_information">Get Info</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
         </DialogHeader>
         
