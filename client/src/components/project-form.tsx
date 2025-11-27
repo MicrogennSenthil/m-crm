@@ -271,67 +271,6 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
 
             <FormField
               control={form.control}
-              name="implementationDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Implementation Date & Time</FormLabel>
-                  <div className="flex gap-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "flex-1 justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                            data-testid="button-select-date"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(new Date(field.value), "MMM d, yyyy") : "Pick a date"}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={field.value ? new Date(field.value) : undefined}
-                          onSelect={(date) => {
-                            if (date) {
-                              const currentValue = field.value ? new Date(field.value) : new Date();
-                              date.setHours(currentValue.getHours(), currentValue.getMinutes());
-                              field.onChange(date);
-                            } else {
-                              field.onChange(undefined);
-                            }
-                          }}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="time"
-                        className="w-[110px]"
-                        value={field.value ? format(new Date(field.value), "HH:mm") : ""}
-                        onChange={(e) => {
-                          const [hours, minutes] = e.target.value.split(":").map(Number);
-                          const newDate = field.value ? new Date(field.value) : new Date();
-                          newDate.setHours(hours || 0, minutes || 0, 0, 0);
-                          field.onChange(newDate);
-                        }}
-                        data-testid="input-implementation-time"
-                      />
-                    </div>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name="status"
               render={({ field }) => (
                 <FormItem>
@@ -355,6 +294,67 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="implementationDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Implementation Date & Time</FormLabel>
+                <div className="flex flex-wrap gap-3">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-[200px] justify-start text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                          data-testid="button-select-date"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {field.value ? format(new Date(field.value), "MMM d, yyyy") : "Pick a date"}
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={field.value ? new Date(field.value) : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            const currentValue = field.value ? new Date(field.value) : new Date();
+                            date.setHours(currentValue.getHours(), currentValue.getMinutes());
+                            field.onChange(date);
+                          } else {
+                            field.onChange(undefined);
+                          }
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="time"
+                      className="w-[130px]"
+                      value={field.value ? format(new Date(field.value), "HH:mm") : ""}
+                      onChange={(e) => {
+                        const [hours, minutes] = e.target.value.split(":").map(Number);
+                        const newDate = field.value ? new Date(field.value) : new Date();
+                        newDate.setHours(hours || 0, minutes || 0, 0, 0);
+                        field.onChange(newDate);
+                      }}
+                      data-testid="input-implementation-time"
+                    />
+                  </div>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
