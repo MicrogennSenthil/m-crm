@@ -2757,6 +2757,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Upload task attachment (video recording, photo, or file)
+  app.post("/api/tasks/attachment-upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { taskId, type, fileName: originalFileName, mimeType } = req.body;
+      
+      // Validate type
+      if (!["video", "photo", "file"].includes(type)) {
+        return res.status(400).json({ message: "Invalid attachment type. Must be 'video', 'photo', or 'file'" });
+      }
+      
+      // Generate a unique file name for the attachment
+      const timestamp = Date.now();
+      const extension = originalFileName ? `.${originalFileName.split('.').pop()}` : 
+                        type === 'video' ? '.webm' : 
+                        type === 'photo' ? '.jpg' : '';
+      const prefix = type === 'video' ? 'video' : type === 'photo' ? 'photo' : 'file';
+      const fileName = `${prefix}_${userId}_${taskId || 'new'}_${timestamp}${extension}`;
+      
+      // Get upload URL using the object storage service
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName);
+      
+      res.json({ 
+        uploadURL, 
+        objectPath,
+        attachmentUrl: objectPath,
+        type,
+        originalFileName,
+        mimeType,
+      });
+    } catch (error) {
+      console.error("Error getting attachment upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
