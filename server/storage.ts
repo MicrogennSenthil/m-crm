@@ -75,6 +75,9 @@ import {
   type ProjectProgressEntry,
   type InsertProjectProgressEntry,
   projectProgressEntries,
+  planningChangeLogs,
+  type PlanningChangeLog,
+  type InsertPlanningChangeLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -156,8 +159,14 @@ export interface IStorage {
 
   // Project Module operations
   getProjectModules(projectId: string): Promise<ProjectModule[]>;
+  getProjectModule(id: string): Promise<ProjectModule | undefined>;
   createProjectModule(projectModule: InsertProjectModule): Promise<ProjectModule>;
   updateProjectModule(id: string, data: Partial<InsertProjectModule>): Promise<ProjectModule>;
+
+  // Planning Change Log operations
+  getPlanningChangeLogs(projectModuleId: string): Promise<PlanningChangeLog[]>;
+  getProjectPlanningChangeLogs(projectId: string): Promise<PlanningChangeLog[]>;
+  createPlanningChangeLog(log: InsertPlanningChangeLog): Promise<PlanningChangeLog>;
 
   // Project Progress Entry operations
   getProjectProgressEntries(projectId: string): Promise<(ProjectProgressEntry & { engineer?: User })[]>;
@@ -606,6 +615,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(projectModules.projectId, projectId));
   }
 
+  async getProjectModule(id: string): Promise<ProjectModule | undefined> {
+    const [pm] = await db.select().from(projectModules).where(eq(projectModules.id, id));
+    return pm;
+  }
+
   async createProjectModule(projectModule: InsertProjectModule): Promise<ProjectModule> {
     const [newPM] = await db.insert(projectModules).values(projectModule).returning();
     return newPM;
@@ -618,6 +632,28 @@ export class DatabaseStorage implements IStorage {
       .where(eq(projectModules.id, id))
       .returning();
     return updated;
+  }
+
+  // Planning Change Log operations
+  async getPlanningChangeLogs(projectModuleId: string): Promise<PlanningChangeLog[]> {
+    return await db
+      .select()
+      .from(planningChangeLogs)
+      .where(eq(planningChangeLogs.projectModuleId, projectModuleId))
+      .orderBy(desc(planningChangeLogs.createdAt));
+  }
+
+  async getProjectPlanningChangeLogs(projectId: string): Promise<PlanningChangeLog[]> {
+    return await db
+      .select()
+      .from(planningChangeLogs)
+      .where(eq(planningChangeLogs.projectId, projectId))
+      .orderBy(desc(planningChangeLogs.createdAt));
+  }
+
+  async createPlanningChangeLog(log: InsertPlanningChangeLog): Promise<PlanningChangeLog> {
+    const [newLog] = await db.insert(planningChangeLogs).values(log).returning();
+    return newLog;
   }
 
   // Project Progress Entry operations

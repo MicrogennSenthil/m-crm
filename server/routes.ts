@@ -1518,8 +1518,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/project-modules/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/project-modules/:id", isAuthenticated, async (req: any, res) => {
     try {
+      // Get current module data for comparison
+      const currentModule = await storage.getProjectModule(req.params.id);
+      if (!currentModule) {
+        return res.status(404).json({ message: "Project module not found" });
+      }
+      
       let updateData = { ...req.body };
       
       // Convert date strings to Date objects
@@ -1531,6 +1537,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (updateData.scheduledEndDate) {
         updateData.scheduledEndDate = new Date(updateData.scheduledEndDate);
+      }
+      if (updateData.actualVisitDate) {
+        updateData.actualVisitDate = new Date(updateData.actualVisitDate);
+      }
+      
+      // Track planning changes for audit log
+      const changedBy = req.user?.claims?.sub;
+      const trackableFields = [
+        { field: 'assignedEngineerId', label: 'Planned Engineer', type: 'engineer' },
+        { field: 'actualEngineerId', label: 'Visiting Engineer', type: 'engineer' },
+        { field: 'scheduledStartDate', label: 'Scheduled Start Date', type: 'date' },
+        { field: 'scheduledEndDate', label: 'Scheduled End Date', type: 'date' },
+        { field: 'actualVisitDate', label: 'Actual Visit Date', type: 'date' },
+        { field: 'installationStatus', label: 'Status', type: 'text' },
+        { field: 'departmentName', label: 'Department', type: 'text' },
+      ];
+      
+      // Log each change
+      for (const { field, label, type } of trackableFields) {
+        const oldValue = (currentModule as any)[field];
+        const newValue = updateData[field];
+        
+        // Skip if field not being updated or value unchanged
+        if (newValue === undefined) continue;
+        
+        const oldStr = oldValue ? (type === 'date' ? new Date(oldValue).toISOString().split('T')[0] : String(oldValue)) : null;
+        const newStr = newValue ? (type === 'date' ? new Date(newValue).toISOString().split('T')[0] : String(newValue)) : null;
+        
+        if (oldStr !== newStr) {
+          await storage.createPlanningChangeLog({
+            projectModuleId: req.params.id,
+            projectId: currentModule.projectId,
+            changedBy,
+            changeType: type === 'engineer' ? 'engineer_changed' : type === 'date' ? 'date_changed' : 'field_changed',
+            fieldName: label,
+            oldValue: oldStr,
+            newValue: newStr,
+            oldEngineerId: type === 'engineer' ? oldValue : null,
+            newEngineerId: type === 'engineer' ? newValue : null,
+          });
+        }
       }
       
       const updated = await storage.updateProjectModule(req.params.id, updateData);
@@ -1637,6 +1684,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting progress entry:", error);
       res.status(400).json({ message: "Failed to delete progress entry" });
+    }
+  });
+
+  // Planning Change Log routes - Audit trail for module scheduling changes
+  app.get("/api/projects/:id/planning-changes", isAuthenticated, async (req, res) => {
+    try {
+      const changeLogs = await storage.getProjectPlanningChangeLogs(req.params.id);
+      
+      // Enrich with user names for changedBy, oldEngineerId, newEngineerId
+      const enrichedLogs = await Promise.all(
+        changeLogs.map(async (log) => {
+          const changedByUser = log.changedBy ? await storage.getUser(log.changedBy) : null;
+          const oldEngineer = log.oldEngineerId ? await storage.getUser(log.oldEngineerId) : null;
+          const newEngineer = log.newEngineerId ? await storage.getUser(log.newEngineerId) : null;
+          const projectModule = await storage.getProjectModule(log.projectModuleId);
+          const module = projectModule?.moduleId ? await storage.getModule(projectModule.moduleId) : null;
+          
+          return {
+            ...log,
+            changedByUser: changedByUser ? { id: changedByUser.id, firstName: changedByUser.firstName, lastName: changedByUser.lastName, email: changedByUser.email } : null,
+            oldEngineerName: oldEngineer ? `${oldEngineer.firstName || ''} ${oldEngineer.lastName || ''}`.trim() || oldEngineer.email : null,
+            newEngineerName: newEngineer ? `${newEngineer.firstName || ''} ${newEngineer.lastName || ''}`.trim() || newEngineer.email : null,
+            moduleName: module?.name || 'Unknown Module',
+          };
+        })
+      );
+      
+      res.json(enrichedLogs);
+    } catch (error) {
+      console.error("Error fetching planning change logs:", error);
+      res.status(500).json({ message: "Failed to fetch planning change logs" });
+    }
+  });
+
+  app.get("/api/project-modules/:id/planning-changes", isAuthenticated, async (req, res) => {
+    try {
+      const changeLogs = await storage.getPlanningChangeLogs(req.params.id);
+      
+      // Enrich with user names
+      const enrichedLogs = await Promise.all(
+        changeLogs.map(async (log) => {
+          const changedByUser = log.changedBy ? await storage.getUser(log.changedBy) : null;
+          const oldEngineer = log.oldEngineerId ? await storage.getUser(log.oldEngineerId) : null;
+          const newEngineer = log.newEngineerId ? await storage.getUser(log.newEngineerId) : null;
+          
+          return {
+            ...log,
+            changedByUser: changedByUser ? { id: changedByUser.id, firstName: changedByUser.firstName, lastName: changedByUser.lastName, email: changedByUser.email } : null,
+            oldEngineerName: oldEngineer ? `${oldEngineer.firstName || ''} ${oldEngineer.lastName || ''}`.trim() || oldEngineer.email : null,
+            newEngineerName: newEngineer ? `${newEngineer.firstName || ''} ${newEngineer.lastName || ''}`.trim() || newEngineer.email : null,
+          };
+        })
+      );
+      
+      res.json(enrichedLogs);
+    } catch (error) {
+      console.error("Error fetching module planning change logs:", error);
+      res.status(500).json({ message: "Failed to fetch planning change logs" });
     }
   });
 

@@ -317,6 +317,30 @@ export const insertProjectModuleSchema = createInsertSchema(projectModules).omit
 export type InsertProjectModule = z.infer<typeof insertProjectModuleSchema>;
 export type ProjectModule = typeof projectModules.$inferSelect;
 
+// Planning Change Log table - Track all changes to module planning
+export const planningChangeLogs = pgTable("planning_change_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectModuleId: varchar("project_module_id").notNull().references(() => projectModules.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  changedBy: varchar("changed_by").references(() => users.id), // User who made the change
+  changeType: text("change_type").notNull(), // engineer_changed, date_changed, status_changed, etc.
+  fieldName: text("field_name").notNull(), // Which field was changed
+  oldValue: text("old_value"), // Previous value
+  newValue: text("new_value"), // New value
+  oldEngineerId: varchar("old_engineer_id").references(() => users.id), // For engineer changes
+  newEngineerId: varchar("new_engineer_id").references(() => users.id), // For engineer changes
+  reason: text("reason"), // Optional reason for the change
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPlanningChangeLogSchema = createInsertSchema(planningChangeLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPlanningChangeLog = z.infer<typeof insertPlanningChangeLogSchema>;
+export type PlanningChangeLog = typeof planningChangeLogs.$inferSelect;
+
 // Project Progress Entries table - Track daily implementation progress with proof
 export const projectProgressEntries = pgTable("project_progress_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
