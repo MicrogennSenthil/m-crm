@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import microgennLogo from "@assets/MG Logo_1764263883732.png";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
@@ -62,7 +63,15 @@ function Router() {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 sm:p-4 border-b bg-background">
-            <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px]" />
+            <div className="flex items-center gap-3">
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px]" />
+              <img 
+                src={microgennLogo} 
+                alt="Microgenn - Empowering Your Hotel's Digital Evolution" 
+                className="h-10 w-auto object-contain"
+                data-testid="logo-microgenn"
+              />
+            </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
             </div>
