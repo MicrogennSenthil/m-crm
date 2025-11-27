@@ -485,7 +485,10 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                             <SelectContent>
                               {engineers?.map((eng) => (
                                 <SelectItem key={eng.id} value={eng.id}>
-                                  {eng.firstName} {eng.lastName}
+                                  <div className="flex flex-col">
+                                    <span>{eng.firstName} {eng.lastName}</span>
+                                    <span className="text-xs text-muted-foreground">{eng.email}</span>
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
