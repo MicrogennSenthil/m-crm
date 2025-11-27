@@ -2112,6 +2112,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Progress entries across all projects - for Work Tracking dashboard
+  app.get("/api/dashboard/progress-entries", isAuthenticated, async (req, res) => {
+    try {
+      // Get all projects
+      const projectsList = await storage.getProjects({});
+      
+      // Get all progress entries from all projects
+      const allEntries = await Promise.all(
+        projectsList.map(async (project) => {
+          const entries = await storage.getProjectProgressEntries(project.id);
+          return entries.map(entry => ({
+            ...entry,
+            project: { id: project.id, clientName: project.clientName },
+          }));
+        })
+      );
+      
+      // Flatten and sort by date (most recent first)
+      const flatEntries = allEntries
+        .flat()
+        .sort((a, b) => new Date(b.progressDate).getTime() - new Date(a.progressDate).getTime());
+      
+      res.json(flatEntries);
+    } catch (error) {
+      console.error("Error fetching progress entries:", error);
+      res.status(500).json({ message: "Failed to fetch progress entries" });
+    }
+  });
+
   // Ticket routes
   app.get("/api/tickets", isAuthenticated, async (req, res) => {
     try {

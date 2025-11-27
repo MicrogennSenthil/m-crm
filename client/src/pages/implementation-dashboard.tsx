@@ -12,10 +12,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { 
   Search, FolderKanban, Users, CheckCircle2, Clock, AlertTriangle, 
-  Calendar, Building2, User, Settings, GraduationCap, Send, Download, Mail, FileText
+  Calendar, Building2, User, Settings, GraduationCap, Send, Download, Mail, FileText,
+  Camera, Video, ClipboardList
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Project, ProjectModule, Module, User as UserType, TrainingSession, ProjectHandoff } from "@shared/schema";
+import type { Project, ProjectModule, Module, User as UserType, TrainingSession, ProjectHandoff, ProjectProgressEntry } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +79,7 @@ export default function ImplementationDashboard() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [progressTypeFilter, setProgressTypeFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("overview");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
@@ -85,6 +87,19 @@ export default function ImplementationDashboard() {
 
   const { data: dashboardData, isLoading } = useQuery<ImplementationDashboardData>({
     queryKey: ["/api/dashboard/implementation"],
+  });
+
+  // Fetch all progress entries across all projects
+  interface ProgressEntryWithProject extends ProjectProgressEntry {
+    engineer?: UserType;
+    project?: {
+      id: string;
+      clientName: string;
+    };
+  }
+  
+  const { data: allProgressEntries } = useQuery<ProgressEntryWithProject[]>({
+    queryKey: ["/api/dashboard/progress-entries"],
   });
 
   const { data: reportData, refetch: fetchReportData } = useQuery<ReportData>({
@@ -409,6 +424,10 @@ export default function ImplementationDashboard() {
           <TabsList data-testid="dashboard-tabs">
             <TabsTrigger value="overview">Projects Overview</TabsTrigger>
             <TabsTrigger value="modules">Module Tracking</TabsTrigger>
+            <TabsTrigger value="work-tracking" data-testid="tab-work-tracking">
+              <ClipboardList className="h-4 w-4 mr-2" />
+              Work Tracking
+            </TabsTrigger>
             <TabsTrigger value="engineers">Engineer Assignments</TabsTrigger>
           </TabsList>
 
@@ -593,6 +612,194 @@ export default function ImplementationDashboard() {
               );
             })
             }
+          </TabsContent>
+
+          {/* Work Tracking Tab */}
+          <TabsContent value="work-tracking" className="space-y-4 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-lg">Daily Progress Tracking</h3>
+                <p className="text-sm text-muted-foreground">
+                  Photo/video evidence of installation, training, and handoff work
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select 
+                  value={progressTypeFilter} 
+                  onValueChange={setProgressTypeFilter}
+                  data-testid="select-progress-type-filter"
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Filter by type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="installation">Installation</SelectItem>
+                    <SelectItem value="training">Training</SelectItem>
+                    <SelectItem value="handoff">Handoff</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Badge variant="outline">
+                  {allProgressEntries?.filter(e => 
+                    progressTypeFilter === 'all' || e.progressType === progressTypeFilter
+                  ).length || 0} Entries
+                </Badge>
+              </div>
+            </div>
+
+            {/* Progress Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <Card 
+                className={`cursor-pointer transition-colors ${progressTypeFilter === 'installation' ? 'ring-2 ring-blue-500' : 'hover-elevate'}`}
+                onClick={() => setProgressTypeFilter(progressTypeFilter === 'installation' ? 'all' : 'installation')}
+                data-testid="stat-installation-progress"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                      <Settings className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">
+                        {allProgressEntries?.filter(e => e.progressType === 'installation').length || 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Installation Logs</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card 
+                className={`cursor-pointer transition-colors ${progressTypeFilter === 'training' ? 'ring-2 ring-purple-500' : 'hover-elevate'}`}
+                onClick={() => setProgressTypeFilter(progressTypeFilter === 'training' ? 'all' : 'training')}
+                data-testid="stat-training-progress"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                      <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">
+                        {allProgressEntries?.filter(e => e.progressType === 'training').length || 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Training Logs</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card 
+                className={`cursor-pointer transition-colors ${progressTypeFilter === 'handoff' ? 'ring-2 ring-green-500' : 'hover-elevate'}`}
+                onClick={() => setProgressTypeFilter(progressTypeFilter === 'handoff' ? 'all' : 'handoff')}
+                data-testid="stat-handoff-progress"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                      <Send className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold">
+                        {allProgressEntries?.filter(e => e.progressType === 'handoff').length || 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Handoff Logs</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Progress Entries List */}
+            {allProgressEntries && allProgressEntries.length > 0 ? (
+              <div className="space-y-3">
+                {allProgressEntries
+                  .filter(entry => progressTypeFilter === 'all' || entry.progressType === progressTypeFilter)
+                  .map((entry) => {
+                    const typeConfig = {
+                      installation: { icon: Settings, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', label: 'Installation' },
+                      training: { icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', label: 'Training' },
+                      handoff: { icon: Send, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', label: 'Handoff' },
+                    };
+                    const config = typeConfig[entry.progressType as keyof typeof typeConfig] || typeConfig.installation;
+                    const IconComponent = config.icon;
+
+                    return (
+                      <Card key={entry.id} data-testid={`progress-entry-${entry.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-4">
+                            <div className={`p-2 rounded-lg ${config.bg}`}>
+                              <IconComponent className={`h-5 w-5 ${config.color}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {config.label}
+                                </Badge>
+                                {entry.project && (
+                                  <span className="text-sm font-medium">
+                                    {entry.project.clientName}
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {format(new Date(entry.progressDate), "MMM d, yyyy 'at' h:mm a")}
+                                </span>
+                              </div>
+                              <p className="text-sm mb-2">{entry.description}</p>
+                              
+                              {/* Engineer Info */}
+                              {entry.engineer && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                                  <Avatar className="h-5 w-5">
+                                    <AvatarImage src={entry.engineer.profileImageUrl || undefined} />
+                                    <AvatarFallback className="text-xs">
+                                      {entry.engineer.firstName?.[0]}{entry.engineer.lastName?.[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span>by {entry.engineer.firstName} {entry.engineer.lastName}</span>
+                                </div>
+                              )}
+
+                              {/* Media Attachments */}
+                              {entry.attachments && entry.attachments.length > 0 && (
+                                <div className="flex gap-2 flex-wrap mt-2">
+                                  {entry.attachments.map((att: any, idx: number) => (
+                                    <a 
+                                      key={idx} 
+                                      href={att.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="block"
+                                    >
+                                      {att.type === 'photo' ? (
+                                        <div className="w-16 h-16 rounded border overflow-hidden hover:ring-2 hover:ring-primary transition-all">
+                                          <img src={att.url} alt="" className="w-full h-full object-cover" />
+                                        </div>
+                                      ) : (
+                                        <div className="w-16 h-16 rounded border bg-muted flex items-center justify-center hover:ring-2 hover:ring-primary transition-all">
+                                          <Video className="h-6 w-6 text-muted-foreground" />
+                                        </div>
+                                      )}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+              </div>
+            ) : (
+              <Card className="p-8 text-center text-muted-foreground">
+                <Camera className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium">No progress entries yet</p>
+                <p className="text-sm mt-1">
+                  Progress entries with photos and videos will appear here
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Engineer Assignments Tab */}

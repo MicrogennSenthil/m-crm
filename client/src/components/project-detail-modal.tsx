@@ -626,24 +626,25 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                 <Accordion type="single" collapsible className="space-y-2">
                   {purchasedProjectModules.map((pm) => (
                     <AccordionItem key={pm.id} value={pm.id} className="border rounded-md px-4">
-                      <AccordionTrigger className="hover:no-underline">
-                        <div className="flex items-center gap-3 flex-1">
-                          <Checkbox
-                            checked={pm.completed ?? false}
-                            onCheckedChange={(checked) =>
-                              toggleModuleMutation.mutate({ id: pm.id, completed: !!checked })
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                            data-testid={`checkbox-module-${pm.id}`}
-                          />
-                          <span className="font-medium">{pm.module?.name || "Module"}</span>
-                          {pm.completed && pm.completedAt && (
-                            <Badge variant="outline" className="ml-auto mr-4 text-xs">
-                              Completed {format(new Date(pm.completedAt), "MMM d")}
-                            </Badge>
-                          )}
-                        </div>
-                      </AccordionTrigger>
+                      <div className="flex items-center gap-3 py-4">
+                        <Checkbox
+                          checked={pm.completed ?? false}
+                          onCheckedChange={(checked) =>
+                            toggleModuleMutation.mutate({ id: pm.id, completed: !!checked })
+                          }
+                          data-testid={`checkbox-module-${pm.id}`}
+                        />
+                        <AccordionTrigger className="hover:no-underline flex-1 py-0">
+                          <div className="flex items-center gap-3 flex-1">
+                            <span className="font-medium">{pm.module?.name || "Module"}</span>
+                            {pm.completed && pm.completedAt && (
+                              <Badge variant="outline" className="ml-auto mr-4 text-xs">
+                                Completed {format(new Date(pm.completedAt), "MMM d")}
+                              </Badge>
+                            )}
+                          </div>
+                        </AccordionTrigger>
+                      </div>
                       <AccordionContent>
                         <div className="pt-2 pb-4">
                           {pm.module?.description && (
