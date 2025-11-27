@@ -22,7 +22,11 @@ The CRM includes:
 - **Support Ticket System**: Priority-based ticket creation (TKT-XXXXXX auto-numbering), round-robin or manual assignment, multi-level escalation (L1 → L2 → L3), conversation threading, status management, and ticket closure workflow with feedback.
 - **Task/Followup Management**: Complete task management with voice recording, video recording (camera capture), photo capture, file attachments, reminder date/time, due date/time, status tracking (pending/followup/get_information/completed), team member mentions, task assignment with assignment timestamp tracking, commenting system, and super admin oversight. Tasks display dates with full time information.
 - **Dashboard & Analytics**: Metric cards (Active Leads, Ongoing Implementations, Open Tickets, Monthly Closures), activity feed, quick access panels, My Tasks section, and trend indicators.
-- **Reports & Analytics**: Visual charts for sales pipeline, lead source analysis, conversion metrics, project status distribution, and ticket analytics (priority, status, resolution times).
+- **Reports & Analytics**: Enhanced reports module with collapsible sidebar menu and three dedicated report pages:
+  - **Sales Reports** (/reports/sales): Fresh/Pending/Completed calls tabs, date range filtering, customer/status filters, stage-based stats cards
+  - **Implementation Reports** (/reports/implementation): Planning/In Progress/Completed tabs, project status tracking
+  - **Support Reports** (/reports/support): Open/In Progress/Resolved tabs, priority filtering, ticket metrics
+  - All reports include: export to CSV/Excel functionality, send via email (using Resend), search, and comprehensive filtering
 - **Settings & Customization**: User profile display, light/dark mode toggle, and placeholder for notification preferences.
 - **Master Data Management (Admin Only)**: CRUD operations for customer records and implementation modules via a tabbed interface.
 
