@@ -72,6 +72,9 @@ import {
   type InsertTask,
   type TaskComment,
   type InsertTaskComment,
+  type ProjectProgressEntry,
+  type InsertProjectProgressEntry,
+  projectProgressEntries,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -155,6 +158,13 @@ export interface IStorage {
   getProjectModules(projectId: string): Promise<ProjectModule[]>;
   createProjectModule(projectModule: InsertProjectModule): Promise<ProjectModule>;
   updateProjectModule(id: string, data: Partial<InsertProjectModule>): Promise<ProjectModule>;
+
+  // Project Progress Entry operations
+  getProjectProgressEntries(projectId: string): Promise<(ProjectProgressEntry & { engineer?: User })[]>;
+  getProjectProgressEntry(id: string): Promise<ProjectProgressEntry | undefined>;
+  createProjectProgressEntry(entry: InsertProjectProgressEntry): Promise<ProjectProgressEntry>;
+  updateProjectProgressEntry(id: string, data: Partial<InsertProjectProgressEntry>): Promise<ProjectProgressEntry>;
+  deleteProjectProgressEntry(id: string): Promise<void>;
 
   // Training Record operations
   getTrainingRecords(projectId: string): Promise<TrainingRecord[]>;
@@ -608,6 +618,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(projectModules.id, id))
       .returning();
     return updated;
+  }
+
+  // Project Progress Entry operations
+  async getProjectProgressEntries(projectId: string): Promise<(ProjectProgressEntry & { engineer?: User })[]> {
+    const entries = await db
+      .select()
+      .from(projectProgressEntries)
+      .where(eq(projectProgressEntries.projectId, projectId))
+      .orderBy(desc(projectProgressEntries.progressDate));
+    
+    // Enrich with engineer details
+    const enrichedEntries = await Promise.all(
+      entries.map(async (entry) => {
+        let engineer: User | undefined;
+        if (entry.engineerId) {
+          engineer = await this.getUser(entry.engineerId);
+        }
+        return { ...entry, engineer };
+      })
+    );
+    
+    return enrichedEntries;
+  }
+
+  async getProjectProgressEntry(id: string): Promise<ProjectProgressEntry | undefined> {
+    const [entry] = await db
+      .select()
+      .from(projectProgressEntries)
+      .where(eq(projectProgressEntries.id, id));
+    return entry;
+  }
+
+  async createProjectProgressEntry(entry: InsertProjectProgressEntry): Promise<ProjectProgressEntry> {
+    const [newEntry] = await db.insert(projectProgressEntries).values(entry).returning();
+    return newEntry;
+  }
+
+  async updateProjectProgressEntry(id: string, data: Partial<InsertProjectProgressEntry>): Promise<ProjectProgressEntry> {
+    const [updated] = await db
+      .update(projectProgressEntries)
+      .set(data)
+      .where(eq(projectProgressEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProjectProgressEntry(id: string): Promise<void> {
+    await db.delete(projectProgressEntries).where(eq(projectProgressEntries.id, id));
   }
 
   // Training Record operations
