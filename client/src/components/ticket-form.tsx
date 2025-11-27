@@ -26,8 +26,18 @@ import {
   SelectLabel,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Camera, Upload, X, Image, Loader2, CheckCircle, Cog, Users, UserPlus } from "lucide-react";
+import { Building2, Plus, Camera, Upload, X, Image, Loader2, CheckCircle, Cog, Users, UserPlus, ChevronsUpDown, Search } from "lucide-react";
 import { useState, useRef, useMemo } from "react";
 
 const PRIORITIES = [
@@ -55,6 +65,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -354,88 +365,160 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               <span className="font-medium text-sm">Select Customer</span>
             </div>
             
-            <Select onValueChange={handleCustomerSelect} value={form.watch("customerId") || (isNewCustomer ? "new" : undefined)}>
-              <SelectTrigger data-testid="select-customer">
-                <SelectValue placeholder="Select from Customer Master" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                <SelectItem value="new">
-                  <div className="flex items-center gap-2">
-                    <UserPlus className="h-4 w-4" />
-                    <span>Add New Customer</span>
-                  </div>
-                </SelectItem>
-                
-                {/* Handed Off Customers - Priority section */}
-                {groupedCustomers.handedOff.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Handed Over to Support
-                    </SelectLabel>
-                    {groupedCustomers.handedOff.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        <div className="flex items-center">
-                          <span>{customer.name}</span>
-                          {getLifecycleBadge(customer.lifecycleStatus)}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
+            <Popover open={customerSearchOpen} onOpenChange={setCustomerSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={customerSearchOpen}
+                  className="w-full justify-between font-normal"
+                  data-testid="select-customer"
+                >
+                  {isNewCustomer ? (
+                    <span className="flex items-center gap-2">
+                      <UserPlus className="h-4 w-4" />
+                      Add New Customer
+                    </span>
+                  ) : selectedCustomerId ? (
+                    <span className="flex items-center gap-2">
+                      {customersWithLifecycle?.find(c => c.id === selectedCustomerId)?.name}
+                      {getLifecycleBadge(customersWithLifecycle?.find(c => c.id === selectedCustomerId)?.lifecycleStatus || "prospect")}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Search or select customer...</span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Type to search customers..." data-testid="input-customer-search" />
+                  <CommandList>
+                    <CommandEmpty>No customer found.</CommandEmpty>
+                    
+                    {/* Add New Customer option */}
+                    <CommandGroup>
+                      <CommandItem
+                        value="add-new-customer"
+                        onSelect={() => {
+                          handleCustomerSelect("new");
+                          setCustomerSearchOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        <span>Add New Customer</span>
+                      </CommandItem>
+                    </CommandGroup>
+                    
+                    <CommandSeparator />
+                    
+                    {/* Handed Off Customers - Priority section */}
+                    {groupedCustomers.handedOff.length > 0 && (
+                      <CommandGroup heading={
+                        <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Handed Over to Support
+                        </span>
+                      }>
+                        {groupedCustomers.handedOff.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={customer.name}
+                            onSelect={() => {
+                              handleCustomerSelect(customer.id);
+                              setCustomerSearchOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <CheckCircle className={`mr-2 h-4 w-4 ${selectedCustomerId === customer.id ? "opacity-100" : "opacity-0"}`} />
+                            <span>{customer.name}</span>
+                            {getLifecycleBadge(customer.lifecycleStatus)}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
 
-                {/* In Implementation Customers */}
-                {groupedCustomers.inImplementation.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                      <Cog className="h-3.5 w-3.5" />
-                      In Implementation
-                    </SelectLabel>
-                    {groupedCustomers.inImplementation.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        <div className="flex items-center">
-                          <span>{customer.name}</span>
-                          {getLifecycleBadge(customer.lifecycleStatus)}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
+                    {/* In Implementation Customers */}
+                    {groupedCustomers.inImplementation.length > 0 && (
+                      <CommandGroup heading={
+                        <span className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                          <Cog className="h-3.5 w-3.5" />
+                          In Implementation
+                        </span>
+                      }>
+                        {groupedCustomers.inImplementation.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={customer.name}
+                            onSelect={() => {
+                              handleCustomerSelect(customer.id);
+                              setCustomerSearchOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <CheckCircle className={`mr-2 h-4 w-4 ${selectedCustomerId === customer.id ? "opacity-100" : "opacity-0"}`} />
+                            <span>{customer.name}</span>
+                            {getLifecycleBadge(customer.lifecycleStatus)}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
 
-                {/* Existing Customers */}
-                {groupedCustomers.existing.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-2 text-muted-foreground">
-                      <Users className="h-3.5 w-3.5" />
-                      Existing Customers
-                    </SelectLabel>
-                    {groupedCustomers.existing.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        <div className="flex items-center">
-                          <span>{customer.name}</span>
-                          {getLifecycleBadge(customer.lifecycleStatus)}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
+                    {/* Existing Customers */}
+                    {groupedCustomers.existing.length > 0 && (
+                      <CommandGroup heading={
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <Users className="h-3.5 w-3.5" />
+                          Existing Customers
+                        </span>
+                      }>
+                        {groupedCustomers.existing.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={customer.name}
+                            onSelect={() => {
+                              handleCustomerSelect(customer.id);
+                              setCustomerSearchOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <CheckCircle className={`mr-2 h-4 w-4 ${selectedCustomerId === customer.id ? "opacity-100" : "opacity-0"}`} />
+                            <span>{customer.name}</span>
+                            {getLifecycleBadge(customer.lifecycleStatus)}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
 
-                {/* Prospects */}
-                {groupedCustomers.prospect.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-2 text-muted-foreground">
-                      <Building2 className="h-3.5 w-3.5" />
-                      Prospects
-                    </SelectLabel>
-                    {groupedCustomers.prospect.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        <span>{customer.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-              </SelectContent>
-            </Select>
+                    {/* Prospects */}
+                    {groupedCustomers.prospect.length > 0 && (
+                      <CommandGroup heading={
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <Building2 className="h-3.5 w-3.5" />
+                          Prospects
+                        </span>
+                      }>
+                        {groupedCustomers.prospect.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={customer.name}
+                            onSelect={() => {
+                              handleCustomerSelect(customer.id);
+                              setCustomerSearchOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <CheckCircle className={`mr-2 h-4 w-4 ${selectedCustomerId === customer.id ? "opacity-100" : "opacity-0"}`} />
+                            <span>{customer.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             
             {/* Show selected customer's lifecycle info */}
             {!isNewCustomer && form.watch("customerId") && (
