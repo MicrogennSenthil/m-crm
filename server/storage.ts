@@ -78,6 +78,7 @@ import {
   planningChangeLogs,
   type PlanningChangeLog,
   type InsertPlanningChangeLog,
+  type CustomerWithLifecycle,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -109,6 +110,7 @@ export interface IStorage {
 
   // Customer operations (Master data)
   getCustomers(): Promise<Customer[]>;
+  getCustomersWithLifecycle(): Promise<CustomerWithLifecycle[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer>;
@@ -366,6 +368,63 @@ export class DatabaseStorage implements IStorage {
   // Customer operations (Master data)
   async getCustomers(): Promise<Customer[]> {
     return await db.select().from(customers).orderBy(desc(customers.createdAt));
+  }
+
+  async getCustomersWithLifecycle(): Promise<CustomerWithLifecycle[]> {
+    // Get all active customers
+    const allCustomers = await db.select().from(customers).where(eq(customers.status, "active")).orderBy(desc(customers.createdAt));
+    
+    // Get all projects with their handoff status
+    const allProjects = await db.select().from(projects);
+    const allHandoffs = await db.select().from(projectHandoffs);
+    
+    // Map customers with their projects and lifecycle status
+    const customersWithLifecycle: CustomerWithLifecycle[] = allCustomers.map(customer => {
+      // Get projects for this customer
+      const customerProjects = allProjects
+        .filter(p => p.customerId === customer.id)
+        .map(project => {
+          const handoff = allHandoffs.find(h => h.projectId === project.id);
+          return {
+            id: project.id,
+            clientName: project.clientName,
+            status: project.status,
+            handoffStatus: handoff?.status || null,
+            handoffDate: handoff?.handoffDate || null,
+          };
+        });
+      
+      // Determine lifecycle status based on projects and handoffs
+      let lifecycleStatus: "handed_off" | "in_implementation" | "prospect" | "existing";
+      
+      // Check if any project has been handed off
+      const hasHandedOffProject = customerProjects.some(p => p.handoffStatus === "handed_off");
+      const hasActiveImplementation = customerProjects.some(p => 
+        p.status === "in_progress" || p.status === "training" || p.status === "not_started"
+      );
+      
+      if (hasHandedOffProject) {
+        lifecycleStatus = "handed_off";
+      } else if (hasActiveImplementation) {
+        lifecycleStatus = "in_implementation";
+      } else if (customer.customerType === "customer") {
+        lifecycleStatus = "existing";
+      } else {
+        lifecycleStatus = "prospect";
+      }
+      
+      return {
+        ...customer,
+        lifecycleStatus,
+        projects: customerProjects,
+      };
+    });
+    
+    // Sort: handed_off first, then in_implementation, then existing, then prospect
+    const statusOrder = { "handed_off": 0, "in_implementation": 1, "existing": 2, "prospect": 3 };
+    customersWithLifecycle.sort((a, b) => statusOrder[a.lifecycleStatus] - statusOrder[b.lifecycleStatus]);
+    
+    return customersWithLifecycle;
   }
 
   async getCustomer(id: string): Promise<Customer | undefined> {

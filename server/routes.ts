@@ -80,6 +80,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get customers with lifecycle status for support ticket creation
+  app.get("/api/customers/with-lifecycle", isAuthenticated, async (req, res) => {
+    try {
+      const customersWithLifecycle = await storage.getCustomersWithLifecycle();
+      res.json(customersWithLifecycle);
+    } catch (error) {
+      console.error("Error fetching customers with lifecycle:", error);
+      res.status(500).json({ message: "Failed to fetch customers with lifecycle" });
+    }
+  });
+
   app.get("/api/customers/:id", isAuthenticated, async (req, res) => {
     try {
       const customer = await storage.getCustomer(req.params.id);

@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { insertTicketSchema, type InsertTicket, type Project, type Customer, type Module } from "@shared/schema";
+import { insertTicketSchema, type InsertTicket, type Project, type Customer, type Module, type CustomerWithLifecycle } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Camera, Upload, X, Image, Loader2 } from "lucide-react";
-import { useState, useRef } from "react";
+import { Building2, Plus, Camera, Upload, X, Image, Loader2, CheckCircle, Cog, Users, UserPlus } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
 
 const PRIORITIES = [
   { value: "low", label: "Low" },
@@ -51,6 +54,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,8 +62,9 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     queryKey: ["/api/projects"],
   });
 
-  const { data: customers } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+  // Use customers with lifecycle status for better grouping
+  const { data: customersWithLifecycle } = useQuery<CustomerWithLifecycle[]>({
+    queryKey: ["/api/customers/with-lifecycle"],
   });
 
   const { data: modules } = useQuery<Module[]>({
@@ -84,21 +89,51 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     },
   });
 
+  // Group customers by lifecycle status
+  const groupedCustomers = useMemo(() => {
+    if (!customersWithLifecycle) return { handedOff: [], inImplementation: [], existing: [], prospect: [] };
+    
+    return {
+      handedOff: customersWithLifecycle.filter(c => c.lifecycleStatus === "handed_off"),
+      inImplementation: customersWithLifecycle.filter(c => c.lifecycleStatus === "in_implementation"),
+      existing: customersWithLifecycle.filter(c => c.lifecycleStatus === "existing"),
+      prospect: customersWithLifecycle.filter(c => c.lifecycleStatus === "prospect"),
+    };
+  }, [customersWithLifecycle]);
+
+  // Filter projects based on selected customer
+  const filteredProjects = useMemo(() => {
+    if (!projects || !selectedCustomerId) return projects || [];
+    return projects.filter(p => p.customerId === selectedCustomerId);
+  }, [projects, selectedCustomerId]);
+
+  // Get selected customer's projects for display
+  const selectedCustomerProjects = useMemo(() => {
+    if (!selectedCustomerId || !customersWithLifecycle) return [];
+    const customer = customersWithLifecycle.find(c => c.id === selectedCustomerId);
+    return customer?.projects || [];
+  }, [selectedCustomerId, customersWithLifecycle]);
+
   const handleCustomerSelect = (customerId: string) => {
     if (customerId === "new") {
       setIsNewCustomer(true);
+      setSelectedCustomerId(null);
       form.setValue("customerId", undefined);
+      form.setValue("projectId", undefined);
       form.setValue("customerName", "");
       form.setValue("customerEmail", "");
       form.setValue("customerPhone", "");
     } else {
       setIsNewCustomer(false);
-      const selectedCustomer = customers?.find(c => c.id === customerId);
+      setSelectedCustomerId(customerId);
+      const selectedCustomer = customersWithLifecycle?.find(c => c.id === customerId);
       if (selectedCustomer) {
         form.setValue("customerId", customerId);
         form.setValue("customerName", selectedCustomer.name);
         form.setValue("customerEmail", selectedCustomer.email || "");
         form.setValue("customerPhone", selectedCustomer.phone || "");
+        // Clear project selection when customer changes
+        form.setValue("projectId", undefined);
       }
     }
   };
@@ -110,13 +145,43 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
       form.setValue("customerName", selectedProject.clientName);
       if (selectedProject.customerId) {
         form.setValue("customerId", selectedProject.customerId);
-        const customer = customers?.find(c => c.id === selectedProject.customerId);
+        setSelectedCustomerId(selectedProject.customerId);
+        const customer = customersWithLifecycle?.find(c => c.id === selectedProject.customerId);
         if (customer) {
           form.setValue("customerEmail", customer.email || "");
           form.setValue("customerPhone", customer.phone || "");
         }
         setIsNewCustomer(false);
       }
+    }
+  };
+
+  // Lifecycle status badge helper
+  const getLifecycleBadge = (status: string) => {
+    switch (status) {
+      case "handed_off":
+        return (
+          <Badge variant="default" className="bg-green-600 text-white text-[10px] px-1.5 py-0 ml-2">
+            <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+            Handed Off
+          </Badge>
+        );
+      case "in_implementation":
+        return (
+          <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0 ml-2">
+            <Cog className="h-2.5 w-2.5 mr-0.5" />
+            In Progress
+          </Badge>
+        );
+      case "existing":
+        return (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-2">
+            <Users className="h-2.5 w-2.5 mr-0.5" />
+            Existing
+          </Badge>
+        );
+      default:
+        return null;
     }
   };
 
@@ -277,7 +342,6 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     createTicketMutation.mutate(data);
   };
 
-  const activeCustomers = customers?.filter(c => c.status === "active") || [];
   const hasUploadingFiles = pendingUploads.some(u => u.status === "uploading");
 
   return (
@@ -294,29 +358,106 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               <SelectTrigger data-testid="select-customer">
                 <SelectValue placeholder="Select from Customer Master" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[300px]">
                 <SelectItem value="new">
                   <div className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
+                    <UserPlus className="h-4 w-4" />
                     <span>Add New Customer</span>
                   </div>
                 </SelectItem>
-                {activeCustomers.map((customer) => (
-                  <SelectItem key={customer.id} value={customer.id}>
-                    <div className="flex flex-col">
-                      <span>{customer.name}</span>
-                      {customer.contactPerson && (
-                        <span className="text-xs text-muted-foreground">{customer.contactPerson}</span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
+                
+                {/* Handed Off Customers - Priority section */}
+                {groupedCustomers.handedOff.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Handed Over to Support
+                    </SelectLabel>
+                    {groupedCustomers.handedOff.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        <div className="flex items-center">
+                          <span>{customer.name}</span>
+                          {getLifecycleBadge(customer.lifecycleStatus)}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+
+                {/* In Implementation Customers */}
+                {groupedCustomers.inImplementation.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                      <Cog className="h-3.5 w-3.5" />
+                      In Implementation
+                    </SelectLabel>
+                    {groupedCustomers.inImplementation.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        <div className="flex items-center">
+                          <span>{customer.name}</span>
+                          {getLifecycleBadge(customer.lifecycleStatus)}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+
+                {/* Existing Customers */}
+                {groupedCustomers.existing.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2 text-muted-foreground">
+                      <Users className="h-3.5 w-3.5" />
+                      Existing Customers
+                    </SelectLabel>
+                    {groupedCustomers.existing.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        <div className="flex items-center">
+                          <span>{customer.name}</span>
+                          {getLifecycleBadge(customer.lifecycleStatus)}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+
+                {/* Prospects */}
+                {groupedCustomers.prospect.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="flex items-center gap-2 text-muted-foreground">
+                      <Building2 className="h-3.5 w-3.5" />
+                      Prospects
+                    </SelectLabel>
+                    {groupedCustomers.prospect.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        <span>{customer.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
+            
+            {/* Show selected customer's lifecycle info */}
             {!isNewCustomer && form.watch("customerId") && (
-              <FormDescription className="mt-2">
-                Contact details loaded from Customer Master
-              </FormDescription>
+              <div className="mt-3 space-y-2">
+                <FormDescription>
+                  Contact details loaded from Customer Master
+                </FormDescription>
+                {selectedCustomerProjects.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-medium">Projects: </span>
+                    {selectedCustomerProjects.map((p, idx) => (
+                      <span key={p.id}>
+                        {p.clientName}
+                        {p.handoffStatus === "handed_off" && (
+                          <CheckCircle className="inline h-3 w-3 text-green-600 ml-0.5" />
+                        )}
+                        {idx < selectedCustomerProjects.length - 1 && ", "}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -373,21 +514,48 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
               name="projectId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Related Project (Optional)</FormLabel>
+                  <FormLabel>Related Project {selectedCustomerId ? "" : "(Optional)"}</FormLabel>
                   <Select onValueChange={handleProjectSelect} value={field.value || undefined}>
                     <FormControl>
                       <SelectTrigger data-testid="select-project">
-                        <SelectValue placeholder="Select project" />
+                        <SelectValue placeholder={selectedCustomerId && filteredProjects.length === 0 ? "No projects found" : "Select project"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {projects?.map((project) => (
+                      {filteredProjects.length > 0 ? (
+                        filteredProjects.map((project) => {
+                          const handoff = selectedCustomerProjects.find(p => p.id === project.id);
+                          return (
+                            <SelectItem key={project.id} value={project.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{project.clientName}</span>
+                                {handoff?.handoffStatus === "handed_off" && (
+                                  <Badge variant="default" className="bg-green-600 text-white text-[10px] px-1.5 py-0">
+                                    <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
+                                    Handed Off
+                                  </Badge>
+                                )}
+                                {project.status === "in_progress" && !handoff?.handoffStatus && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    In Progress
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })
+                      ) : !selectedCustomerId && projects?.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
                           {project.clientName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedCustomerId && filteredProjects.length > 0 && (
+                    <FormDescription>
+                      Showing projects for selected customer
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

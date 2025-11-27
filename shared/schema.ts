@@ -654,3 +654,15 @@ export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
 
 export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
 export type TaskComment = typeof taskComments.$inferSelect;
+
+// Customer with lifecycle info for support ticket creation
+export type CustomerWithLifecycle = Customer & {
+  lifecycleStatus: "handed_off" | "in_implementation" | "prospect" | "existing";
+  projects: {
+    id: string;
+    clientName: string;
+    status: string;
+    handoffStatus: string | null;
+    handoffDate: Date | null;
+  }[];
+};
