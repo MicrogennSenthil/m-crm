@@ -320,6 +320,7 @@ export const projectProgressEntries = pgTable("project_progress_entries", {
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   engineerId: varchar("engineer_id").references(() => users.id),
   progressDate: timestamp("progress_date").notNull(),
+  progressType: text("progress_type").default("installation"), // installation, training, handoff
   description: text("description").notNull(),
   attachments: jsonb("attachments").$type<Array<{
     type: 'photo' | 'video' | 'file';

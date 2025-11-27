@@ -1583,21 +1583,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/projects/:id/progress", isAuthenticated, async (req: any, res) => {
     try {
+      // Auto-set progressDate to current timestamp (recording date becomes progress date)
+      const now = new Date();
       const validatedData = insertProjectProgressEntrySchema.parse({
         ...req.body,
         projectId: req.params.id,
         engineerId: req.user.claims.sub,
-        progressDate: new Date(req.body.progressDate),
+        progressDate: now,
+        progressType: req.body.progressType || "installation",
       });
       
       const newEntry = await storage.createProjectProgressEntry(validatedData);
+      
+      const progressTypeLabel = validatedData.progressType === "installation" ? "Installation" :
+                                validatedData.progressType === "training" ? "Training" : "Handoff";
       
       // Log activity
       await storage.logActivity({
         entityType: "project",
         entityId: req.params.id,
         action: "progress_added",
-        description: `Daily progress entry added for ${new Date(validatedData.progressDate).toLocaleDateString()}`,
+        description: `${progressTypeLabel} progress recorded at ${now.toLocaleString()}`,
         userId: req.user.claims.sub,
       });
       
