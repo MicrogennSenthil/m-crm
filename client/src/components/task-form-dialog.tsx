@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Task, User, Lead } from "@shared/schema";
+import type { Task, User, Lead, TaskAttachment } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -47,7 +47,10 @@ import {
 } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Mic, MicOff, Calendar as CalendarIcon, X, Check, ChevronsUpDown, Play, Pause, Trash2 } from "lucide-react";
+import { 
+  Mic, MicOff, Calendar as CalendarIcon, X, Check, ChevronsUpDown, Play, Pause, Trash2,
+  Video, VideoOff, Camera, Image, Paperclip, FileIcon, StopCircle
+} from "lucide-react";
 
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -91,6 +94,32 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Video recording state
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [showVideoPreview, setShowVideoPreview] = useState(false);
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  
+  // Photo capture state
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  
+  // File attachments state
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fetch all users for assignment and mentions
   const { data: users = [] } = useQuery<User[]>({
@@ -213,6 +242,20 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       setAudioUrl(null);
       setRecordingDuration(0);
       setSelectedLeadId(null);
+      // Reset video/photo/attachment state
+      setVideoBlob(null);
+      setVideoUrl(null);
+      setVideoDuration(0);
+      setShowVideoPreview(false);
+      setCapturedPhoto(null);
+      setPhotoBlob(null);
+      setShowCamera(false);
+      setAttachments([]);
+    }
+    
+    // Load existing attachments when editing
+    if (task?.attachments) {
+      setAttachments(task.attachments);
     }
   }, [task, form, open]);
 
@@ -300,9 +343,198 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Video recording functions
+  const startVideoRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      videoStreamRef.current = stream;
+      
+      if (videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream;
+        videoPreviewRef.current.play();
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+      videoRecorderRef.current = mediaRecorder;
+      videoChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          videoChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(videoChunksRef.current, { type: "video/webm" });
+        setVideoBlob(blob);
+        setVideoUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(track => track.stop());
+        videoStreamRef.current = null;
+      };
+      
+      mediaRecorder.start();
+      setIsRecordingVideo(true);
+      setShowVideoPreview(true);
+      setVideoDuration(0);
+      
+      videoTimerRef.current = setInterval(() => {
+        setVideoDuration(prev => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      toast({ title: "Could not access camera", variant: "destructive" });
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (videoRecorderRef.current && isRecordingVideo) {
+      videoRecorderRef.current.stop();
+      setIsRecordingVideo(false);
+      if (videoTimerRef.current) {
+        clearInterval(videoTimerRef.current);
+      }
+    }
+  };
+
+  const deleteVideoRecording = () => {
+    setVideoBlob(null);
+    setVideoUrl(null);
+    setVideoDuration(0);
+    setShowVideoPreview(false);
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach(track => track.stop());
+      videoStreamRef.current = null;
+    }
+  };
+
+  // Photo capture functions
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      cameraStreamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        cameraVideoRef.current.play();
+      }
+      setShowCamera(true);
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      toast({ title: "Could not access camera", variant: "destructive" });
+    }
+  };
+
+  const capturePhoto = () => {
+    if (cameraVideoRef.current && canvasRef.current) {
+      const video = cameraVideoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            setPhotoBlob(blob);
+            setCapturedPhoto(URL.createObjectURL(blob));
+          }
+        }, 'image/jpeg', 0.8);
+      }
+      closeCamera();
+    }
+  };
+
+  const closeCamera = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    setShowCamera(false);
+  };
+
+  const deletePhoto = () => {
+    setCapturedPhoto(null);
+    setPhotoBlob(null);
+  };
+
+  // File upload function
+  const uploadAttachment = async (file: File, type: "video" | "photo" | "file") => {
+    setIsUploading(true);
+    try {
+      // Get upload URL
+      const response = await apiRequest("POST", "/api/tasks/attachment-upload", {
+        taskId: task?.id,
+        type,
+        fileName: file.name,
+        mimeType: file.type,
+      });
+      const data = await response.json();
+      
+      // Upload the file
+      await fetch(data.uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+      
+      // Create attachment metadata
+      const newAttachment: TaskAttachment = {
+        id: crypto.randomUUID(),
+        type,
+        url: data.attachmentUrl,
+        name: file.name,
+        size: file.size,
+        mimeType: file.type,
+        createdAt: new Date().toISOString(),
+      };
+      
+      setAttachments(prev => [...prev, newAttachment]);
+      toast({ title: `${type === 'file' ? 'File' : type === 'photo' ? 'Photo' : 'Video'} uploaded successfully` });
+    } catch (error) {
+      console.error("Error uploading attachment:", error);
+      toast({ title: "Failed to upload attachment", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      for (const file of Array.from(files)) {
+        await uploadAttachment(file, "file");
+      }
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handlePhotoSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      await uploadAttachment(files[0], "photo");
+    }
+    if (photoInputRef.current) {
+      photoInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
   const onSubmit = async (data: TaskFormValues) => {
     let voiceNoteUrl = task?.voiceNoteUrl;
     let voiceNoteDuration = task?.voiceNoteDuration;
+    let finalAttachments = [...attachments];
     
     // If there's a new audio blob, upload it
     if (audioBlob && !audioUrl?.startsWith("/objects/")) {
@@ -330,11 +562,77 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       }
     }
     
+    // If there's a new video blob, upload it
+    if (videoBlob && !videoUrl?.startsWith("/objects/")) {
+      try {
+        const response = await apiRequest("POST", "/api/tasks/attachment-upload", {
+          taskId: task?.id,
+          type: "video",
+          fileName: "video_recording.webm",
+          mimeType: "video/webm",
+        });
+        const uploadData = await response.json();
+        
+        await fetch(uploadData.uploadURL, {
+          method: "PUT",
+          body: videoBlob,
+          headers: { "Content-Type": "video/webm" },
+        });
+        
+        finalAttachments.push({
+          id: crypto.randomUUID(),
+          type: "video",
+          url: uploadData.attachmentUrl,
+          name: "Video Recording",
+          size: videoBlob.size,
+          duration: videoDuration,
+          mimeType: "video/webm",
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error uploading video:", error);
+        toast({ title: "Failed to upload video recording", variant: "destructive" });
+      }
+    }
+    
+    // If there's a captured photo, upload it
+    if (photoBlob && !capturedPhoto?.startsWith("/objects/")) {
+      try {
+        const response = await apiRequest("POST", "/api/tasks/attachment-upload", {
+          taskId: task?.id,
+          type: "photo",
+          fileName: "captured_photo.jpg",
+          mimeType: "image/jpeg",
+        });
+        const uploadData = await response.json();
+        
+        await fetch(uploadData.uploadURL, {
+          method: "PUT",
+          body: photoBlob,
+          headers: { "Content-Type": "image/jpeg" },
+        });
+        
+        finalAttachments.push({
+          id: crypto.randomUUID(),
+          type: "photo",
+          url: uploadData.attachmentUrl,
+          name: "Captured Photo",
+          size: photoBlob.size,
+          mimeType: "image/jpeg",
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error uploading photo:", error);
+        toast({ title: "Failed to upload photo", variant: "destructive" });
+      }
+    }
+    
     createTaskMutation.mutate({
       ...data,
       voiceNoteUrl: voiceNoteUrl || undefined,
       voiceNoteDuration: voiceNoteDuration || undefined,
-    });
+      attachments: finalAttachments.length > 0 ? finalAttachments : undefined,
+    } as any);
   };
 
   const selectedMentionedUsers = form.watch("mentionedUsers") || [];
@@ -737,11 +1035,246 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
               </div>
             </div>
             
+            {/* Video Recording Section */}
+            <div className="space-y-2">
+              <FormLabel>Video Recording</FormLabel>
+              <div className="border rounded-lg bg-muted/30 p-3">
+                {showVideoPreview && !videoUrl ? (
+                  <div className="space-y-3">
+                    <video 
+                      ref={videoPreviewRef} 
+                      className="w-full rounded-lg aspect-video bg-black"
+                      muted
+                      playsInline
+                    />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        <span className="text-sm text-muted-foreground">
+                          Recording... {formatDuration(videoDuration)}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={stopVideoRecording}
+                        data-testid="button-stop-video"
+                      >
+                        <StopCircle className="h-4 w-4 mr-2" />
+                        Stop Recording
+                      </Button>
+                    </div>
+                  </div>
+                ) : videoUrl ? (
+                  <div className="space-y-3">
+                    <video 
+                      src={videoUrl} 
+                      className="w-full rounded-lg aspect-video bg-black"
+                      controls
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">
+                        Video Recording ({formatDuration(videoDuration)})
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        onClick={deleteVideoRecording}
+                        data-testid="button-delete-video"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={startVideoRecording}
+                      data-testid="button-record-video"
+                    >
+                      <Video className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Click to record a video
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Photo Capture Section */}
+            <div className="space-y-2">
+              <FormLabel>Photo</FormLabel>
+              <div className="border rounded-lg bg-muted/30 p-3">
+                {showCamera ? (
+                  <div className="space-y-3">
+                    <video 
+                      ref={cameraVideoRef} 
+                      className="w-full rounded-lg aspect-video bg-black"
+                      playsInline
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                    <div className="flex items-center justify-between">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={closeCamera}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={capturePhoto}
+                        data-testid="button-capture-photo"
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Capture
+                      </Button>
+                    </div>
+                  </div>
+                ) : capturedPhoto ? (
+                  <div className="space-y-3">
+                    <img 
+                      src={capturedPhoto} 
+                      alt="Captured" 
+                      className="w-full rounded-lg object-cover max-h-48"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Captured Photo</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive"
+                        onClick={deletePhoto}
+                        data-testid="button-delete-photo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={openCamera}
+                      data-testid="button-open-camera"
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Take a photo
+                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <input
+                        type="file"
+                        ref={photoInputRef}
+                        accept="image/*"
+                        onChange={handlePhotoSelect}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => photoInputRef.current?.click()}
+                        data-testid="button-upload-photo"
+                      >
+                        <Image className="h-4 w-4 mr-2" />
+                        Upload Photo
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* File Attachments Section */}
+            <div className="space-y-2">
+              <FormLabel>Attachments</FormLabel>
+              <div className="border rounded-lg bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    data-testid="button-attach-file"
+                  >
+                    <Paperclip className="h-4 w-4 mr-2" />
+                    {isUploading ? "Uploading..." : "Attach Files"}
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Documents, images, or other files
+                  </span>
+                </div>
+                
+                {attachments.length > 0 && (
+                  <div className="space-y-2">
+                    {attachments.map((attachment) => (
+                      <div 
+                        key={attachment.id} 
+                        className="flex items-center gap-3 p-2 bg-background rounded border"
+                      >
+                        {attachment.type === "photo" ? (
+                          <Image className="h-4 w-4 text-blue-500" />
+                        ) : attachment.type === "video" ? (
+                          <Video className="h-4 w-4 text-purple-500" />
+                        ) : (
+                          <FileIcon className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{attachment.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {attachment.size && formatFileSize(attachment.size)}
+                            {attachment.duration && ` - ${formatDuration(attachment.duration)}`}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive h-8 w-8"
+                          onClick={() => removeAttachment(attachment.id)}
+                          data-testid={`button-remove-attachment-${attachment.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={createTaskMutation.isPending} data-testid="button-save-task">
+              <Button 
+                type="submit" 
+                disabled={createTaskMutation.isPending || isUploading} 
+                data-testid="button-save-task"
+              >
                 {createTaskMutation.isPending ? "Saving..." : task ? "Update Task" : "Create Task"}
               </Button>
             </div>
