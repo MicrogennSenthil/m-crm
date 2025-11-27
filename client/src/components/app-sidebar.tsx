@@ -37,6 +37,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
+import microgennLogo from "@assets/MG Logo_1764263883732.png";
 
 // Navigation items based on design guidelines
 const mainMenuItems = [
@@ -145,9 +146,14 @@ export function AppSidebar() {
     <Sidebar data-testid="sidebar-main">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sm font-semibold px-4 py-2">
-            Microgenn CRM
-          </SidebarGroupLabel>
+          <div className="px-4 py-4 flex items-center justify-center">
+            <img 
+              src={microgennLogo} 
+              alt="Microgenn - Empowering Your Hotel's Digital Evolution" 
+              className="h-12 w-auto object-contain"
+              data-testid="logo-microgenn"
+            />
+          </div>
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleMainItems.map((item) => (
