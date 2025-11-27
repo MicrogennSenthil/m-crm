@@ -538,12 +538,26 @@ export const tasks = pgTable("tasks", {
   dueDate: timestamp("due_date"),
   voiceNoteUrl: text("voice_note_url"), // Object storage path for voice recording
   voiceNoteDuration: integer("voice_note_duration"), // Duration in seconds
+  attachments: jsonb("attachments").$type<TaskAttachment[]>(), // Video recordings, photos, and file attachments
   relatedEntityType: text("related_entity_type"), // lead, project, ticket, customer
   relatedEntityId: varchar("related_entity_id"),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Task attachment type for videos, photos, and files
+export type TaskAttachment = {
+  id: string;
+  type: "video" | "photo" | "file";
+  url: string;
+  name: string;
+  size?: number;
+  duration?: number; // For video recordings in seconds
+  mimeType?: string;
+  thumbnailUrl?: string; // For video thumbnails
+  createdAt: string;
+};
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
