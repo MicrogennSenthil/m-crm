@@ -206,17 +206,24 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground mb-2">Assigned To</h4>
                   {task.assignee ? (
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={task.assignee.profileImageUrl || undefined} />
-                        <AvatarFallback>
-                          {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">{task.assignee.firstName} {task.assignee.lastName}</p>
-                        <p className="text-xs text-muted-foreground">{task.assignee.role}</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={task.assignee.profileImageUrl || undefined} />
+                          <AvatarFallback>
+                            {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{task.assignee.firstName} {task.assignee.lastName}</p>
+                          <p className="text-xs text-muted-foreground">{task.assignee.role}</p>
+                        </div>
                       </div>
+                      {(task as any).assignedAt && (
+                        <p className="text-xs text-muted-foreground ml-10">
+                          Assigned on {format(new Date((task as any).assignedAt), "PPP 'at' h:mm a")}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">Unassigned</p>
@@ -226,30 +233,30 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Dates</h4>
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Dates & Times</h4>
                   <div className="space-y-2 text-sm">
                     {task.dueDate && (
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span>Due: {format(new Date(task.dueDate), "PPP")}</span>
+                        <span>Due: {format(new Date(task.dueDate), "PPP 'at' h:mm a")}</span>
                       </div>
                     )}
                     {task.reminderDate && (
                       <div className="flex items-center gap-2">
                         <Bell className="h-4 w-4 text-muted-foreground" />
-                        <span>Reminder: {format(new Date(task.reminderDate), "PPP")}</span>
+                        <span>Reminder: {format(new Date(task.reminderDate), "PPP 'at' h:mm a")}</span>
                       </div>
                     )}
                     {task.createdAt && (
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span>Created: {format(new Date(task.createdAt), "PPP")}</span>
+                        <span>Created: {format(new Date(task.createdAt), "PPP 'at' h:mm a")}</span>
                       </div>
                     )}
                     {task.completedAt && (
                       <div className="flex items-center gap-2 text-green-600">
                         <CheckCircle2 className="h-4 w-4" />
-                        <span>Completed: {format(new Date(task.completedAt), "PPP")}</span>
+                        <span>Completed: {format(new Date(task.completedAt), "PPP 'at' h:mm a")}</span>
                       </div>
                     )}
                   </div>

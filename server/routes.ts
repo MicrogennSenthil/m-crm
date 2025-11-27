@@ -2517,12 +2517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       
-      // Parse dates properly
+      // Parse dates properly and set assignedAt if task is assigned
       const taskData = {
         ...req.body,
         createdBy: userId,
         reminderDate: req.body.reminderDate ? new Date(req.body.reminderDate) : undefined,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+        assignedAt: req.body.assignedTo ? new Date() : undefined,
       };
       
       const validatedData = insertTaskSchema.parse(taskData);
@@ -2564,12 +2565,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "You don't have permission to update this task" });
       }
       
-      // Parse dates properly
-      const updateData = {
+      // Parse dates properly and update assignedAt if assignment changes
+      const updateData: any = {
         ...req.body,
         reminderDate: req.body.reminderDate ? new Date(req.body.reminderDate) : undefined,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
       };
+      
+      // Set assignedAt when task is newly assigned or assignment changes
+      if (req.body.assignedTo && req.body.assignedTo !== task.assignedTo) {
+        updateData.assignedAt = new Date();
+      }
       
       const updatedTask = await storage.updateTask(req.params.id, updateData);
       

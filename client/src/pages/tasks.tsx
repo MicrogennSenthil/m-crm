@@ -198,13 +198,13 @@ export default function TasksPage() {
                 {task.dueDate && (
                   <span className={`flex items-center gap-1 ${isOverdue ? "text-red-500" : ""}`}>
                     <Calendar className="h-3 w-3" />
-                    {format(new Date(task.dueDate), "MMM d")}
+                    {format(new Date(task.dueDate), "MMM d, h:mm a")}
                   </span>
                 )}
                 {task.reminderDate && (
                   <span className={`flex items-center gap-1 ${hasReminder ? "text-orange-500" : ""}`}>
                     <Bell className="h-3 w-3" />
-                    {format(new Date(task.reminderDate), "MMM d")}
+                    {format(new Date(task.reminderDate), "MMM d, h:mm a")}
                   </span>
                 )}
                 {task.commentsCount && task.commentsCount > 0 && (

@@ -49,7 +49,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { 
   Mic, MicOff, Calendar as CalendarIcon, X, Check, ChevronsUpDown, Play, Pause, Trash2,
-  Video, VideoOff, Camera, Image, Paperclip, FileIcon, StopCircle
+  Video, VideoOff, Camera, Image, Paperclip, FileIcon, StopCircle, Clock
 } from "lucide-react";
 
 const taskFormSchema = z.object({
@@ -912,29 +912,54 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                 name="reminderDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Reminder Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            data-testid="button-reminder-date"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(field.value, "PPP") : "Set reminder"}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value || undefined}
-                          onSelect={field.onChange}
-                          initialFocus
+                    <FormLabel>Reminder Date & Time</FormLabel>
+                    <div className="flex gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={`flex-1 justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
+                              data-testid="button-reminder-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {field.value ? format(field.value, "MMM d, yyyy") : "Date"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value || undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const currentValue = field.value || new Date();
+                                date.setHours(currentValue.getHours(), currentValue.getMinutes());
+                                field.onChange(date);
+                              } else {
+                                field.onChange(null);
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="time"
+                          className="w-[110px]"
+                          value={field.value ? format(field.value, "HH:mm") : ""}
+                          onChange={(e) => {
+                            const [hours, minutes] = e.target.value.split(":").map(Number);
+                            const newDate = field.value ? new Date(field.value) : new Date();
+                            newDate.setHours(hours || 0, minutes || 0, 0, 0);
+                            field.onChange(newDate);
+                          }}
+                          data-testid="input-reminder-time"
                         />
-                      </PopoverContent>
-                    </Popover>
+                      </div>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -945,29 +970,54 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                 name="dueDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Due Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                            data-testid="button-due-date"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(field.value, "PPP") : "Set due date"}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value || undefined}
-                          onSelect={field.onChange}
-                          initialFocus
+                    <FormLabel>Due Date & Time</FormLabel>
+                    <div className="flex gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={`flex-1 justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
+                              data-testid="button-due-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {field.value ? format(field.value, "MMM d, yyyy") : "Date"}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value || undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const currentValue = field.value || new Date();
+                                date.setHours(currentValue.getHours(), currentValue.getMinutes());
+                                field.onChange(date);
+                              } else {
+                                field.onChange(null);
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="time"
+                          className="w-[110px]"
+                          value={field.value ? format(field.value, "HH:mm") : ""}
+                          onChange={(e) => {
+                            const [hours, minutes] = e.target.value.split(":").map(Number);
+                            const newDate = field.value ? new Date(field.value) : new Date();
+                            newDate.setHours(hours || 0, minutes || 0, 0, 0);
+                            field.onChange(newDate);
+                          }}
+                          data-testid="input-due-time"
                         />
-                      </PopoverContent>
-                    </Popover>
+                      </div>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

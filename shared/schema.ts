@@ -533,6 +533,7 @@ export const tasks = pgTable("tasks", {
   priority: text("priority").default("medium"), // low, medium, high, urgent
   createdBy: varchar("created_by").notNull().references(() => users.id),
   assignedTo: varchar("assigned_to").references(() => users.id),
+  assignedAt: timestamp("assigned_at"), // When the task was assigned
   mentionedUsers: text("mentioned_users").array(), // User IDs mentioned in the task
   reminderDate: timestamp("reminder_date"),
   dueDate: timestamp("due_date"),
