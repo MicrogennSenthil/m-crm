@@ -314,12 +314,12 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             )}
             
-            {task.attachments && task.attachments.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
-                  <Paperclip className="h-4 w-4" />
-                  Attachments ({task.attachments.length})
-                </h4>
+            <div data-testid="section-attachments">
+              <h4 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Attachments ({task.attachments?.length || 0})
+              </h4>
+              {task.attachments && task.attachments.length > 0 ? (
                 <div className="space-y-3">
                   {task.attachments.filter(a => a.type === "video").map((attachment) => (
                     <div key={attachment.id} className="p-3 bg-muted rounded-lg">
@@ -383,8 +383,10 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">No attachments added</p>
+              )}
+            </div>
             
             <Separator />
             
