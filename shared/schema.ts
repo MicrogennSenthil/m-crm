@@ -314,6 +314,30 @@ export const insertProjectModuleSchema = createInsertSchema(projectModules).omit
 export type InsertProjectModule = z.infer<typeof insertProjectModuleSchema>;
 export type ProjectModule = typeof projectModules.$inferSelect;
 
+// Project Progress Entries table - Track daily implementation progress with proof
+export const projectProgressEntries = pgTable("project_progress_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  engineerId: varchar("engineer_id").references(() => users.id),
+  progressDate: timestamp("progress_date").notNull(),
+  description: text("description").notNull(),
+  attachments: jsonb("attachments").$type<Array<{
+    type: 'photo' | 'video' | 'file';
+    url: string;
+    name: string;
+    size?: number;
+  }>>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectProgressEntrySchema = createInsertSchema(projectProgressEntries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertProjectProgressEntry = z.infer<typeof insertProjectProgressEntrySchema>;
+export type ProjectProgressEntry = typeof projectProgressEntries.$inferSelect;
+
 // Training Sessions table - Schedule future training sessions
 export const trainingSessions = pgTable("training_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
