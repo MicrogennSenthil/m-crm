@@ -32,6 +32,26 @@ type TaskWithDetails = Task & {
   assignee?: User;
 };
 
+// Get greeting based on Indian Standard Time (IST = UTC+5:30)
+function getISTGreeting(): string {
+  const now = new Date();
+  // Convert to IST by adding 5 hours 30 minutes to UTC
+  const utcHours = now.getUTCHours();
+  const utcMinutes = now.getUTCMinutes();
+  const istTotalMinutes = (utcHours * 60 + utcMinutes) + 330; // 330 minutes = 5h 30m
+  const istHours = Math.floor((istTotalMinutes % 1440) / 60); // 1440 = 24 * 60
+  
+  if (istHours >= 5 && istHours < 12) {
+    return "Good Morning";
+  } else if (istHours >= 12 && istHours < 17) {
+    return "Good Afternoon";
+  } else if (istHours >= 17 && istHours < 21) {
+    return "Good Evening";
+  } else {
+    return "Good Night";
+  }
+}
+
 interface DashboardStats {
   activeLeads: number;
   ongoingProjects: number;
@@ -168,10 +188,15 @@ export default function Home() {
     }
   };
 
+  const greeting = getISTGreeting();
+  const userName = currentUser?.firstName || "User";
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2" data-testid="text-greeting">
+          Hi {userName}, {greeting}!
+        </h1>
         <p className="text-sm text-muted-foreground">
           Welcome to your Microgenn CRM dashboard
         </p>
