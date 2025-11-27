@@ -17,9 +17,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { 
   Calendar, Clock, User, Building2, CheckCircle2, AlertCircle, 
-  GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings
+  GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings,
+  Camera, Video, FileText, Image, Loader2
 } from "lucide-react";
-import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer } from "@shared/schema";
+import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer, ProjectProgressEntry } from "@shared/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileUploader } from "./file-uploader";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -76,6 +79,11 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     handoffDate: new Date().toISOString().split('T')[0],
     notes: "",
   });
+  const [newProgress, setNewProgress] = useState({
+    progressDate: new Date().toISOString().split('T')[0],
+    description: "",
+    attachments: [] as Array<{ type: 'photo' | 'video' | 'file'; url: string; name: string; size?: number }>,
+  });
 
   const { data: projectModules } = useQuery<ProjectModuleWithDetails[]>({
     queryKey: ["/api/projects", project.id, "modules"],
@@ -114,6 +122,12 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
 
   const { data: handoff } = useQuery<ProjectHandoff | null>({
     queryKey: ["/api/projects", project.id, "handoff"],
+    enabled: open,
+  });
+
+  // Progress entries query
+  const { data: progressEntries, isLoading: progressLoading } = useQuery<(ProjectProgressEntry & { engineer?: UserType })[]>({
+    queryKey: ["/api/projects", project.id, "progress"],
     enabled: open,
   });
 
@@ -227,6 +241,48 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     },
   });
 
+  // Progress entry mutations
+  const createProgressMutation = useMutation({
+    mutationFn: async (data: typeof newProgress) => {
+      await apiRequest("POST", `/api/projects/${project.id}/progress`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "progress"] });
+      setNewProgress({
+        progressDate: new Date().toISOString().split('T')[0],
+        description: "",
+        attachments: [],
+      });
+      toast({ title: "Success", description: "Daily progress added" });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({ title: "Unauthorized", description: "You are logged out.", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/api/login"; }, 500);
+        return;
+      }
+      toast({ title: "Error", description: "Failed to add progress", variant: "destructive" });
+    },
+  });
+
+  const deleteProgressMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/projects/${project.id}/progress/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "progress"] });
+      toast({ title: "Success", description: "Progress entry deleted" });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({ title: "Unauthorized", description: "You are logged out.", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/api/login"; }, 500);
+        return;
+      }
+      toast({ title: "Error", description: "Failed to delete progress", variant: "destructive" });
+    },
+  });
+
   // Use purchased modules for calculations (only modules customer bought)
   const completedModules = purchasedProjectModules?.filter((pm) => pm.completed).length || 0;
   const totalModules = purchasedProjectModules?.length || 0;
@@ -264,10 +320,14 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList className="grid w-full grid-cols-4" data-testid="project-detail-tabs">
+          <TabsList className="grid w-full grid-cols-5" data-testid="project-detail-tabs">
             <TabsTrigger value="overview" data-testid="tab-overview">
               <ClipboardCheck className="h-4 w-4 mr-2" />
               Overview
+            </TabsTrigger>
+            <TabsTrigger value="progress" data-testid="tab-progress">
+              <Camera className="h-4 w-4 mr-2" />
+              Progress
             </TabsTrigger>
             <TabsTrigger value="installation" data-testid="tab-installation">
               <Settings className="h-4 w-4 mr-2" />
@@ -380,6 +440,216 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
             <Separator />
 
             <AttachmentsList entityType="project" entityId={project.id} title="Project Documents" />
+          </TabsContent>
+
+          {/* Daily Progress Tab */}
+          <TabsContent value="progress" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Daily Progress Tracking</h3>
+              <Badge variant="outline">{progressEntries?.length || 0} Entries</Badge>
+            </div>
+
+            {/* Add New Progress Entry */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Plus className="h-4 w-4" /> Add Today's Progress
+                </CardTitle>
+                <CardDescription>
+                  Document your daily implementation work with photos and videos
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs flex items-center gap-1">
+                      <Calendar className="h-3 w-3" /> Progress Date
+                    </Label>
+                    <Input
+                      type="date"
+                      value={newProgress.progressDate}
+                      onChange={(e) => setNewProgress({ ...newProgress, progressDate: e.target.value })}
+                      className="h-9"
+                      data-testid="input-progress-date"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> Work Description
+                  </Label>
+                  <Textarea
+                    placeholder="Describe what was accomplished today..."
+                    value={newProgress.description}
+                    onChange={(e) => setNewProgress({ ...newProgress, description: e.target.value })}
+                    rows={3}
+                    data-testid="textarea-progress-description"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Camera className="h-3 w-3" /> Photos & Videos (Proof)
+                  </Label>
+                  <FileUploader
+                    entityType="project_progress"
+                    entityId={`${project.id}-${newProgress.progressDate}`}
+                    onUploadComplete={(url, fileName, fileType, fileSize) => {
+                      const type: 'photo' | 'video' | 'file' = 
+                        fileType.startsWith('image/') ? 'photo' : 
+                        fileType.startsWith('video/') ? 'video' : 'file';
+                      setNewProgress({
+                        ...newProgress,
+                        attachments: [...newProgress.attachments, { type, url, name: fileName, size: fileSize }]
+                      });
+                    }}
+                    accept="image/*,video/*"
+                    multiple
+                  />
+                  
+                  {newProgress.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {newProgress.attachments.map((att, idx) => (
+                        <div key={idx} className="relative group">
+                          {att.type === 'photo' ? (
+                            <div className="w-20 h-20 rounded border overflow-hidden">
+                              <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                            </div>
+                          ) : att.type === 'video' ? (
+                            <div className="w-20 h-20 rounded border bg-muted flex items-center justify-center">
+                              <Video className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 rounded border bg-muted flex items-center justify-center">
+                              <FileText className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setNewProgress({
+                              ...newProgress,
+                              attachments: newProgress.attachments.filter((_, i) => i !== idx)
+                            })}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  onClick={() => createProgressMutation.mutate(newProgress)}
+                  disabled={!newProgress.description.trim() || createProgressMutation.isPending}
+                  data-testid="button-add-progress"
+                >
+                  {createProgressMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" /> Add Progress Entry
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Progress Timeline */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm">Progress History</h4>
+              
+              {progressLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : progressEntries && progressEntries.length > 0 ? (
+                <ScrollArea className="max-h-[400px]">
+                  <div className="space-y-4 pr-4">
+                    {progressEntries.map((entry) => (
+                      <Card key={entry.id} className="relative">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Badge variant="outline" className="text-xs">
+                                  <Calendar className="h-3 w-3 mr-1" />
+                                  {format(new Date(entry.progressDate), "EEEE, MMMM d, yyyy")}
+                                </Badge>
+                                {entry.engineer && (
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Avatar className="h-5 w-5">
+                                      <AvatarImage src={entry.engineer.profileImageUrl || undefined} />
+                                      <AvatarFallback className="text-[10px]">
+                                        {entry.engineer.firstName?.[0]}{entry.engineer.lastName?.[0]}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    {entry.engineer.firstName} {entry.engineer.lastName}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <p className="text-sm whitespace-pre-wrap">{entry.description}</p>
+                              
+                              {entry.attachments && entry.attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  {entry.attachments.map((att, idx) => (
+                                    <a
+                                      key={idx}
+                                      href={att.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block"
+                                    >
+                                      {att.type === 'photo' ? (
+                                        <div className="w-24 h-24 rounded border overflow-hidden hover:ring-2 ring-primary transition-all">
+                                          <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                                        </div>
+                                      ) : att.type === 'video' ? (
+                                        <div className="w-24 h-24 rounded border bg-muted flex flex-col items-center justify-center hover:ring-2 ring-primary transition-all">
+                                          <Video className="h-8 w-8 text-muted-foreground" />
+                                          <span className="text-[10px] text-muted-foreground mt-1">Video</span>
+                                        </div>
+                                      ) : (
+                                        <div className="w-24 h-24 rounded border bg-muted flex flex-col items-center justify-center hover:ring-2 ring-primary transition-all">
+                                          <FileText className="h-8 w-8 text-muted-foreground" />
+                                          <span className="text-[10px] text-muted-foreground mt-1 truncate max-w-[80px] px-1">{att.name}</span>
+                                        </div>
+                                      )}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => deleteProgressMutation.mutate(entry.id)}
+                              disabled={deleteProgressMutation.isPending}
+                              data-testid={`button-delete-progress-${entry.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <Card className="p-8 text-center text-muted-foreground">
+                  <Camera className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No progress entries yet</p>
+                  <p className="text-xs mt-1">Start tracking daily implementation progress above</p>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           {/* Installation Scheduling Tab */}
