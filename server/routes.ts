@@ -111,13 +111,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No pending signup found. Please start again." });
       }
       
+      // Determine role - super admin gets admin role automatically
+      const userRole = pendingSignup.email === "senthil@microgenn.com" ? "admin" : "sales_executive";
+      
       // Create user
       const user = await storage.createUserWithPassword({
         email: pendingSignup.email,
         firstName: pendingSignup.firstName,
         lastName: pendingSignup.lastName,
         passwordHash: pendingSignup.passwordHash,
-        role: "sales_executive", // Default role
+        role: userRole,
       });
       
       // Mark email as verified
@@ -173,6 +176,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid email or password" });
       }
       
+      // Auto-assign admin role to super admin email if not already admin
+      let userRole = user.role;
+      if (email === "senthil@microgenn.com" && user.role !== "admin") {
+        await storage.updateUser(user.id, { role: "admin" });
+        userRole = "admin";
+      }
+      
       // Update last login
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
@@ -188,7 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user.email, 
           firstName: user.firstName, 
           lastName: user.lastName, 
-          role: user.role,
+          role: userRole,
           profileImageUrl: user.profileImageUrl
         } 
       });
@@ -343,6 +353,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Target user not found" });
       }
       
+      // Prevent impersonating super admin
+      if (targetUser.email === "senthil@microgenn.com") {
+        return res.status(403).json({ message: "Cannot impersonate super admin" });
+      }
+      
       // Store original admin session
       (req.session as any).originalAdminId = adminUserId;
       (req.session as any).isImpersonating = true;
@@ -418,7 +433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: Update user status
+  // Super Admin email - protected from modifications
+  const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
+  // Admin: Update user status and role
   app.patch("/api/users/:userId", isAuthenticated, async (req: any, res) => {
     try {
       const adminUserId = req.user.claims.sub || (req.session as any).userId;
@@ -440,6 +458,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetUser = await storage.getUser(userId);
       if (!targetUser) {
         return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Protect super admin from role/status changes
+      if (targetUser.email === SUPER_ADMIN_EMAIL) {
+        if (role && role !== "admin") {
+          return res.status(403).json({ message: "Cannot change super admin role" });
+        }
+        if (isActive === false) {
+          return res.status(403).json({ message: "Cannot deactivate super admin account" });
+        }
       }
       
       // Build update object

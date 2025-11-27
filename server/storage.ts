@@ -93,7 +93,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
   createUser(user: InsertUser): Promise<User>;
   createUserWithPassword(user: InsertUser & { passwordHash: string }): Promise<User>;
-  updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; lastLoginAt?: Date }>): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
 

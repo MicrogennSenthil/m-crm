@@ -9,9 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Search, UserCog, Users, ShieldCheck, LogIn, Ban, CheckCircle, Mail, Calendar } from "lucide-react";
+import { Loader2, Search, UserCog, Users, ShieldCheck, LogIn, Ban, CheckCircle, Mail, Calendar, Crown, Shield } from "lucide-react";
 import { format } from "date-fns";
-import type { User } from "@shared/schema";
+import type { User, UserRole } from "@shared/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +31,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
+const DEFAULT_ROLES = [
+  { name: "admin", displayName: "Administrator" },
+  { name: "sales_executive", displayName: "Sales Executive" },
+  { name: "engineer", displayName: "Engineer" },
+  { name: "support", displayName: "Support" },
+];
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
@@ -42,6 +63,13 @@ export default function AdminUsers() {
     queryKey: ["/api/admin/users"],
     enabled: currentUser?.role === "admin",
   });
+
+  const { data: roles = [] } = useQuery<UserRole[]>({
+    queryKey: ["/api/user-roles"],
+    enabled: currentUser?.role === "admin",
+  });
+
+  const availableRoles = roles.length > 0 ? roles : DEFAULT_ROLES;
 
   const impersonateMutation = useMutation({
     mutationFn: async (targetUserId: string) => {
@@ -66,26 +94,50 @@ export default function AdminUsers() {
     },
   });
 
-  const toggleUserStatusMutation = useMutation({
-    mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/users/${userId}`, { isActive });
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, data }: { userId: string; data: { isActive?: boolean; role?: string } }) => {
+      const response = await apiRequest("PATCH", `/api/users/${userId}`, data);
       return response.json();
     },
     onSuccess: () => {
       toast({
         title: "User Updated",
-        description: "User status has been updated",
+        description: "User has been updated successfully",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (error: any) => {
       toast({
         title: "Update Failed",
-        description: error.message || "Failed to update user status",
+        description: error.message || "Failed to update user",
         variant: "destructive",
       });
     },
   });
+
+  const handleRoleChange = (userId: string, newRole: string, userEmail: string | null) => {
+    if (userEmail === SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Cannot Change Role",
+        description: "The super admin role cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateUserMutation.mutate({ userId, data: { role: newRole } });
+  };
+
+  const handleStatusToggle = (userId: string, currentStatus: boolean | null, userEmail: string | null) => {
+    if (userEmail === SUPER_ADMIN_EMAIL) {
+      toast({
+        title: "Cannot Deactivate",
+        description: "The super admin account cannot be deactivated",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateUserMutation.mutate({ userId, data: { isActive: currentStatus === false } });
+  };
 
   const filteredUsers = users.filter((user) => {
     const searchLower = searchQuery.toLowerCase();
@@ -112,6 +164,8 @@ export default function AdminUsers() {
     }
   };
 
+  const isSuperAdmin = (email: string | null) => email === SUPER_ADMIN_EMAIL;
+
   if (currentUser?.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
@@ -136,13 +190,12 @@ export default function AdminUsers() {
             User Management
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage users, roles, and impersonation
+            Manage users, assign roles, and control access
           </p>
         </div>
-        
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -188,6 +241,22 @@ export default function AdminUsers() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-md bg-yellow-500/10 flex items-center justify-center">
+                <Crown className="h-6 w-6 text-yellow-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Super Admin</p>
+                <p className="text-sm font-medium truncate" data-testid="text-super-admin">
+                  {SUPER_ADMIN_EMAIL.split('@')[0]}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -195,7 +264,7 @@ export default function AdminUsers() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-base sm:text-lg">All Users</CardTitle>
-              <CardDescription>View and manage all registered users</CardDescription>
+              <CardDescription>View and manage all registered users. Assign roles to control access.</CardDescription>
             </div>
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -243,10 +312,18 @@ export default function AdminUsers() {
                               {user.firstName?.[0]}{user.lastName?.[0]}
                             </AvatarFallback>
                           </Avatar>
-                          <div>
+                          <div className="flex items-center gap-2">
                             <p className="font-medium">
                               {user.firstName} {user.lastName}
                             </p>
+                            {isSuperAdmin(user.email) && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Crown className="h-4 w-4 text-yellow-500" />
+                                </TooltipTrigger>
+                                <TooltipContent>Super Admin</TooltipContent>
+                              </Tooltip>
+                            )}
                           </div>
                         </div>
                       </TableCell>
@@ -260,9 +337,43 @@ export default function AdminUsers() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getRoleBadgeVariant(user.role)} className="capitalize">
-                          {user.role?.replace("_", " ")}
-                        </Badge>
+                        {isSuperAdmin(user.email) ? (
+                          <Badge variant="default" className="capitalize bg-yellow-500 hover:bg-yellow-600">
+                            <Crown className="h-3 w-3 mr-1" />
+                            Super Admin
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={user.role}
+                            onValueChange={(value) => handleRoleChange(user.id, value, user.email)}
+                            disabled={updateUserMutation.isPending}
+                          >
+                            <SelectTrigger 
+                              className="w-[150px] h-8"
+                              data-testid={`select-role-${user.id}`}
+                            >
+                              <SelectValue>
+                                <Badge variant={getRoleBadgeVariant(user.role)} className="capitalize">
+                                  {user.role?.replace("_", " ")}
+                                </Badge>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableRoles.map((role) => (
+                                <SelectItem 
+                                  key={role.name} 
+                                  value={role.name}
+                                  data-testid={`option-role-${role.name}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {role.name === "admin" && <Shield className="h-3 w-3" />}
+                                    <span className="capitalize">{role.displayName}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       </TableCell>
                       <TableCell>
                         {user.isActive !== false ? (
@@ -292,7 +403,7 @@ export default function AdminUsers() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {user.id !== currentUser?.id && (
+                          {user.id !== currentUser?.id && !isSuperAdmin(user.email) && (
                             <>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -336,7 +447,7 @@ export default function AdminUsers() {
                                   <Button 
                                     size="sm" 
                                     variant={user.isActive !== false ? "ghost" : "outline"}
-                                    disabled={toggleUserStatusMutation.isPending}
+                                    disabled={updateUserMutation.isPending}
                                     data-testid={`button-toggle-status-${user.id}`}
                                   >
                                     {user.isActive !== false ? (
@@ -361,13 +472,10 @@ export default function AdminUsers() {
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction
-                                      onClick={() => toggleUserStatusMutation.mutate({ 
-                                        userId: user.id, 
-                                        isActive: user.isActive === false 
-                                      })}
-                                      disabled={toggleUserStatusMutation.isPending}
+                                      onClick={() => handleStatusToggle(user.id, user.isActive, user.email)}
+                                      disabled={updateUserMutation.isPending}
                                     >
-                                      {toggleUserStatusMutation.isPending ? (
+                                      {updateUserMutation.isPending ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                       ) : null}
                                       Confirm
@@ -377,6 +485,18 @@ export default function AdminUsers() {
                               </AlertDialog>
                             </>
                           )}
+                          {isSuperAdmin(user.email) && user.id !== currentUser?.id && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button size="sm" variant="ghost" disabled>
+                                    <Shield className="h-4 w-4" />
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Super Admin - Protected</TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -385,6 +505,89 @@ export default function AdminUsers() {
               </Table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Role-Based Access Rights
+          </CardTitle>
+          <CardDescription>Overview of what each role can access in the system</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Crown className="h-5 w-5 text-yellow-500" />
+                <h3 className="font-semibold">Super Admin</h3>
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Full system access</li>
+                <li>User management</li>
+                <li>Role assignment</li>
+                <li>Impersonation</li>
+                <li>All modules access</li>
+              </ul>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold">Administrator</h3>
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Dashboard access</li>
+                <li>All modules access</li>
+                <li>Reports access</li>
+                <li>Masters management</li>
+                <li>User management</li>
+              </ul>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="secondary" className="px-2">SE</Badge>
+                <h3 className="font-semibold">Sales Executive</h3>
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Dashboard access</li>
+                <li>Tasks management</li>
+                <li>Sales Pipeline</li>
+                <li>Lead management</li>
+                <li>Quote creation</li>
+              </ul>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="outline" className="px-2">ENG</Badge>
+                <h3 className="font-semibold">Engineer</h3>
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Dashboard access</li>
+                <li>Tasks management</li>
+                <li>Implementations</li>
+                <li>Work Tracking</li>
+                <li>Training records</li>
+              </ul>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="outline" className="px-2">SUP</Badge>
+                <h3 className="font-semibold">Support</h3>
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li>Dashboard access</li>
+                <li>Tasks management</li>
+                <li>Support Tickets</li>
+                <li>Ticket escalation</li>
+                <li>Customer feedback</li>
+              </ul>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
