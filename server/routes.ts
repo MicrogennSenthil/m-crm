@@ -15,6 +15,7 @@ import {
   insertProjectEngineerSchema,
   insertModuleSchema,
   insertProjectModuleSchema,
+  insertProjectProgressEntrySchema,
   insertTrainingRecordSchema,
   insertTicketSchema,
   insertTicketCommentSchema,
@@ -1566,6 +1567,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating project module:", error);
       res.status(400).json({ message: "Failed to update project module" });
+    }
+  });
+
+  // Project Progress Entry routes - Daily implementation progress tracking
+  app.get("/api/projects/:id/progress", isAuthenticated, async (req, res) => {
+    try {
+      const progressEntries = await storage.getProjectProgressEntries(req.params.id);
+      res.json(progressEntries);
+    } catch (error) {
+      console.error("Error fetching project progress entries:", error);
+      res.status(500).json({ message: "Failed to fetch progress entries" });
+    }
+  });
+
+  app.post("/api/projects/:id/progress", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertProjectProgressEntrySchema.parse({
+        ...req.body,
+        projectId: req.params.id,
+        engineerId: req.user.claims.sub,
+        progressDate: new Date(req.body.progressDate),
+      });
+      
+      const newEntry = await storage.createProjectProgressEntry(validatedData);
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "project",
+        entityId: req.params.id,
+        action: "progress_added",
+        description: `Daily progress entry added for ${new Date(validatedData.progressDate).toLocaleDateString()}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.status(201).json(newEntry);
+    } catch (error) {
+      console.error("Error creating progress entry:", error);
+      res.status(400).json({ message: "Failed to create progress entry" });
+    }
+  });
+
+  app.patch("/api/projects/:projectId/progress/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updateData = { ...req.body };
+      if (updateData.progressDate) {
+        updateData.progressDate = new Date(updateData.progressDate);
+      }
+      
+      const updated = await storage.updateProjectProgressEntry(req.params.id, updateData);
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating progress entry:", error);
+      res.status(400).json({ message: "Failed to update progress entry" });
+    }
+  });
+
+  app.delete("/api/projects/:projectId/progress/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteProjectProgressEntry(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting progress entry:", error);
+      res.status(400).json({ message: "Failed to delete progress entry" });
     }
   });
 

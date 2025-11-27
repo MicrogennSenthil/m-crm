@@ -330,10 +330,21 @@ export const projectProgressEntries = pgTable("project_progress_entries", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertProjectProgressEntrySchema = createInsertSchema(projectProgressEntries).omit({
-  id: true,
-  createdAt: true,
+const progressAttachmentSchema = z.object({
+  type: z.enum(['photo', 'video', 'file']),
+  url: z.string(),
+  name: z.string(),
+  size: z.number().optional(),
 });
+
+export const insertProjectProgressEntrySchema = createInsertSchema(projectProgressEntries)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    attachments: z.array(progressAttachmentSchema).nullable().optional(),
+  });
 
 export type InsertProjectProgressEntry = z.infer<typeof insertProjectProgressEntrySchema>;
 export type ProjectProgressEntry = typeof projectProgressEntries.$inferSelect;
