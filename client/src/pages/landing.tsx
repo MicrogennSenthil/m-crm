@@ -1,10 +1,38 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LayoutDashboard, TrendingUp, Wrench, Headphones, CheckCircle } from "lucide-react";
+import { useLocation } from "wouter";
+import microgennLogo from "@assets/MG Logo_1764263883732.png";
 
 export default function Landing() {
+  const [, setLocation] = useLocation();
+  
   return (
     <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={microgennLogo} alt="Microgenn" className="h-10 w-auto" />
+            <span className="font-bold text-xl text-primary">Microgenn CRM</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="ghost" 
+              onClick={() => setLocation("/auth/login")}
+              data-testid="button-header-login"
+            >
+              Sign In
+            </Button>
+            <Button 
+              onClick={() => setLocation("/auth/signup")}
+              data-testid="button-header-signup"
+            >
+              Get Started
+            </Button>
+          </div>
+        </div>
+      </header>
+      
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
@@ -14,13 +42,23 @@ export default function Landing() {
             Comprehensive platform for managing sales pipeline, implementation projects,
             and customer support with seamless workflow integration
           </p>
-          <Button
-            size="lg"
-            asChild
-            data-testid="button-login"
-          >
-            <a href="/api/login">Get Started</a>
-          </Button>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <Button
+              size="lg"
+              onClick={() => setLocation("/auth/signup")}
+              data-testid="button-cta-signup"
+            >
+              Create Free Account
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => setLocation("/auth/login")}
+              data-testid="button-cta-login"
+            >
+              Sign In
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">

@@ -23,7 +23,7 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table (required for Replit Auth)
+// User storage table (required for Replit Auth and Local Auth)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
@@ -31,6 +31,14 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role", { length: 50 }).notNull().default("sales_executive"), // sales_executive, engineer, support, admin
+  // Local authentication fields
+  passwordHash: varchar("password_hash"), // Bcrypt hashed password
+  isEmailVerified: boolean("is_email_verified").default(false),
+  isActive: boolean("is_active").default(true),
+  authProvider: varchar("auth_provider", { length: 20 }).default("local"), // local, replit
+  lastLoginAt: timestamp("last_login_at"),
+  // Impersonation tracking
+  impersonatedBy: varchar("impersonated_by"), // Super admin user ID when impersonating
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -40,11 +48,39 @@ export type User = typeof users.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
+  passwordHash: true,
+  isEmailVerified: true,
+  isActive: true,
+  authProvider: true,
+  lastLoginAt: true,
+  impersonatedBy: true,
   createdAt: true,
   updatedAt: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// OTP Verification table for email verification
+export const otpVerifications = pgTable("otp_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull(),
+  otpCode: varchar("otp_code", { length: 6 }).notNull(),
+  purpose: varchar("purpose", { length: 20 }).notNull().default("signup"), // signup, login, password_reset
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").default(false),
+  attempts: integer("attempts").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOtpVerificationSchema = createInsertSchema(otpVerifications).omit({
+  id: true,
+  isUsed: true,
+  attempts: true,
+  createdAt: true,
+});
+
+export type InsertOtpVerification = z.infer<typeof insertOtpVerificationSchema>;
+export type OtpVerification = typeof otpVerifications.$inferSelect;
 
 // User Roles table - Define available roles in the system
 export const userRoles = pgTable("user_roles", {

@@ -23,6 +23,7 @@ import {
   attachments,
   tasks,
   taskComments,
+  otpVerifications,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -85,14 +86,21 @@ import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
-  // User operations (required for Replit Auth)
+  // User operations (required for Replit Auth and Local Auth)
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, data: Partial<InsertUser>): Promise<User>;
+  createUserWithPassword(user: InsertUser & { passwordHash: string }): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; lastLoginAt?: Date }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
+
+  // OTP operations
+  createOtp(email: string, otpCode: string, purpose: string, expiresAt: Date): Promise<void>;
+  verifyOtp(email: string, otpCode: string, purpose: string): Promise<boolean>;
+  invalidateOtp(email: string, purpose: string): Promise<void>;
 
   // User Role operations (Master data)
   getUserRoles(): Promise<UserRole[]>;
@@ -304,6 +312,95 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: string): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUserWithPassword(userData: InsertUser & { passwordHash: string }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        authProvider: "local",
+        isEmailVerified: false,
+        isActive: true,
+      })
+      .returning();
+    return user;
+  }
+
+  // OTP operations
+  async createOtp(email: string, otpCode: string, purpose: string, expiresAt: Date): Promise<void> {
+    // Invalidate any existing OTPs for this email and purpose
+    await this.invalidateOtp(email, purpose);
+    
+    await db.insert(otpVerifications).values({
+      email,
+      otpCode,
+      purpose,
+      expiresAt,
+    });
+  }
+
+  async verifyOtp(email: string, otpCode: string, purpose: string): Promise<boolean> {
+    const [otp] = await db
+      .select()
+      .from(otpVerifications)
+      .where(
+        and(
+          eq(otpVerifications.email, email),
+          eq(otpVerifications.otpCode, otpCode),
+          eq(otpVerifications.purpose, purpose),
+          eq(otpVerifications.isUsed, false)
+        )
+      )
+      .orderBy(desc(otpVerifications.createdAt))
+      .limit(1);
+
+    if (!otp) return false;
+    
+    // Check if OTP has expired
+    if (new Date() > otp.expiresAt) {
+      return false;
+    }
+    
+    // Check if too many attempts (max 5)
+    if ((otp.attempts || 0) >= 5) {
+      return false;
+    }
+    
+    // Increment attempts
+    await db
+      .update(otpVerifications)
+      .set({ attempts: (otp.attempts || 0) + 1 })
+      .where(eq(otpVerifications.id, otp.id));
+    
+    // Mark as used if OTP matches
+    if (otp.otpCode === otpCode) {
+      await db
+        .update(otpVerifications)
+        .set({ isUsed: true })
+        .where(eq(otpVerifications.id, otp.id));
+      return true;
+    }
+    
+    return false;
+  }
+
+  async invalidateOtp(email: string, purpose: string): Promise<void> {
+    await db
+      .update(otpVerifications)
+      .set({ isUsed: true })
+      .where(
+        and(
+          eq(otpVerifications.email, email),
+          eq(otpVerifications.purpose, purpose),
+          eq(otpVerifications.isUsed, false)
+        )
+      );
   }
 
   // User Role operations (Master data)
@@ -1568,7 +1665,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTask(task: InsertTask): Promise<Task> {
-    const [newTask] = await db.insert(tasks).values(task).returning();
+    const [newTask] = await db.insert(tasks).values(task as any).returning();
     return newTask;
   }
 

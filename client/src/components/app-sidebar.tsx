@@ -13,6 +13,7 @@ import {
   FileText,
   Package,
   TicketCheck,
+  UserCog,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -109,6 +110,14 @@ const settingsItems = [
     title: "Settings",
     url: "/settings",
     icon: Settings,
+  },
+];
+
+const adminItems = [
+  {
+    title: "User Management",
+    url: "/admin/users",
+    icon: UserCog,
   },
 ];
 
@@ -221,6 +230,21 @@ export function AppSidebar() {
                     asChild
                     isActive={location === item.url}
                     data-testid="nav-settings"
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              
+              {user?.role === "admin" && adminItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === item.url}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />

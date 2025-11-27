@@ -23,6 +23,10 @@ import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
 import TaskDetail from "@/pages/task-detail";
+import AuthLogin from "@/pages/auth-login";
+import AuthSignup from "@/pages/auth-signup";
+import AuthForgotPassword from "@/pages/auth-forgot-password";
+import AdminUsers from "@/pages/admin-users";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -38,6 +42,9 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
+        <Route path="/auth/login" component={AuthLogin} />
+        <Route path="/auth/signup" component={AuthSignup} />
+        <Route path="/auth/forgot-password" component={AuthForgotPassword} />
         <Route path="/" component={Landing} />
         <Route component={Landing} />
       </Switch>
@@ -75,6 +82,7 @@ function Router() {
               <Route path="/reports/support" component={SupportReports} />
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
+              <Route path="/admin/users" component={AdminUsers} />
               <Route component={NotFound} />
             </Switch>
           </main>

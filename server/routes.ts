@@ -4,8 +4,9 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
-import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail } from "./email";
+import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail } from "./email";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import {
   insertCustomerSchema,
   insertLeadSchema,
@@ -31,9 +32,448 @@ import {
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 
+// Generate 6-digit OTP
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
+
+  // =============================================
+  // LOCAL AUTHENTICATION ROUTES
+  // =============================================
+
+  // Step 1: Signup - Request OTP
+  app.post("/api/auth/signup/request-otp", async (req, res) => {
+    try {
+      const { email, firstName, lastName, password } = req.body;
+      
+      if (!email || !firstName || !lastName || !password) {
+        return res.status(400).json({ message: "Email, first name, last name, and password are required" });
+      }
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser && existingUser.isEmailVerified) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+      
+      // Validate password (min 8 chars)
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Generate OTP
+      const otpCode = generateOtp();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      // Store OTP
+      await storage.createOtp(email, otpCode, "signup", expiresAt);
+      
+      // Send OTP email
+      await sendOtpEmail(email, otpCode, "signup");
+      
+      // Store pending user data in session temporarily
+      (req.session as any).pendingSignup = {
+        email,
+        firstName,
+        lastName,
+        passwordHash: await bcrypt.hash(password, 10)
+      };
+      
+      res.json({ success: true, message: "OTP sent to your email" });
+    } catch (error) {
+      console.error("Error requesting signup OTP:", error);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Step 2: Signup - Verify OTP and create account
+  app.post("/api/auth/signup/verify-otp", async (req, res) => {
+    try {
+      const { email, otpCode } = req.body;
+      
+      if (!email || !otpCode) {
+        return res.status(400).json({ message: "Email and OTP code are required" });
+      }
+      
+      // Verify OTP
+      const isValid = await storage.verifyOtp(email, otpCode, "signup");
+      if (!isValid) {
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+      
+      // Get pending signup data
+      const pendingSignup = (req.session as any).pendingSignup;
+      if (!pendingSignup || pendingSignup.email !== email) {
+        return res.status(400).json({ message: "No pending signup found. Please start again." });
+      }
+      
+      // Create user
+      const user = await storage.createUserWithPassword({
+        email: pendingSignup.email,
+        firstName: pendingSignup.firstName,
+        lastName: pendingSignup.lastName,
+        passwordHash: pendingSignup.passwordHash,
+        role: "sales_executive", // Default role
+      });
+      
+      // Mark email as verified
+      await storage.updateUser(user.id, { isEmailVerified: true });
+      
+      // Clear pending signup
+      delete (req.session as any).pendingSignup;
+      
+      // Send welcome email
+      const fullName = `${user.firstName} ${user.lastName}`.trim();
+      await sendWelcomeEmail(user.email!, fullName, user.role);
+      
+      // Set up session
+      (req.session as any).userId = user.id;
+      (req.session as any).isLocalAuth = true;
+      req.user = { claims: { sub: user.id } };
+      
+      res.json({ success: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role } });
+    } catch (error) {
+      console.error("Error verifying signup OTP:", error);
+      res.status(500).json({ message: "Failed to verify OTP" });
+    }
+  });
+
+  // Local Login
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Check if account is active
+      if (!user.isActive) {
+        return res.status(401).json({ message: "Your account has been deactivated. Please contact an administrator." });
+      }
+      
+      // Check if using local auth
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "Please login using your original sign-in method" });
+      }
+      
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      
+      // Update last login
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      
+      // Set up session
+      (req.session as any).userId = user.id;
+      (req.session as any).isLocalAuth = true;
+      req.user = { claims: { sub: user.id } };
+      
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          firstName: user.firstName, 
+          lastName: user.lastName, 
+          role: user.role,
+          profileImageUrl: user.profileImageUrl
+        } 
+      });
+    } catch (error) {
+      console.error("Error logging in:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Request password reset OTP
+  app.post("/api/auth/forgot-password/request-otp", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if user exists
+        return res.json({ success: true, message: "If an account exists with this email, you will receive an OTP" });
+      }
+      
+      // Generate OTP
+      const otpCode = generateOtp();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      // Store OTP
+      await storage.createOtp(email, otpCode, "password_reset", expiresAt);
+      
+      // Send OTP email
+      await sendOtpEmail(email, otpCode, "password_reset");
+      
+      res.json({ success: true, message: "If an account exists with this email, you will receive an OTP" });
+    } catch (error) {
+      console.error("Error requesting password reset OTP:", error);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Reset password with OTP
+  app.post("/api/auth/forgot-password/reset", async (req, res) => {
+    try {
+      const { email, otpCode, newPassword } = req.body;
+      
+      if (!email || !otpCode || !newPassword) {
+        return res.status(400).json({ message: "Email, OTP code, and new password are required" });
+      }
+      
+      // Validate password
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Verify OTP
+      const isValid = await storage.verifyOtp(email, otpCode, "password_reset");
+      if (!isValid) {
+        return res.status(400).json({ message: "Invalid or expired OTP" });
+      }
+      
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(user.id, { passwordHash });
+      
+      // Send confirmation email
+      const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User';
+      await sendPasswordResetSuccessEmail(email, userName);
+      
+      res.json({ success: true, message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Change password (authenticated)
+  app.post("/api/auth/change-password", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub || (req.session as any).userId;
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+      
+      // Validate new password
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "New password must be at least 8 characters" });
+      }
+      
+      // Get user
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if user has password (local auth)
+      if (!user.passwordHash) {
+        return res.status(400).json({ message: "Cannot change password for this account type" });
+      }
+      
+      // Verify current password
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+      
+      // Update password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(userId, { passwordHash });
+      
+      // Send confirmation email
+      const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User';
+      if (user.email) {
+        await sendPasswordResetSuccessEmail(user.email, userName);
+      }
+      
+      res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Super Admin: Impersonate user
+  app.post("/api/auth/impersonate", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminUserId = req.user.claims.sub || (req.session as any).userId;
+      const { targetUserId } = req.body;
+      
+      if (!targetUserId) {
+        return res.status(400).json({ message: "Target user ID is required" });
+      }
+      
+      // Check if current user is admin
+      const adminUser = await storage.getUser(adminUserId);
+      if (!adminUser || adminUser.role !== "admin") {
+        return res.status(403).json({ message: "Only administrators can impersonate users" });
+      }
+      
+      // Get target user
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Target user not found" });
+      }
+      
+      // Store original admin session
+      (req.session as any).originalAdminId = adminUserId;
+      (req.session as any).isImpersonating = true;
+      
+      // Switch to target user
+      (req.session as any).userId = targetUserId;
+      req.user = { claims: { sub: targetUserId } };
+      
+      res.json({ 
+        success: true, 
+        message: `Now logged in as ${targetUser.firstName} ${targetUser.lastName}`,
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          firstName: targetUser.firstName,
+          lastName: targetUser.lastName,
+          role: targetUser.role,
+          profileImageUrl: targetUser.profileImageUrl,
+          isImpersonating: true
+        }
+      });
+    } catch (error) {
+      console.error("Error impersonating user:", error);
+      res.status(500).json({ message: "Failed to impersonate user" });
+    }
+  });
+
+  // Super Admin: Stop impersonating
+  app.post("/api/auth/stop-impersonating", isAuthenticated, async (req: any, res) => {
+    try {
+      const originalAdminId = (req.session as any).originalAdminId;
+      
+      if (!originalAdminId || !(req.session as any).isImpersonating) {
+        return res.status(400).json({ message: "Not currently impersonating any user" });
+      }
+      
+      // Restore admin session
+      (req.session as any).userId = originalAdminId;
+      req.user = { claims: { sub: originalAdminId } };
+      delete (req.session as any).originalAdminId;
+      delete (req.session as any).isImpersonating;
+      
+      // Get admin user
+      const adminUser = await storage.getUser(originalAdminId);
+      
+      res.json({ 
+        success: true, 
+        message: "Stopped impersonating",
+        user: adminUser
+      });
+    } catch (error) {
+      console.error("Error stopping impersonation:", error);
+      res.status(500).json({ message: "Failed to stop impersonation" });
+    }
+  });
+
+  // Get all users for admin (for impersonation)
+  app.get("/api/admin/users", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub || (req.session as any).userId;
+      
+      // Check if current user is admin
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only administrators can view all users" });
+      }
+      
+      const allUsers = await storage.getUsers();
+      res.json(allUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Update user status
+  app.patch("/api/users/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const adminUserId = req.user.claims.sub || (req.session as any).userId;
+      const { userId } = req.params;
+      const { isActive, role } = req.body;
+      
+      // Check if current user is admin
+      const adminUser = await storage.getUser(adminUserId);
+      if (!adminUser || adminUser.role !== "admin") {
+        return res.status(403).json({ message: "Only administrators can update users" });
+      }
+      
+      // Prevent admin from deactivating themselves
+      if (userId === adminUserId && isActive === false) {
+        return res.status(400).json({ message: "Cannot deactivate your own account" });
+      }
+      
+      // Get target user
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Build update object
+      const updates: any = {};
+      if (typeof isActive === "boolean") {
+        updates.isActive = isActive;
+      }
+      if (role && ["admin", "sales_executive", "engineer", "support"].includes(role)) {
+        updates.role = role;
+      }
+      
+      const updatedUser = await storage.updateUser(userId, updates);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Local logout
+  app.post("/api/auth/local-logout", async (req, res) => {
+    try {
+      req.session.destroy((err: any) => {
+        if (err) {
+          console.error("Error destroying session:", err);
+          return res.status(500).json({ message: "Failed to logout" });
+        }
+        res.json({ success: true, message: "Logged out successfully" });
+      });
+    } catch (error) {
+      console.error("Error logging out:", error);
+      res.status(500).json({ message: "Failed to logout" });
+    }
+  });
 
   // Auth routes
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {

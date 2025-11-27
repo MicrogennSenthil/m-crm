@@ -288,3 +288,109 @@ export async function sendEmail(params: {
     throw error;
   }
 }
+
+// OTP verification email
+export async function sendOtpEmail(
+  toEmail: string,
+  otpCode: string,
+  purpose: 'signup' | 'login' | 'password_reset'
+) {
+  try {
+    const { client, fromEmail } = await getUncachableResendClient();
+    
+    const purposeText = {
+      signup: 'complete your registration',
+      login: 'verify your login',
+      password_reset: 'reset your password'
+    }[purpose];
+    
+    const subjectText = {
+      signup: 'Verify Your Email - Microgenn CRM',
+      login: 'Login Verification Code - Microgenn CRM',
+      password_reset: 'Password Reset Code - Microgenn CRM'
+    }[purpose];
+
+    await client.emails.send({
+      from: fromEmail,
+      to: toEmail,
+      subject: subjectText,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Microgenn CRM</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Verification Code</h2>
+            
+            <p>Use the following code to ${purposeText}:</p>
+            
+            <div style="background-color: #1a2b6d; color: #f5a623; font-size: 32px; font-weight: bold; letter-spacing: 8px; text-align: center; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              ${otpCode}
+            </div>
+            
+            <p style="color: #666; font-size: 14px;">
+              This code will expire in 10 minutes. Do not share this code with anyone.
+            </p>
+            
+            <p style="color: #666; font-size: 14px;">
+              If you did not request this code, please ignore this email.
+            </p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ OTP email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send OTP email:', error);
+    return { success: false, error };
+  }
+}
+
+// Password reset success email
+export async function sendPasswordResetSuccessEmail(toEmail: string, userName: string) {
+  try {
+    const { client, fromEmail } = await getUncachableResendClient();
+
+    await client.emails.send({
+      from: fromEmail,
+      to: toEmail,
+      subject: 'Password Changed Successfully - Microgenn CRM',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Microgenn CRM</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Password Changed</h2>
+            
+            <p>Hello ${userName},</p>
+            
+            <p>Your password has been successfully changed. You can now log in with your new password.</p>
+            
+            <p style="color: #666; font-size: 14px;">
+              If you did not make this change, please contact your administrator immediately.
+            </p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ Password reset success email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send password reset success email:', error);
+    return { success: false, error };
+  }
+}
