@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Building2, Plus, Package } from "lucide-react";
+import { CalendarIcon, Building2, Plus, Package, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -274,32 +274,57 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
               name="implementationDate"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Implementation Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                          data-testid="button-select-date"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value ? format(new Date(field.value), "PPP") : "Pick a date"}
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={field.value ? new Date(field.value) : undefined}
-                        onSelect={field.onChange}
-                        initialFocus
+                  <FormLabel>Implementation Date & Time</FormLabel>
+                  <div className="flex gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "flex-1 justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-select-date"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value ? format(new Date(field.value), "MMM d, yyyy") : "Pick a date"}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={field.value ? new Date(field.value) : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const currentValue = field.value ? new Date(field.value) : new Date();
+                              date.setHours(currentValue.getHours(), currentValue.getMinutes());
+                              field.onChange(date);
+                            } else {
+                              field.onChange(undefined);
+                            }
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="time"
+                        className="w-[110px]"
+                        value={field.value ? format(new Date(field.value), "HH:mm") : ""}
+                        onChange={(e) => {
+                          const [hours, minutes] = e.target.value.split(":").map(Number);
+                          const newDate = field.value ? new Date(field.value) : new Date();
+                          newDate.setHours(hours || 0, minutes || 0, 0, 0);
+                          field.onChange(newDate);
+                        }}
+                        data-testid="input-implementation-time"
                       />
-                    </PopoverContent>
-                  </Popover>
+                    </div>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}

@@ -439,7 +439,7 @@ export default function ImplementationDashboard() {
                             {project.implementationDate && (
                               <span className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
-                                Due: {format(new Date(project.implementationDate), "MMM d, yyyy")}
+                                Implementation: {format(new Date(project.implementationDate), "MMM d, yyyy 'at' h:mm a")}
                               </span>
                             )}
                             <span className="flex items-center gap-1">

@@ -253,7 +253,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
               <DialogTitle className="text-2xl">{project.clientName}</DialogTitle>
               {project.implementationDate && (
                 <p className="text-muted-foreground mt-1">
-                  Due: {format(new Date(project.implementationDate), "MMMM d, yyyy")}
+                  Implementation: {format(new Date(project.implementationDate), "MMMM d, yyyy 'at' h:mm a")}
                 </p>
               )}
             </div>

@@ -118,7 +118,7 @@ export default function Implementations() {
                   </div>
                   {project.implementationDate && (
                     <p className="text-xs text-muted-foreground">
-                      Due: {format(new Date(project.implementationDate), "MMM d, yyyy")}
+                      Implementation: {format(new Date(project.implementationDate), "MMM d, yyyy 'at' h:mm a")}
                     </p>
                   )}
                 </CardHeader>
