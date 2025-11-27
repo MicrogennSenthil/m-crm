@@ -19,6 +19,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Users,
+  Video,
+  Image,
+  Paperclip,
+  Mic,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { Lead, Project, Ticket, ActivityLog, Task, User } from "@shared/schema";
@@ -296,20 +300,51 @@ export default function Home() {
                   {tasks.slice(0, 6).map((task) => {
                     const StatusIcon = getTaskStatusIcon(task.status);
                     const isCompleted = task.status === "completed";
+                    const hasVoiceNote = !!task.voiceNoteUrl;
+                    const hasVideo = task.attachments?.some(a => a.type === "video");
+                    const hasPhoto = task.attachments?.some(a => a.type === "photo");
+                    const hasFile = task.attachments?.some(a => a.type === "file");
+                    const hasAttachments = hasVoiceNote || hasVideo || hasPhoto || hasFile;
                     return (
                       <div 
                         key={task.id} 
-                        className="flex gap-2 items-center group"
+                        className="flex gap-2 items-start group"
                         data-testid={`dashboard-task-${task.id}`}
                       >
-                        <div className={`h-4 w-4 flex-shrink-0 ${getTaskStatusColor(task.status)}`}>
+                        <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${getTaskStatusColor(task.status)}`}>
                           <StatusIcon className="h-4 w-4" />
                         </div>
-                        <p 
-                          className={`text-sm flex-1 truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}
-                        >
-                          {task.title}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <p 
+                            className={`text-sm truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}
+                          >
+                            {task.title}
+                          </p>
+                          {hasAttachments && (
+                            <div className="flex gap-1.5 mt-1" data-testid={`task-attachments-${task.id}`}>
+                              {hasVoiceNote && (
+                                <span className="text-blue-500" title="Voice note">
+                                  <Mic className="h-3 w-3" />
+                                </span>
+                              )}
+                              {hasVideo && (
+                                <span className="text-purple-500" title="Video">
+                                  <Video className="h-3 w-3" />
+                                </span>
+                              )}
+                              {hasPhoto && (
+                                <span className="text-green-500" title="Photo">
+                                  <Image className="h-3 w-3" />
+                                </span>
+                              )}
+                              {hasFile && (
+                                <span className="text-orange-500" title="File">
+                                  <Paperclip className="h-3 w-3" />
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         {/* Admin revoke button for completed tasks */}
                         {isAdmin && isCompleted && (
                           <Button

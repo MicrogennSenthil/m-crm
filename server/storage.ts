@@ -74,7 +74,7 @@ import {
   type InsertTaskComment,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -1322,8 +1322,13 @@ export class DatabaseStorage implements IStorage {
       // If not admin viewing all, filter by user involvement
       if (filters?.userId) {
         // Show tasks where user is creator, assignee, or mentioned
+        // Use raw SQL for the array check to avoid parameterization issues
         conditions.push(
-          sql`(${tasks.createdBy} = ${filters.userId} OR ${tasks.assignedTo} = ${filters.userId} OR ${filters.userId} = ANY(${tasks.mentionedUsers}))`
+          or(
+            eq(tasks.createdBy, filters.userId),
+            eq(tasks.assignedTo, filters.userId),
+            sql`COALESCE(${tasks.mentionedUsers}, ARRAY[]::text[]) @> ARRAY[${filters.userId}]::text[]`
+          )
         );
       }
       if (filters?.assignedTo) {
@@ -1356,7 +1361,7 @@ export class DatabaseStorage implements IStorage {
           mentionedUserDetails = await db
             .select()
             .from(users)
-            .where(sql`${users.id} = ANY(${task.mentionedUsers})`);
+            .where(sql`${users.id} IN (${sql.join(task.mentionedUsers.map(id => sql`${id}`), sql`, `)})`);
         }
 
         const [commentCount] = await db
@@ -1398,7 +1403,7 @@ export class DatabaseStorage implements IStorage {
       mentionedUserDetails = await db
         .select()
         .from(users)
-        .where(sql`${users.id} = ANY(${task.mentionedUsers})`);
+        .where(sql`${users.id} IN (${sql.join(task.mentionedUsers.map(id => sql`${id}`), sql`, `)})`);
     }
 
     return {

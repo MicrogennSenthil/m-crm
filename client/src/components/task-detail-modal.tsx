@@ -37,6 +37,11 @@ import {
   Pause,
   Send,
   Edit,
+  Video,
+  Image,
+  FileIcon,
+  Paperclip,
+  ExternalLink,
 } from "lucide-react";
 
 type TaskWithDetails = Task & {
@@ -305,6 +310,78 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                     onEnded={() => setIsPlayingVoice(false)}
                     className="hidden"
                   />
+                </div>
+              </div>
+            )}
+            
+            {task.attachments && task.attachments.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+                  <Paperclip className="h-4 w-4" />
+                  Attachments ({task.attachments.length})
+                </h4>
+                <div className="space-y-3">
+                  {task.attachments.filter(a => a.type === "video").map((attachment) => (
+                    <div key={attachment.id} className="p-3 bg-muted rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Video className="h-4 w-4 text-purple-500" />
+                        <span className="text-sm font-medium">{attachment.name}</span>
+                      </div>
+                      <video
+                        src={attachment.url}
+                        className="w-full rounded-lg aspect-video bg-black"
+                        controls
+                        data-testid={`video-attachment-${attachment.id}`}
+                      />
+                    </div>
+                  ))}
+                  
+                  {task.attachments.filter(a => a.type === "photo").map((attachment) => (
+                    <div key={attachment.id} className="p-3 bg-muted rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Image className="h-4 w-4 text-green-500" />
+                        <span className="text-sm font-medium">{attachment.name}</span>
+                      </div>
+                      <img
+                        src={attachment.url}
+                        alt={attachment.name}
+                        className="w-full rounded-lg max-h-64 object-contain"
+                        data-testid={`photo-attachment-${attachment.id}`}
+                      />
+                    </div>
+                  ))}
+                  
+                  {task.attachments.filter(a => a.type === "file").map((attachment) => (
+                    <div 
+                      key={attachment.id} 
+                      className="flex items-center gap-3 p-3 bg-muted rounded-lg"
+                    >
+                      <FileIcon className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{attachment.name}</p>
+                        {attachment.size && (
+                          <p className="text-xs text-muted-foreground">
+                            {attachment.size < 1024 
+                              ? `${attachment.size} B`
+                              : attachment.size < 1024 * 1024
+                                ? `${(attachment.size / 1024).toFixed(1)} KB`
+                                : `${(attachment.size / (1024 * 1024)).toFixed(1)} MB`
+                            }
+                          </p>
+                        )}
+                      </div>
+                      <a
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                        data-testid={`file-attachment-${attachment.id}`}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open
+                      </a>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
