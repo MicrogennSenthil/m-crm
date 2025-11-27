@@ -20,6 +20,7 @@ import {
   GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings,
   Camera, Video, FileText, Image, Loader2
 } from "lucide-react";
+import { DatePickerCompact } from "@/components/ui/date-picker";
 import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer, ProjectProgressEntry } from "@shared/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MediaCapture } from "./media-capture";
@@ -183,22 +184,20 @@ function ModuleInstallationCard({
 
             <div className="space-y-2">
               <Label className="text-xs">Scheduled Start</Label>
-              <Input
-                type="date"
-                className="h-9 text-xs"
+              <DatePickerCompact
                 value={localData.scheduledStartDate}
-                onChange={(e) => updateField("scheduledStartDate", e.target.value)}
+                onChange={(date) => updateField("scheduledStartDate", date ? date.toISOString().split('T')[0] : "")}
+                placeholder="Select start date"
                 data-testid={`input-scheduled-start-${pm.id}`}
               />
             </div>
 
             <div className="space-y-2">
               <Label className="text-xs">Scheduled End</Label>
-              <Input
-                type="date"
-                className="h-9 text-xs"
+              <DatePickerCompact
                 value={localData.scheduledEndDate}
-                onChange={(e) => updateField("scheduledEndDate", e.target.value)}
+                onChange={(date) => updateField("scheduledEndDate", date ? date.toISOString().split('T')[0] : "")}
+                placeholder="Select end date"
                 data-testid={`input-scheduled-end-${pm.id}`}
               />
             </div>
@@ -236,11 +235,10 @@ function ModuleInstallationCard({
 
             <div className="space-y-2">
               <Label className="text-xs">Actual Visit Date</Label>
-              <Input
-                type="date"
-                className="h-9 text-xs"
+              <DatePickerCompact
                 value={localData.actualVisitDate}
-                onChange={(e) => updateField("actualVisitDate", e.target.value)}
+                onChange={(date) => updateField("actualVisitDate", date ? date.toISOString().split('T')[0] : "")}
+                placeholder="Select visit date"
                 data-testid={`input-actual-visit-${pm.id}`}
               />
             </div>
@@ -1171,20 +1169,22 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Certificate Issue Date</Label>
-                      <Input
-                        type="date"
+                      <DatePickerCompact
                         value={handoffData.completionCertificateDate}
-                        onChange={(e) => setHandoffData({ ...handoffData, completionCertificateDate: e.target.value })}
+                        onChange={(date) => setHandoffData({ ...handoffData, completionCertificateDate: date ? date.toISOString().split('T')[0] : "" })}
+                        placeholder="Select certificate date"
+                        size="default"
                         data-testid="input-certificate-date"
                       />
                     </div>
 
                     <div className="space-y-2">
                       <Label>Handoff Date</Label>
-                      <Input
-                        type="date"
+                      <DatePickerCompact
                         value={handoffData.handoffDate}
-                        onChange={(e) => setHandoffData({ ...handoffData, handoffDate: e.target.value })}
+                        onChange={(date) => setHandoffData({ ...handoffData, handoffDate: date ? date.toISOString().split('T')[0] : "" })}
+                        placeholder="Select handoff date"
+                        size="default"
                         data-testid="input-handoff-date"
                       />
                     </div>
