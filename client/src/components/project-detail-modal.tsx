@@ -61,6 +61,244 @@ const DEPARTMENTS = [
   { value: "management", label: "Management" },
 ];
 
+// Separate component for module installation with local state and save button
+function ModuleInstallationCard({ 
+  pm, 
+  engineers, 
+  updateModuleMutation,
+  getStatusBadge 
+}: { 
+  pm: ProjectModuleWithDetails;
+  engineers: UserType[];
+  updateModuleMutation: any;
+  getStatusBadge: (status: string) => JSX.Element;
+}) {
+  const { toast } = useToast();
+  const [hasChanges, setHasChanges] = useState(false);
+  const [localData, setLocalData] = useState({
+    assignedEngineerId: pm.assignedEngineerId || "",
+    departmentName: pm.departmentName || "",
+    scheduledStartDate: pm.scheduledStartDate?.toString().split('T')[0] || "",
+    scheduledEndDate: pm.scheduledEndDate?.toString().split('T')[0] || "",
+    installationStatus: pm.installationStatus || "not_started",
+    installationNotes: pm.installationNotes || "",
+    actualEngineerId: (pm as any).actualEngineerId || "",
+    actualVisitDate: (pm as any).actualVisitDate?.toString().split('T')[0] || "",
+  });
+
+  const updateField = (field: string, value: string) => {
+    setLocalData(prev => ({ ...prev, [field]: value }));
+    setHasChanges(true);
+  };
+
+  const handleSave = () => {
+    updateModuleMutation.mutate({
+      id: pm.id,
+      assignedEngineerId: localData.assignedEngineerId || null,
+      departmentName: localData.departmentName || null,
+      scheduledStartDate: localData.scheduledStartDate ? new Date(localData.scheduledStartDate).toISOString() : null,
+      scheduledEndDate: localData.scheduledEndDate ? new Date(localData.scheduledEndDate).toISOString() : null,
+      installationStatus: localData.installationStatus,
+      installationNotes: localData.installationNotes || null,
+      actualEngineerId: localData.actualEngineerId || null,
+      actualVisitDate: localData.actualVisitDate ? new Date(localData.actualVisitDate).toISOString() : null,
+    }, {
+      onSuccess: () => {
+        setHasChanges(false);
+        toast({ title: "Saved", description: "Module installation details updated" });
+      }
+    });
+  };
+
+  return (
+    <Card className={pm.completed ? "bg-muted/50" : ""}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            {pm.completed ? (
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-muted-foreground" />
+            )}
+            {pm.module?.name || "Module"}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {getStatusBadge(localData.installationStatus)}
+            {hasChanges && (
+              <Badge variant="secondary" className="text-xs">Unsaved</Badge>
+            )}
+          </div>
+        </div>
+        <CardDescription>{pm.module?.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Planning Section */}
+        <div>
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <Calendar className="h-4 w-4" /> Planning
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Planned Engineer</Label>
+              <Select
+                value={localData.assignedEngineerId}
+                onValueChange={(value) => updateField("assignedEngineerId", value)}
+                data-testid={`select-planned-engineer-${pm.id}`}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select engineer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {engineers.map((eng) => (
+                    <SelectItem key={eng.id} value={eng.id}>
+                      <div className="flex flex-col">
+                        <span>{eng.firstName} {eng.lastName}</span>
+                        <span className="text-xs text-muted-foreground">{eng.email}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Department</Label>
+              <Select
+                value={localData.departmentName}
+                onValueChange={(value) => updateField("departmentName", value)}
+                data-testid={`select-department-${pm.id}`}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEPARTMENTS.map((dept) => (
+                    <SelectItem key={dept.value} value={dept.value}>
+                      {dept.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Scheduled Start</Label>
+              <Input
+                type="date"
+                className="h-9 text-xs"
+                value={localData.scheduledStartDate}
+                onChange={(e) => updateField("scheduledStartDate", e.target.value)}
+                data-testid={`input-scheduled-start-${pm.id}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Scheduled End</Label>
+              <Input
+                type="date"
+                className="h-9 text-xs"
+                value={localData.scheduledEndDate}
+                onChange={(e) => updateField("scheduledEndDate", e.target.value)}
+                data-testid={`input-scheduled-end-${pm.id}`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Actual Work Section */}
+        <div className="border-t pt-4">
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <User className="h-4 w-4" /> Actual Work
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Visiting Engineer</Label>
+              <Select
+                value={localData.actualEngineerId}
+                onValueChange={(value) => updateField("actualEngineerId", value)}
+                data-testid={`select-actual-engineer-${pm.id}`}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Engineer who visited" />
+                </SelectTrigger>
+                <SelectContent>
+                  {engineers.map((eng) => (
+                    <SelectItem key={eng.id} value={eng.id}>
+                      <div className="flex flex-col">
+                        <span>{eng.firstName} {eng.lastName}</span>
+                        <span className="text-xs text-muted-foreground">{eng.email}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Actual Visit Date</Label>
+              <Input
+                type="date"
+                className="h-9 text-xs"
+                value={localData.actualVisitDate}
+                onChange={(e) => updateField("actualVisitDate", e.target.value)}
+                data-testid={`input-actual-visit-${pm.id}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Status</Label>
+              <Select
+                value={localData.installationStatus}
+                onValueChange={(value) => updateField("installationStatus", value)}
+                data-testid={`select-status-${pm.id}`}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSTALLATION_STATUSES.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="border-t pt-4">
+          <Label className="text-xs">Installation Notes</Label>
+          <Textarea
+            placeholder="Add notes about installation progress..."
+            className="mt-1 text-sm"
+            value={localData.installationNotes}
+            onChange={(e) => updateField("installationNotes", e.target.value)}
+            rows={2}
+            data-testid={`textarea-notes-${pm.id}`}
+          />
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end pt-2">
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || updateModuleMutation.isPending}
+            data-testid={`button-save-module-${pm.id}`}
+          >
+            {updateModuleMutation.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
@@ -451,150 +689,13 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
             {purchasedProjectModules && purchasedProjectModules.length > 0 ? (
               <div className="space-y-4">
                 {purchasedProjectModules.map((pm) => (
-                  <Card key={pm.id} className={pm.completed ? "bg-muted/50" : ""}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          {pm.completed ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-500" />
-                          ) : (
-                            <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          {pm.module?.name || "Module"}
-                        </CardTitle>
-                        {getStatusBadge(pm.installationStatus || "not_started")}
-                      </div>
-                      <CardDescription>{pm.module?.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            <User className="h-3 w-3" /> Assigned Engineer
-                          </Label>
-                          <Select
-                            value={pm.assignedEngineerId || ""}
-                            onValueChange={(value) => 
-                              updateModuleMutation.mutate({ id: pm.id, assignedEngineerId: value || null })
-                            }
-                            data-testid={`select-engineer-${pm.id}`}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select engineer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {engineers?.map((eng) => (
-                                <SelectItem key={eng.id} value={eng.id}>
-                                  <div className="flex flex-col">
-                                    <span>{eng.firstName} {eng.lastName}</span>
-                                    <span className="text-xs text-muted-foreground">{eng.email}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            <Building2 className="h-3 w-3" /> Department
-                          </Label>
-                          <Select
-                            value={pm.departmentName || ""}
-                            onValueChange={(value) => 
-                              updateModuleMutation.mutate({ id: pm.id, departmentName: value || null })
-                            }
-                            data-testid={`select-department-${pm.id}`}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue placeholder="Select department" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DEPARTMENTS.map((dept) => (
-                                <SelectItem key={dept.value} value={dept.value}>
-                                  {dept.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            <Calendar className="h-3 w-3" /> Start Date
-                          </Label>
-                          <Input
-                            type="date"
-                            className="h-9 text-xs"
-                            value={pm.scheduledStartDate?.toString().split('T')[0] || ""}
-                            onChange={(e) => 
-                              updateModuleMutation.mutate({ 
-                                id: pm.id, 
-                                scheduledStartDate: e.target.value ? new Date(e.target.value).toISOString() : null 
-                              })
-                            }
-                            data-testid={`input-start-date-${pm.id}`}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            <Calendar className="h-3 w-3" /> End Date
-                          </Label>
-                          <Input
-                            type="date"
-                            className="h-9 text-xs"
-                            value={pm.scheduledEndDate?.toString().split('T')[0] || ""}
-                            onChange={(e) => 
-                              updateModuleMutation.mutate({ 
-                                id: pm.id, 
-                                scheduledEndDate: e.target.value ? new Date(e.target.value).toISOString() : null 
-                              })
-                            }
-                            data-testid={`input-end-date-${pm.id}`}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs flex items-center gap-1">
-                            Status
-                          </Label>
-                          <Select
-                            value={pm.installationStatus || "not_started"}
-                            onValueChange={(value) => 
-                              updateModuleMutation.mutate({ id: pm.id, installationStatus: value })
-                            }
-                            data-testid={`select-status-${pm.id}`}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {INSTALLATION_STATUSES.map((status) => (
-                                <SelectItem key={status.value} value={status.value}>
-                                  {status.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="mt-3">
-                        <Label className="text-xs">Installation Notes</Label>
-                        <Textarea
-                          placeholder="Add notes about installation progress..."
-                          className="mt-1 text-sm"
-                          value={pm.installationNotes || ""}
-                          onChange={(e) => 
-                            updateModuleMutation.mutate({ id: pm.id, installationNotes: e.target.value })
-                          }
-                          rows={2}
-                          data-testid={`textarea-notes-${pm.id}`}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <ModuleInstallationCard 
+                    key={pm.id} 
+                    pm={pm} 
+                    engineers={engineers || []}
+                    updateModuleMutation={updateModuleMutation}
+                    getStatusBadge={getStatusBadge}
+                  />
                 ))}
               </div>
             ) : (

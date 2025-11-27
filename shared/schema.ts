@@ -294,14 +294,17 @@ export const projectModules = pgTable("project_modules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   moduleId: varchar("module_id").notNull().references(() => modules.id),
-  // Installation scheduling fields
-  assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
+  // Planning/Scheduling fields
+  assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id), // Planned engineer
   scheduledStartDate: timestamp("scheduled_start_date"),
   scheduledEndDate: timestamp("scheduled_end_date"),
   departmentName: text("department_name"), // Client department for this module installation
   departmentContact: text("department_contact"), // Contact person at the department
   installationStatus: text("installation_status").default("pending"), // pending, scheduled, in_progress, completed
   installationNotes: text("installation_notes"),
+  // Actual visit/work fields (may differ from planned)
+  actualEngineerId: varchar("actual_engineer_id").references(() => users.id), // Engineer who actually visited
+  actualVisitDate: timestamp("actual_visit_date"), // When work was actually done
   // Completion tracking
   completed: boolean("completed").default(false),
   completedAt: timestamp("completed_at"),
