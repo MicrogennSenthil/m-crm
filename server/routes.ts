@@ -3015,6 +3015,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =============================================
+  // REPORT EMAIL ROUTES
+  // =============================================
+  
+  // Send report via email
+  app.post("/api/reports/send-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const { to, subject, html } = req.body;
+      
+      if (!to || !subject || !html) {
+        return res.status(400).json({ message: "Missing required fields: to, subject, html" });
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(to)) {
+        return res.status(400).json({ message: "Invalid email address" });
+      }
+      
+      const result = await sendEmail({ to, subject, html });
+      
+      if (result.success) {
+        res.json({ success: true, message: "Report sent successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error sending report email:", error);
+      res.status(500).json({ message: "Failed to send report email" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

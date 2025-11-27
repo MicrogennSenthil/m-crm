@@ -9,6 +9,10 @@ import {
   Settings,
   LogOut,
   ListTodo,
+  ChevronRight,
+  FileText,
+  Package,
+  TicketCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -20,8 +24,16 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
@@ -65,16 +77,29 @@ const mainMenuItems = [
     roles: ["support", "admin"],
   },
   {
-    title: "Reports",
-    url: "/reports",
-    icon: BarChart3,
-    roles: ["admin"],
-  },
-  {
     title: "Masters",
     url: "/masters",
     icon: Database,
     roles: ["admin"],
+  },
+];
+
+// Reports sub-menu items
+const reportsSubItems = [
+  {
+    title: "Sales Reports",
+    url: "/reports/sales",
+    icon: TrendingUp,
+  },
+  {
+    title: "Implementation Reports",
+    url: "/reports/implementation",
+    icon: Package,
+  },
+  {
+    title: "Support Reports",
+    url: "/reports/support",
+    icon: TicketCheck,
   },
 ];
 
@@ -94,6 +119,12 @@ export function AppSidebar() {
   const visibleMainItems = mainMenuItems.filter((item) =>
     user?.role ? item.roles.includes(user.role) : true
   );
+
+  // Check if user has access to reports (admin only)
+  const canViewReports = user?.role === "admin";
+  
+  // Check if any reports sub-item is active
+  const isReportsActive = location.startsWith("/reports");
 
   const getUserInitials = () => {
     if (!user) return "U";
@@ -133,6 +164,42 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              {/* Reports with collapsible sub-menu */}
+              {canViewReports && (
+                <Collapsible defaultOpen={isReportsActive} className="group/collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={isReportsActive}
+                        data-testid="nav-reports"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+                        <span>Reports</span>
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {reportsSubItems.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === subItem.url}
+                              data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                            >
+                              <Link href={subItem.url}>
+                                <subItem.icon className="h-3.5 w-3.5" />
+                                <span>{subItem.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

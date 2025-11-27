@@ -16,6 +16,9 @@ import Implementations from "@/pages/implementations";
 import ImplementationDashboard from "@/pages/implementation-dashboard";
 import Support from "@/pages/support";
 import Reports from "@/pages/reports";
+import SalesReports from "@/pages/reports-sales";
+import ImplementationReports from "@/pages/reports-implementation";
+import SupportReports from "@/pages/reports-support";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
@@ -67,6 +70,9 @@ function Router() {
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />
               <Route path="/support" component={Support} />
               <Route path="/reports" component={Reports} />
+              <Route path="/reports/sales" component={SalesReports} />
+              <Route path="/reports/implementation" component={ImplementationReports} />
+              <Route path="/reports/support" component={SupportReports} />
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
