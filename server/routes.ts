@@ -3147,6 +3147,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
+  // PROFILE MANAGEMENT ROUTES
+  // =============================================
+
+  // Get upload URL for profile image
+  app.post("/api/profile/upload-image", isAuthenticated, async (req: any, res) => {
+    try {
+      const { fileName } = req.body;
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName || "profile.jpg");
+      res.json({ uploadURL, objectPath });
+    } catch (error) {
+      console.error("Error getting profile upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Update profile image after upload
+  app.put("/api/profile/image", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { objectPath } = req.body;
+
+      if (!objectPath) {
+        return res.status(400).json({ message: "objectPath is required" });
+      }
+
+      // Set ACL policy - profile images are public so they can be displayed in the app
+      await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: userId,
+        visibility: "public",
+      });
+
+      // Update user profile with the new image URL
+      const updatedUser = await storage.updateUser(userId, {
+        profileImageUrl: objectPath,
+      });
+
+      res.json({
+        success: true,
+        profileImageUrl: objectPath,
+        user: {
+          id: updatedUser.id,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          email: updatedUser.email,
+          profileImageUrl: updatedUser.profileImageUrl,
+          role: updatedUser.role,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating profile image:", error);
+      res.status(500).json({ message: "Failed to update profile image" });
+    }
+  });
+
+  // Update profile info (first name, last name)
+  app.patch("/api/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { firstName, lastName } = req.body;
+
+      const updateData: Partial<{ firstName: string; lastName: string }> = {};
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+
+      res.json({
+        success: true,
+        user: {
+          id: updatedUser.id,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          email: updatedUser.email,
+          profileImageUrl: updatedUser.profileImageUrl,
+          role: updatedUser.role,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // =============================================
   // TASK/FOLLOWUP MANAGEMENT ROUTES
   // =============================================
 
