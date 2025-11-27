@@ -9,12 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, Globe, CheckCircle2, MessageCircle, Monitor, Lock, Eye, EyeOff, Loader2, Key } from "lucide-react";
+import { Copy, ExternalLink, Globe, CheckCircle2, MessageCircle, Monitor, Lock, Eye, EyeOff, Loader2, Key, Camera, Pencil, Save, X } from "lucide-react";
 import { SiFacebook, SiLinkedin, SiInstagram, SiX, SiGoogle, SiYoutube, SiTiktok, SiPinterest, SiSnapchat, SiWhatsapp } from "react-icons/si";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SelfieCaptureDialog } from "@/components/selfie-capture";
 
 function WebhookUrlField({ label, url, description }: { label: string; url: string; description?: string }) {
   const { toast } = useToast();
@@ -315,13 +316,123 @@ function PasswordChangeCard({ user }: { user: any }) {
 }
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, refetch } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
   const [baseUrl, setBaseUrl] = useState("");
+  const [showSelfieCapture, setShowSelfieCapture] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [firstName, setFirstName] = useState(user?.firstName || "");
+  const [lastName, setLastName] = useState(user?.lastName || "");
   
   useEffect(() => {
     setBaseUrl(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.firstName || "");
+      setLastName(user.lastName || "");
+    }
+  }, [user]);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { firstName?: string; lastName?: string }) => {
+      const response = await apiRequest("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+      return response;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
+      });
+      setIsEditingProfile(false);
+      refetch();
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSelfieCapture = async (blob: Blob) => {
+    setIsUploadingImage(true);
+    try {
+      const uploadUrlResponse = await apiRequest("/api/profile/upload-image", {
+        method: "POST",
+        body: JSON.stringify({ fileName: "profile.jpg" }),
+      });
+      
+      const { uploadURL, objectPath } = uploadUrlResponse;
+      
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: blob,
+        headers: {
+          "Content-Type": "image/jpeg",
+        },
+      });
+      
+      await apiRequest("/api/profile/image", {
+        method: "PUT",
+        body: JSON.stringify({ objectPath }),
+      });
+      
+      toast({
+        title: "Profile Picture Updated",
+        description: "Your profile picture has been updated successfully.",
+      });
+      
+      setShowSelfieCapture(false);
+      refetch();
+    } catch (error) {
+      console.error("Error uploading profile image:", error);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload profile picture. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleSaveProfile = () => {
+    if (!firstName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "First name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    updateProfileMutation.mutate({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setFirstName(user?.firstName || "");
+    setLastName(user?.lastName || "");
+    setIsEditingProfile(false);
+  };
+
+  const getProfileImageUrl = () => {
+    if (!user?.profileImageUrl) return undefined;
+    if (user.profileImageUrl.startsWith("/objects/")) {
+      return user.profileImageUrl;
+    }
+    return user.profileImageUrl;
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -341,29 +452,119 @@ export default function Settings() {
         <TabsContent value="profile" className="space-y-4 sm:space-y-6">
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg">Profile</CardTitle>
-              <CardDescription>Your account information</CardDescription>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base sm:text-lg">Profile</CardTitle>
+                  <CardDescription>Your account information</CardDescription>
+                </div>
+                {!isEditingProfile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditingProfile(true)}
+                    data-testid="button-edit-profile"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0 space-y-4 sm:space-y-6">
               <div className="flex flex-col sm:flex-row items-center gap-4">
-                <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
-                  <AvatarImage src={user?.profileImageUrl || undefined} />
-                  <AvatarFallback className="text-xl sm:text-2xl">
-                    {user?.firstName?.[0]}{user?.lastName?.[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="text-center sm:text-left">
-                  <h3 className="text-base sm:text-lg font-semibold">
-                    {user?.firstName} {user?.lastName}
-                  </h3>
-                  <p className="text-sm text-muted-foreground break-all">{user?.email}</p>
-                  <Badge variant="secondary" className="mt-2 capitalize">
-                    {user?.role?.replace("_", " ")}
-                  </Badge>
+                <div className="relative group">
+                  <Avatar className="h-20 w-20 sm:h-24 sm:w-24 border-2 border-primary/20">
+                    <AvatarImage src={getProfileImageUrl()} />
+                    <AvatarFallback className="text-xl sm:text-2xl bg-primary/10 text-primary">
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full shadow-md"
+                    onClick={() => setShowSelfieCapture(true)}
+                    data-testid="button-take-selfie"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
                 </div>
+                
+                {isEditingProfile ? (
+                  <div className="flex-1 space-y-3 w-full sm:w-auto">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Enter first name"
+                        data-testid="input-first-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Enter last name"
+                        data-testid="input-last-name"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveProfile}
+                        disabled={updateProfileMutation.isPending}
+                        data-testid="button-save-profile"
+                      >
+                        {updateProfileMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                        disabled={updateProfileMutation.isPending}
+                        data-testid="button-cancel-edit"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center sm:text-left">
+                    <h3 className="text-base sm:text-lg font-semibold">
+                      {user?.firstName} {user?.lastName}
+                    </h3>
+                    <p className="text-sm text-muted-foreground break-all">{user?.email}</p>
+                    <Badge variant="secondary" className="mt-2 capitalize">
+                      {user?.role?.replace("_", " ")}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+              
+              <Separator />
+              
+              <div className="text-sm text-muted-foreground">
+                <p>Click the camera icon on your profile picture to take a new selfie.</p>
               </div>
             </CardContent>
           </Card>
+
+          <SelfieCaptureDialog
+            open={showSelfieCapture}
+            onOpenChange={setShowSelfieCapture}
+            onCapture={handleSelfieCapture}
+            isUploading={isUploadingImage}
+          />
 
           <Card>
             <CardHeader className="p-4 sm:p-6">
