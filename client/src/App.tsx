@@ -52,18 +52,20 @@ function AuthenticatedLayout() {
       <div className="flex h-screen w-full">
         <AppSidebar isPinned={isPinned} onPinChange={setIsPinned} />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 sm:p-4 border-b-2 border-b-[#FF9933] bg-background">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
-            </div>
-            <div className="flex items-center gap-4">
-              <img 
-                src={microgennLogo} 
-                alt="M-CRM" 
-                className="h-10 sm:h-12 w-auto object-contain"
-                data-testid="logo-mcrm"
-              />
-              <ThemeToggle />
+          <header className="sticky top-0 z-50 border-b-2 border-b-[#FF9933] bg-background">
+            <div className="flex items-center justify-between gap-2 px-2 sm:px-4 py-2 sm:py-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
+              </div>
+              <div className="flex items-center gap-4">
+                <img 
+                  src={microgennLogo} 
+                  alt="M-CRM" 
+                  className="h-10 sm:h-12 w-auto object-contain"
+                  data-testid="logo-mcrm"
+                />
+                <ThemeToggle />
+              </div>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-3 sm:p-6">
