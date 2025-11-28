@@ -34,6 +34,8 @@ import UserMaster from "@/pages/admin/user-master";
 import UserRoleMaster from "@/pages/admin/user-role-master";
 import UserRightsAllocation from "@/pages/admin/user-rights-allocation";
 import UserApproval from "@/pages/admin/user-approval";
+import KnowledgeBaseAdmin from "@/pages/knowledge-base-admin";
+import KnowledgeBaseSearch from "@/pages/knowledge-base-search";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -86,6 +88,8 @@ function AuthenticatedLayout() {
               <Route path="/admin/user-rights" component={UserRightsAllocation} />
               <Route path="/admin/user-approval" component={UserApproval} />
               <Route path="/admin/user-management" component={UserManagement} />
+              <Route path="/knowledge-base" component={KnowledgeBaseSearch} />
+              <Route path="/admin/knowledge-base" component={KnowledgeBaseAdmin} />
               <Route component={NotFound} />
             </Switch>
           </main>
