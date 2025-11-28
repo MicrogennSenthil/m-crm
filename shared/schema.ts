@@ -702,3 +702,121 @@ export type CustomerWithLifecycle = Customer & {
     handoffDate: Date | null;
   }[];
 };
+
+// Departments table - Organize users by department
+export const departments = pgTable("departments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  managerId: varchar("manager_id").references(() => users.id),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDepartmentSchema = createInsertSchema(departments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
+export type Department = typeof departments.$inferSelect;
+
+// System Modules catalog - Available modules/forms in the system for permissions
+export const systemModules = pgTable("system_modules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(), // dashboard, sales, implementations, support, reports, masters, tasks
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  icon: text("icon"), // Lucide icon name
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSystemModuleSchema = createInsertSchema(systemModules).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSystemModule = z.infer<typeof insertSystemModuleSchema>;
+export type SystemModule = typeof systemModules.$inferSelect;
+
+// User Role Assignments - Many-to-many relationship between users and roles
+export const userRoleAssignments = pgTable("user_role_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  roleId: varchar("role_id").notNull().references(() => userRoles.id, { onDelete: "cascade" }),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertUserRoleAssignmentSchema = createInsertSchema(userRoleAssignments).omit({
+  id: true,
+  assignedAt: true,
+});
+
+export type InsertUserRoleAssignment = z.infer<typeof insertUserRoleAssignmentSchema>;
+export type UserRoleAssignment = typeof userRoleAssignments.$inferSelect;
+
+// Role Change History - Audit trail for role changes
+export const roleChangeHistory = pgTable("role_change_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  previousRoleId: varchar("previous_role_id").references(() => userRoles.id),
+  newRoleId: varchar("new_role_id").references(() => userRoles.id),
+  changedBy: varchar("changed_by").notNull().references(() => users.id),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRoleChangeHistorySchema = createInsertSchema(roleChangeHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertRoleChangeHistory = z.infer<typeof insertRoleChangeHistorySchema>;
+export type RoleChangeHistory = typeof roleChangeHistory.$inferSelect;
+
+// User Module Permissions - Individual user permission overrides
+export const userModulePermissions = pgTable("user_module_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  moduleId: varchar("module_id").notNull().references(() => systemModules.id, { onDelete: "cascade" }),
+  canView: boolean("can_view").default(false),
+  canCreate: boolean("can_create").default(false),
+  canEdit: boolean("can_edit").default(false),
+  canDelete: boolean("can_delete").default(false),
+  grantedBy: varchar("granted_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserModulePermissionSchema = createInsertSchema(userModulePermissions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserModulePermission = z.infer<typeof insertUserModulePermissionSchema>;
+export type UserModulePermission = typeof userModulePermissions.$inferSelect;
+
+// Extended User type with role and permission details
+export type UserWithRoles = User & {
+  roles: UserRole[];
+  department?: Department;
+  permissions: {
+    module: string;
+    canView: boolean;
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+  }[];
+};
+
+// Role with rights
+export type RoleWithRights = UserRole & {
+  rights: UserRoleRight[];
+};
