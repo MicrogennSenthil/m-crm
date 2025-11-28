@@ -59,7 +59,7 @@ function AuthenticatedLayout() {
             <div className="flex items-center gap-4">
               <img 
                 src={microgennLogo} 
-                alt="M CRM" 
+                alt="M-CRM" 
                 className="h-10 sm:h-12 w-auto object-contain"
                 data-testid="logo-mcrm"
               />

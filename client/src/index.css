@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE - M CRM Brand Colors */
+/* LIGHT MODE - M-CRM Brand Colors */
 /* Primary: Navy Blue (#1a2b6d) - HSL: 228, 65%, 26% */
 /* Accent: Golden Yellow (#f5a623) - HSL: 42, 92%, 55% */
 :root {
@@ -89,7 +89,7 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-/* DARK MODE - M CRM Brand Colors */
+/* DARK MODE - M-CRM Brand Colors */
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);

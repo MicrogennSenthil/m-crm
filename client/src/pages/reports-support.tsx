@@ -119,7 +119,7 @@ export default function SupportReports() {
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
-  const [emailSubject, setEmailSubject] = useState("Support Report - M CRM");
+  const [emailSubject, setEmailSubject] = useState("Support Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
   const { data: tickets, isLoading: ticketsLoading } = useQuery<Ticket[]>({

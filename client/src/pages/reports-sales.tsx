@@ -119,7 +119,7 @@ export default function SalesReports() {
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
-  const [emailSubject, setEmailSubject] = useState("Sales Report - M CRM");
+  const [emailSubject, setEmailSubject] = useState("Sales Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
   const { data: leads, isLoading: leadsLoading } = useQuery<Lead[]>({

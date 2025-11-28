@@ -213,14 +213,14 @@ export default function AuthSignup() {
           <div className="flex justify-center">
             <img 
               src={microgennLogo} 
-              alt="M CRM Logo" 
+              alt="M-CRM Logo" 
               className="h-16 w-auto"
             />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-primary">Create Account</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Join M CRM to manage your business
+              Join M-CRM to manage your business
             </CardDescription>
           </div>
         </CardHeader>
