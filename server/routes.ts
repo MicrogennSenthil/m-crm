@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail } from "./email";
@@ -441,18 +441,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Super Admin email - protected from modifications
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
-  // Admin: Update user status and role
-  app.patch("/api/users/:userId", isAuthenticated, async (req: any, res) => {
+  // Admin: Update user status and role (admin only)
+  app.patch("/api/users/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const adminUserId = req.user.claims.sub || (req.session as any).userId;
       const { userId } = req.params;
       const { isActive, role } = req.body;
-      
-      // Check if current user is admin
-      const adminUser = await storage.getUser(adminUserId);
-      if (!adminUser || adminUser.role !== "admin") {
-        return res.status(403).json({ message: "Only administrators can update users" });
-      }
       
       // Prevent admin from deactivating themselves
       if (userId === adminUserId && isActive === false) {
@@ -738,7 +732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/users", isAuthenticated, async (req: any, res) => {
+  app.post("/api/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserSchema.parse(req.body);
       const newUser = await storage.createUser(validatedData);
@@ -767,7 +761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/users/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const updated = await storage.updateUser(req.params.id, req.body);
       
@@ -786,7 +780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) {
@@ -810,7 +804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User Role routes
+  // User Role routes (admin only for write operations)
   app.get("/api/user-roles", isAuthenticated, async (req, res) => {
     try {
       const rolesList = await storage.getUserRoles();
@@ -834,7 +828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/user-roles", isAuthenticated, async (req: any, res) => {
+  app.post("/api/user-roles", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserRoleSchema.parse(req.body);
       const newRole = await storage.createUserRole(validatedData);
@@ -854,7 +848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/user-roles/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/user-roles/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const updated = await storage.updateUserRole(req.params.id, req.body);
       
@@ -873,7 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/user-roles/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/user-roles/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const role = await storage.getUserRole(req.params.id);
       if (!role) {
@@ -897,7 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User Role Rights routes
+  // User Role Rights routes (admin only for write operations)
   app.get("/api/user-role-rights", isAuthenticated, async (req, res) => {
     try {
       const { roleId } = req.query;
@@ -922,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/user-role-rights", isAuthenticated, async (req: any, res) => {
+  app.post("/api/user-role-rights", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserRoleRightSchema.parse(req.body);
       const newRight = await storage.createUserRoleRight(validatedData);
@@ -942,7 +936,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/user-role-rights/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/user-role-rights/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const updated = await storage.updateUserRoleRight(req.params.id, req.body);
       
@@ -961,7 +955,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/user-role-rights/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/user-role-rights/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const right = await storage.getUserRoleRight(req.params.id);
       if (!right) {
@@ -985,8 +979,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Bulk update role rights for a role
-  app.post("/api/user-roles/:roleId/rights/bulk", isAuthenticated, async (req: any, res) => {
+  // Bulk update role rights for a role (admin only)
+  app.post("/api/user-roles/:roleId/rights/bulk", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { roleId } = req.params;
       const { rights } = req.body;
@@ -1040,7 +1034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
-  // DEPARTMENT ROUTES
+  // DEPARTMENT ROUTES (admin only for write operations)
   // =============================================
 
   app.get("/api/departments", isAuthenticated, async (req, res) => {
@@ -1066,7 +1060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/departments", isAuthenticated, async (req: any, res) => {
+  app.post("/api/departments", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertDepartmentSchema.parse(req.body);
       const newDept = await storage.createDepartment(validatedData);
@@ -1086,7 +1080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/departments/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/departments/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const updated = await storage.updateDepartment(req.params.id, req.body);
       
@@ -1105,7 +1099,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/departments/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/departments/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const dept = await storage.getDepartment(req.params.id);
       if (!dept) {
@@ -1130,7 +1124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
-  // SYSTEM MODULE ROUTES (for permissions)
+  // SYSTEM MODULE ROUTES (admin only for write operations)
   // =============================================
 
   app.get("/api/system-modules", isAuthenticated, async (req, res) => {
@@ -1156,7 +1150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/system-modules", isAuthenticated, async (req: any, res) => {
+  app.post("/api/system-modules", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertSystemModuleSchema.parse(req.body);
       const newModule = await storage.createSystemModule(validatedData);
@@ -1176,7 +1170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/system-modules/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/system-modules/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const updated = await storage.updateSystemModule(req.params.id, req.body);
       
@@ -1195,7 +1189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/system-modules/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/system-modules/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const module = await storage.getSystemModule(req.params.id);
       if (!module) {
@@ -1219,8 +1213,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Seed default system modules
-  app.post("/api/system-modules/seed", isAuthenticated, async (req: any, res) => {
+  // Seed default system modules (admin only)
+  app.post("/api/system-modules/seed", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const defaultModules = [
         { name: "dashboard", displayName: "Dashboard", description: "Main dashboard and analytics", icon: "LayoutDashboard", sortOrder: 1 },
@@ -1267,7 +1261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
-  // USER ROLE ASSIGNMENT ROUTES
+  // USER ROLE ASSIGNMENT ROUTES (admin only for write operations)
   // =============================================
 
   app.get("/api/user-role-assignments", isAuthenticated, async (req, res) => {
@@ -1294,7 +1288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/user-role-assignments", isAuthenticated, async (req: any, res) => {
+  app.post("/api/user-role-assignments", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserRoleAssignmentSchema.parse(req.body);
       
@@ -1337,7 +1331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/user-role-assignments/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/user-role-assignments/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const assignment = await storage.getUserRoleAssignment(req.params.id);
       if (!assignment) {

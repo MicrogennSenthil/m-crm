@@ -173,3 +173,18 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     return;
   }
 };
+
+export const isAdmin: RequestHandler = async (req, res, next) => {
+  const user = req.user as any;
+  
+  if (!user?.claims?.metadata?.role) {
+    return res.status(403).json({ message: "Access denied. Admin privileges required." });
+  }
+  
+  const role = user.claims.metadata.role;
+  if (role !== "admin") {
+    return res.status(403).json({ message: "Access denied. Admin privileges required." });
+  }
+  
+  return next();
+};

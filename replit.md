@@ -33,6 +33,12 @@ The CRM includes:
 ### System Design Choices
 The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.
 
+### Security Architecture
+- **Authorization Middleware**: All user management routes are protected with `isAdmin` middleware that checks the current user's role on the server-side before allowing any write operations (POST, PATCH, DELETE).
+- **Protected Routes**: Users management, roles, departments, system modules, permissions, and role assignments all require admin privileges for modifications.
+- **Super Admin**: The super admin is permanently set as `senthil@microgenn.com` with full system access.
+- **Read Access**: Authenticated users can view user management data (for dropdown selections), but cannot modify it without admin role.
+
 ## External Dependencies
 - **Authentication**: Replit Auth (OpenID Connect)
 - **Database**: PostgreSQL (via Drizzle ORM)
