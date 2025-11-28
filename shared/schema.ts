@@ -824,3 +824,116 @@ export type UserWithRoles = User & {
 export type RoleWithRights = UserRole & {
   rights: UserRoleRight[];
 };
+
+// ==================== Knowledge Base (Vector Database) ====================
+
+// Knowledge Base Sources - stores original documents/content
+export const knowledgeBaseSources = pgTable("knowledge_base_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }).notNull().default("general"), // general, sales, implementation, support, product, faq
+  contentType: varchar("content_type", { length: 50 }).notNull().default("document"), // document, faq, guide, article, policy
+  originalContent: text("original_content").notNull(), // The full original content
+  sourceUrl: text("source_url"), // Optional external URL
+  fileUrl: text("file_url"), // If uploaded as a file
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  isIndexed: boolean("is_indexed").default(false), // Whether embeddings have been generated
+  indexedAt: timestamp("indexed_at"),
+  tokenCount: integer("token_count"), // Total tokens in the content
+  chunkCount: integer("chunk_count"), // Number of chunks created
+  createdBy: varchar("created_by").references(() => users.id),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertKnowledgeBaseSourceSchema = createInsertSchema(knowledgeBaseSources).omit({
+  id: true,
+  isIndexed: true,
+  indexedAt: true,
+  tokenCount: true,
+  chunkCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertKnowledgeBaseSource = z.infer<typeof insertKnowledgeBaseSourceSchema>;
+export type KnowledgeBaseSource = typeof knowledgeBaseSources.$inferSelect;
+
+// Knowledge Base Chunks - stores chunked content with embeddings
+// Note: The 'embedding' column is a vector(1536) which is handled by pgvector extension
+// We store it as text here and handle conversion in the database
+export const knowledgeBaseChunks = pgTable("knowledge_base_chunks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => knowledgeBaseSources.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(), // Order within the source document
+  content: text("content").notNull(), // The chunked text content
+  tokenCount: integer("token_count"), // Tokens in this chunk
+  // Note: embedding column is added via raw SQL as vector(1536)
+  metadata: jsonb("metadata").$type<{
+    startPosition?: number;
+    endPosition?: number;
+    headings?: string[];
+    section?: string;
+  }>(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertKnowledgeBaseChunkSchema = createInsertSchema(knowledgeBaseChunks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertKnowledgeBaseChunk = z.infer<typeof insertKnowledgeBaseChunkSchema>;
+export type KnowledgeBaseChunk = typeof knowledgeBaseChunks.$inferSelect;
+
+// Knowledge Base Search Queries - for analytics and improving search
+export const knowledgeBaseQueries = pgTable("knowledge_base_queries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  queryText: text("query_text").notNull(),
+  resultsCount: integer("results_count"),
+  topResults: jsonb("top_results").$type<{
+    sourceId: string;
+    title: string;
+    score: number;
+  }[]>(),
+  searchDurationMs: integer("search_duration_ms"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertKnowledgeBaseQuerySchema = createInsertSchema(knowledgeBaseQueries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertKnowledgeBaseQuery = z.infer<typeof insertKnowledgeBaseQuerySchema>;
+export type KnowledgeBaseQuery = typeof knowledgeBaseQueries.$inferSelect;
+
+// Knowledge Base Category type
+export const knowledgeBaseCategories = [
+  "general",
+  "sales",
+  "implementation", 
+  "support",
+  "product",
+  "faq",
+  "training",
+  "policy"
+] as const;
+
+export type KnowledgeBaseCategory = typeof knowledgeBaseCategories[number];
+
+// Knowledge Base Content Types
+export const knowledgeBaseContentTypes = [
+  "document",
+  "faq",
+  "guide",
+  "article",
+  "policy",
+  "tutorial"
+] as const;
+
+export type KnowledgeBaseContentType = typeof knowledgeBaseContentTypes[number];

@@ -336,7 +336,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
       )}
       
       <SidebarContent 
-        ref={scrollContainerRef as any}
+        ref={scrollContainerRef}
         className="overflow-y-auto"
       >
         <SidebarGroup>
