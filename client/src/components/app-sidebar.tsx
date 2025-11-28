@@ -28,6 +28,8 @@ import {
   Home,
   Briefcase,
   Cog,
+  BookOpen,
+  Search,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -124,6 +126,25 @@ const menuGroups = [
         url: "/support",
         icon: Headphones,
         roles: ["support", "admin"],
+      },
+    ],
+  },
+  {
+    id: "knowledge",
+    label: "Knowledge Base",
+    icon: BookOpen,
+    items: [
+      {
+        title: "Search",
+        url: "/knowledge-base",
+        icon: Search,
+        roles: ["sales_executive", "engineer", "support", "admin"],
+      },
+      {
+        title: "Manage Documents",
+        url: "/admin/knowledge-base",
+        icon: FileText,
+        roles: ["admin"],
       },
     ],
   },
