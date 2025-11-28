@@ -50,9 +50,6 @@ function AuthenticatedLayout() {
           <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 sm:p-4 border-b bg-background">
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
-              <h1 className="text-xl sm:text-2xl font-semibold text-accent" data-testid="text-app-title">
-                Microgenn CRM
-              </h1>
             </div>
             <div className="flex items-center gap-4">
               <img 

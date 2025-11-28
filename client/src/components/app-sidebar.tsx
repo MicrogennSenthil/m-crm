@@ -181,52 +181,59 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon" data-testid="sidebar-main">
-      <SidebarHeader className="p-2">
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} gap-1`}>
-          {!isMobile && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handlePin}
-                    className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                    data-testid="button-sidebar-pin"
-                  >
-                    {isPinned ? (
-                      <Pin className="h-4 w-4 fill-current" />
-                    ) : (
-                      <PinOff className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {isPinned ? "Unpin sidebar" : "Pin sidebar"}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCollapse}
-                    className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                    data-testid="button-sidebar-collapse"
-                  >
-                    {isCollapsed ? (
-                      <PanelLeft className="h-4 w-4" />
-                    ) : (
-                      <PanelLeftClose className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                </TooltipContent>
-              </Tooltip>
-            </>
+      <SidebarHeader className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          {!isCollapsed && (
+            <h1 className="text-lg font-bold text-sidebar-primary truncate" data-testid="text-sidebar-title">
+              Microgenn CRM
+            </h1>
           )}
+          <div className={`flex items-center gap-1 ${isCollapsed ? 'mx-auto' : ''}`}>
+            {!isMobile && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handlePin}
+                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                      data-testid="button-sidebar-pin"
+                    >
+                      {isPinned ? (
+                        <Pin className="h-4 w-4 fill-current" />
+                      ) : (
+                        <PinOff className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {isPinned ? "Unpin sidebar" : "Pin sidebar"}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCollapse}
+                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                      data-testid="button-sidebar-collapse"
+                    >
+                      {isCollapsed ? (
+                        <PanelLeft className="h-4 w-4" />
+                      ) : (
+                        <PanelLeftClose className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  </TooltipContent>
+                </Tooltip>
+              </>
+            )}
+          </div>
         </div>
       </SidebarHeader>
       <Separator className="bg-sidebar-border" />
