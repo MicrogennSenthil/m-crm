@@ -59,7 +59,7 @@ export default function AuthLogin() {
           <div className="flex justify-center">
             <img 
               src={microgennLogo} 
-              alt="Microgenn Logo" 
+              alt="M CRM Logo" 
               className="h-16 w-auto"
             />
           </div>

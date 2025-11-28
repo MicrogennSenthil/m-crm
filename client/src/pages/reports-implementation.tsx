@@ -118,7 +118,7 @@ export default function ImplementationReports() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
-  const [emailSubject, setEmailSubject] = useState("Implementation Report - Microgenn CRM");
+  const [emailSubject, setEmailSubject] = useState("Implementation Report - M CRM");
   const [emailBody, setEmailBody] = useState("");
 
   const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({

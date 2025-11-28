@@ -198,7 +198,7 @@ export default function Home() {
           Hi {userName}, {greeting}!
         </h1>
         <p className="text-sm text-muted-foreground">
-          Welcome to your Microgenn CRM dashboard
+          Welcome to your M CRM dashboard
         </p>
       </div>
 

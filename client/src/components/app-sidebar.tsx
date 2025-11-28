@@ -208,7 +208,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
         <div className="flex items-center justify-between gap-2">
           {!isCollapsed && (
             <h1 className="text-lg font-bold text-sidebar-primary truncate" data-testid="text-sidebar-title">
-              Microgenn CRM
+              M CRM
             </h1>
           )}
           <div className={`flex items-center gap-1 ${isCollapsed ? 'mx-auto' : ''}`}>

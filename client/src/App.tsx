@@ -59,9 +59,9 @@ function AuthenticatedLayout() {
             <div className="flex items-center gap-4">
               <img 
                 src={microgennLogo} 
-                alt="Microgenn" 
+                alt="M CRM" 
                 className="h-10 sm:h-12 w-auto object-contain"
-                data-testid="logo-microgenn"
+                data-testid="logo-mcrm"
               />
               <ThemeToggle />
             </div>

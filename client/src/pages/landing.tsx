@@ -12,8 +12,8 @@ export default function Landing() {
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={microgennLogo} alt="Microgenn" className="h-10 w-auto" />
-            <span className="font-bold text-xl text-primary">Microgenn CRM</span>
+            <img src={microgennLogo} alt="M CRM" className="h-10 w-auto" />
+            <span className="font-bold text-xl text-primary">M CRM</span>
           </div>
           <div className="flex items-center gap-3">
             <Button 
@@ -36,7 +36,7 @@ export default function Landing() {
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
-            Microgenn CRM
+            M CRM
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Comprehensive platform for managing sales pipeline, implementation projects,
