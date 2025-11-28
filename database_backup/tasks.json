@@ -1,0 +1,10 @@
+[
+  {"id":"acaa7486-a022-44a3-991b-00cc52132506","title":"Test Task 5Wa0c5","description":"This is a test task created by automated testing","status":"pending","priority":"medium","created_by":"dhFEIZ"},
+  {"id":"b92c9526-4610-4606-9df3-60377f2400dd","title":"sales team meeting","description":"Every day evening sales team meeting","status":"pending","priority":"medium","created_by":"46525611","assigned_to":"test-admin-001","mentioned_users":["46525611"],"reminder_date":"2025-11-25T18:30:00","due_date":"2025-11-25T18:30:00"},
+  {"id":"aa969ab5-6fc0-425a-8df7-9d780945a28e","title":"7qVo5C-task-test","status":"completed","priority":"medium","created_by":"admin-test-dash-isWoCU","reminder_date":"2025-11-27T00:00:00"},
+  {"id":"efa7325b-ba67-4cfe-ba3e-dce7907c0750","title":"eGzaiR-revoke-test","status":"pending","priority":"medium","created_by":"admin-revoke-xGZyDe","reminder_date":"2025-11-27T00:00:00"},
+  {"id":"0b4622a4-a62e-4608-8a2c-779bd5822c91","title":"Test Task 6Dk0yW","description":"This is a test task for attachments verification","status":"pending","priority":"medium","created_by":"test-tasks-MafsAy"},
+  {"id":"0c46868b-581d-4bbb-8500-9e89a2e9bc60","title":"Attachment Test _4SzZQ","description":"Testing attachments section visibility","status":"pending","priority":"medium","created_by":"test-tasks2-s1tKdn"},
+  {"id":"d6087817-916c-4300-b3c0-c92e0f40b851","title":"Time Test f_x0nI","description":"Testing date and time selection","status":"pending","priority":"medium","created_by":"test-time-7iAcWj","reminder_date":"2025-11-29T14:30:00","due_date":"2025-12-15T17:00:00"},
+  {"id":"93fcb4e4-178a-43ed-b579-b2e34fb78a68","title":"Test Task for Viewing","status":"pending","priority":"medium","created_by":"test-view-kVfqJh"}
+]

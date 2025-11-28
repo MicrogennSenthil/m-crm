@@ -1,0 +1,12 @@
+[
+  {"id":"25ffdfc0-4d2e-4bc4-a835-7c6655be79b7","name":"dashboard","display_name":"Dashboard","description":"Main dashboard and analytics","icon":"LayoutDashboard","sort_order":1,"is_active":true},
+  {"id":"b940578c-b24c-417b-9eea-3ca85307d6b9","name":"leads","display_name":"Sales / Leads","description":"Lead management and sales pipeline","icon":"Target","sort_order":2,"is_active":true},
+  {"id":"5ceece30-dfa8-46ba-b5dc-e5a136990672","name":"quotes","display_name":"Quotes","description":"Quote generation and management","icon":"FileText","sort_order":3,"is_active":true},
+  {"id":"6dc95aef-6cb1-43f0-ab01-b9750a3b06a5","name":"projects","display_name":"Implementation","description":"Project implementation tracking","icon":"FolderKanban","sort_order":4,"is_active":true},
+  {"id":"ac885381-c087-46f6-b94f-0cf8ef1ae2a4","name":"tickets","display_name":"Support Tickets","description":"Customer support ticket management","icon":"Ticket","sort_order":5,"is_active":true},
+  {"id":"967a957a-caa5-4469-b2ac-fde5382d2b72","name":"tasks","display_name":"Tasks","description":"Task and follow-up management","icon":"CheckSquare","sort_order":6,"is_active":true},
+  {"id":"ad5e69fe-6d42-48d6-b47e-fd940c4588d6","name":"customers","display_name":"Customers","description":"Customer master data","icon":"Users","sort_order":7,"is_active":true},
+  {"id":"898a165c-2167-4784-98c7-84fecb399e00","name":"reports","display_name":"Reports","description":"Reports and analytics","icon":"BarChart3","sort_order":8,"is_active":true},
+  {"id":"39f03178-7a1b-438b-a367-09803a1b59d2","name":"user_management","display_name":"User Management","description":"User, role, and permission management","icon":"ShieldCheck","sort_order":9,"is_active":true},
+  {"id":"a7a7dc0e-4fa6-49e1-bfea-6731d16a5434","name":"settings","display_name":"Settings","description":"System settings and configuration","icon":"Settings","sort_order":10,"is_active":true}
+]

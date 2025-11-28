@@ -1,0 +1,11 @@
+[
+  {"id":"test-admin-001","email":"admin@microgenn.com","first_name":"Admin","last_name":"User","role":"sales_executive","is_active":true,"auth_provider":"local"},
+  {"id":"test-admin-7wwHSs","email":"admin-test@example.com","first_name":"Test","last_name":"Admin","role":"sales_executive","is_active":true,"auth_provider":"local"},
+  {"id":"63f037af-1a62-4cc9-9dd6-c018eebbc377","email":"snayagamk@gmail.com","first_name":"Naveen","last_name":"Kumar","role":"support","is_active":true,"auth_provider":"local","is_approved":true,"approved_by":"46525611"},
+  {"id":"test-sales-8PJPaV","email":"sales-test@example.com","first_name":"Sales","last_name":"Rep","role":"salesexe","is_active":true,"auth_provider":"local"},
+  {"id":"sales_user_abc123","email":"sales_test@example.com","first_name":"Santhosh","last_name":"Sales","role":"sales_executive","is_active":true,"auth_provider":"local"},
+  {"id":"test-user-FWb4Ps","email":"testuserEkHYkg@example.com","first_name":"Test","last_name":"User","role":"engineer","is_active":true,"auth_provider":"local"},
+  {"id":"test-user-hGkYOT","email":"testuser1BAceB@example.com","first_name":"Test","last_name":"User","role":"engineer","is_active":true,"auth_provider":"local"},
+  {"id":"admin-revoke-xGZyDe","email":"admin-revoke-Osbhgr@example.com","first_name":"Admin","last_name":"Tester","role":"admin","is_active":true,"auth_provider":"local"},
+  {"id":"46525611","email":"senthil@microgenn.com","first_name":"NIRMALA","last_name":"NAYAGAM","role":"admin","is_active":true,"auth_provider":"local","password_hash":"$2b$10$jvCCZqFcHan6V2skxjDXMufVXZtNxD/Nia5pZdh7XH57vb/.5pWBC","is_email_verified":true,"is_approved":true}
+]

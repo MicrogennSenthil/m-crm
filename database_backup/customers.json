@@ -1,0 +1,7 @@
+[
+  {"id":"7f2c4395-e9bd-41df-82f4-595f31ae38e6","name":"Test Customer ABC","email":"test.customer@example.com","phone":"+1234567890","company":"Test Company Ltd","address":"123 Test Street","city":"New York","state":"NY","country":"USA","status":"active","notes":"Contact Person: John Doe","customer_type":"prospect"},
+  {"id":"d88a64d8-2328-4d0e-b317-9cfc419ace37","name":"Test Customer t2sQTb","status":"active","customer_type":"prospect","selected_modules":["Front Office"]},
+  {"id":"abcaebf2-319f-4a57-bfdf-eb1925653e2e","name":"ModuleTest qhZEhu","status":"active","customer_type":"prospect","selected_modules":["Accounting"]},
+  {"id":"393d246c-5a79-43ff-9680-7d1775040b84","name":"Microgenn Software Solutions","email":"contact@microgenn.com","status":"active","customer_type":"prospect"},
+  {"id":"1f60a117-024e-4457-8e0f-a85a479347d1","name":"Sri Bhagavathi Residency","email":"contact@sribhagavathi.com","status":"active","customer_type":"prospect"}
+]

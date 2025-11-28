@@ -1,0 +1,10 @@
+[
+  {"id":"5a5b1267-a09e-4034-a045-bc797c64257f","lead_id":"126d0164-d4a5-42a6-a3b8-131ce49d8066","client_name":"Test Company eXt4G3","implementation_date":"2025-11-26","status":"not_started","completion_percentage":0},
+  {"id":"51e3a5c2-a38b-4c15-8a91-3a159b394cf1","lead_id":"30a9a8ad-fb1f-46f2-a003-590dbf93c68c","client_name":"Test Company Edit","implementation_date":"2025-11-25","status":"not_started","completion_percentage":0,"customer_id":"abcaebf2-319f-4a57-bfdf-eb1925653e2e"},
+  {"id":"666a522b-f869-4286-97b6-b8940ef48c01","client_name":"Test Customer t2sQTb","status":"initiation","completion_percentage":0,"customer_id":"d88a64d8-2328-4d0e-b317-9cfc419ace37"},
+  {"id":"be7cffa8-eaa2-4af8-89c3-32a16fc4e85d","lead_id":"b6f3393f-080a-406e-9c03-1eb24dcfb23c","client_name":"Test Auto-Init Corporation","implementation_date":"2025-12-01","status":"not_started","completion_percentage":0},
+  {"id":"1cc90753-e1a0-40bd-8224-de352abce728","lead_id":"b6f3393f-080a-406e-9c03-1eb24dcfb23c","client_name":"Test Transaction Auto-Init Corp","implementation_date":"2025-12-15","status":"not_started","completion_percentage":0},
+  {"id":"e62c0a6f-1320-4901-9206-104db3274734","client_name":"ModuleTest qhZEhu","implementation_date":"2025-12-20T10:30:00","status":"not_started","completion_percentage":0,"customer_id":"abcaebf2-319f-4a57-bfdf-eb1925653e2e"},
+  {"id":"2483de02-b507-4b7a-bd14-46928008daf9","lead_id":"999de455-f290-4738-833b-99dba51bf115","client_name":"Microgenn Software Solutions","implementation_date":"2025-11-25T18:30:00","status":"completed","completion_percentage":100,"customer_id":"393d246c-5a79-43ff-9680-7d1775040b84"},
+  {"id":"35bbfdf1-3c16-4ab2-b59a-92e7d7c57719","lead_id":"7a859167-b4a1-4c10-a895-c01739fd11ca","client_name":"Sri Bhagavathi Residency","implementation_date":"2025-11-27T16:50:00","status":"completed","completion_percentage":100,"customer_id":"1f60a117-024e-4457-8e0f-a85a479347d1"}
+]

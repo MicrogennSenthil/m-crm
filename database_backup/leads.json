@@ -1,0 +1,10 @@
+[
+  {"id":"b6f3393f-080a-406e-9c03-1eb24dcfb23c","company_name":"Acme Corporation","contact_person":"John Smith","contact_email":"john@acme.com","contact_phone":"+1234567890","lead_source":"linkedin","stage":"new_lead"},
+  {"id":"ef943b85-804f-46ac-982c-29d6753159b8","company_name":"Test Corp","contact_person":"John Doe","contact_email":"john@testcorp.com","contact_phone":"+1-555-0123","lead_source":"website","stage":"new_lead"},
+  {"id":"2c1854d9-d440-4105-a698-aafa32a4a28d","company_name":"DocTest Corp","contact_person":"John File","contact_email":"john.file@doctest.com","contact_phone":"+1-555-1234","lead_source":"website","stage":"new_lead"},
+  {"id":"30a9a8ad-fb1f-46f2-a003-590dbf93c68c","company_name":"Test Company Edit","contact_person":"Updated Contact Name","contact_email":"test.edit@example.com","lead_source":"website","stage":"closed_won","confirmed_order_value":540000},
+  {"id":"999de455-f290-4738-833b-99dba51bf115","company_name":"Microgenn Software Solutions","contact_person":"/admin/settings","contact_email":"smart@hotelsmartlock.com","contact_phone":"+919363150105","lead_source":"website","stage":"closed_won","quote_value":60000,"selected_modules":["Front Office","POS"],"confirmed_order_value":55000},
+  {"id":"f6fa8650-4968-497f-bd48-875b83e827d2","company_name":"Test Company -JqtKn","contact_person":"John Doe","contact_email":"test@example.com","contact_phone":"1234567890","lead_source":"website","stage":"closed_won"},
+  {"id":"126d0164-d4a5-42a6-a3b8-131ce49d8066","company_name":"Test Company eXt4G3","contact_person":"John Doe","contact_email":"test@example.com","contact_phone":"1234567890","lead_source":"website","stage":"closed_won","sales_executive_id":"test-admin-001","selected_modules":["Front Office","Inventory Management","POS (Point of Sale)"]},
+  {"id":"7a859167-b4a1-4c10-a895-c01739fd11ca","company_name":"Sri Bhagavathi Residency","contact_person":"Dr.Suresh","lead_source":"referral","stage":"closed_won","sales_executive_id":"sales_user_abc123","quote_value":540000,"selected_modules":["Front Office","POS","Reporting & Analytics","Accounting"],"confirmed_order_value":500000}
+]

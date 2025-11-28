@@ -1,0 +1,9 @@
+[
+  {"id":"7799d270-236f-4a22-bc41-2865749728f8","title":"Support Ticket System Guide","description":"Complete guide for managing customer support tickets and escalations","category":"support","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"da7eb6ef-3a45-4a16-9296-f395c3e17e83","title":"Implementation Module Guide","description":"Guide for managing implementation projects and tracking progress","category":"implementation","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"a19423a7-4076-460b-9ac0-9effada567d1","title":"Sales Management Guide","description":"Complete guide for managing leads, quotes, and sales pipeline","category":"sales","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"bb3a3d3c-e802-4254-ab87-cfab830c53f4","title":"Support Ticket System Guide","category":"support","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"df72b700-7b33-41c0-9829-27ca452d95af","title":"How to Create and Manage Leads","category":"sales","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"e4569aca-e5a4-4cd8-bb41-835710b0c4ed","title":"M-CRM Overview","category":"general","content_type":"guide","language_code":"en","is_indexed":true},
+  {"id":"6fd0fc89-7e41-4c5b-8a2a-e471afa1d7fc","title":"Admin Guide - User Management","category":"general","content_type":"guide","language_code":"en","is_indexed":true}
+]

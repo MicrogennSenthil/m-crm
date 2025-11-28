@@ -1,0 +1,6 @@
+[
+  {"id":"d6dafb1a-573d-4e04-b637-a147b03973ae","name":"deve","display_name":"Developer Trainee","description":"Developer Trainee web","is_active":true},
+  {"id":"4a6d9690-6440-4e38-8d31-e68cfebb0f99","name":"salesexe","display_name":"Sales Executive","description":"Sales Executive","is_active":true},
+  {"id":"9cbf2dac-00dd-4864-83ca-d2a51986a68d","name":"engineer","display_name":"Engineer","description":"A test manager role","is_active":true},
+  {"id":"e6494264-b679-4b98-a062-ec2d048537c9","name":"technical_support_engineer","display_name":"Tech Support","description":"technical support","is_active":true}
+]
