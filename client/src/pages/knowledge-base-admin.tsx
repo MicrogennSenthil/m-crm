@@ -163,6 +163,26 @@ export default function KnowledgeBaseAdmin() {
     },
   });
 
+  const reindexAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/knowledge-base/reindex-all`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Bulk Re-index Complete", 
+        description: data.indexed > 0 
+          ? `Indexed ${data.indexed} documents with ${data.totalChunks} chunks` 
+          : data.message 
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/analytics"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const onSubmit = (data: FormValues) => {
     createMutation.mutate(data);
   };
@@ -192,18 +212,37 @@ export default function KnowledgeBaseAdmin() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-knowledge-base-title">Knowledge Base Management</h1>
           <p className="text-muted-foreground">Manage documents for semantic search</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-document">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Document
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => reindexAllMutation.mutate()}
+            disabled={reindexAllMutation.isPending}
+            data-testid="button-reindex-all"
+          >
+            {reindexAllMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Indexing...
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Re-index All
+              </>
+            )}
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-document">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Document
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Document</DialogTitle>
@@ -353,6 +392,7 @@ export default function KnowledgeBaseAdmin() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>

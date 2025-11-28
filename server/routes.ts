@@ -4454,6 +4454,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk re-index all unindexed knowledge base sources
+  app.post("/api/knowledge-base/reindex-all", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      // Get all unindexed sources
+      const allSources = await storage.getKnowledgeBaseSources();
+      const unindexedSources = allSources.filter(s => !s.isIndexed && s.isActive);
+      
+      if (unindexedSources.length === 0) {
+        return res.json({ message: "All documents are already indexed", indexed: 0 });
+      }
+
+      let indexedCount = 0;
+      let totalChunks = 0;
+      const errors: string[] = [];
+
+      for (const source of unindexedSources) {
+        try {
+          // Delete existing chunks if any
+          await storage.deleteKnowledgeBaseChunksBySource(source.id);
+
+          // Extract and chunk the content
+          const extractedText = extractTextFromContent(source.originalContent || '', source.contentType);
+          const chunks = chunkText(extractedText);
+
+          if (chunks.length === 0) {
+            errors.push(`${source.title}: Content too short to index`);
+            continue;
+          }
+
+          // Generate embeddings
+          const chunkTexts = chunks.map(c => c.text);
+          const embeddings = await generateEmbeddings(chunkTexts);
+
+          // Create chunk records
+          const chunkRecords = chunks.map((chunk, index) => ({
+            sourceId: source.id,
+            chunkIndex: index,
+            content: chunk.text,
+            tokenCount: estimateTokenCount(chunk.text),
+            metadata: {
+              startPosition: chunk.metadata.startChar,
+              endPosition: chunk.metadata.endChar,
+            },
+          }));
+
+          const createdChunks = await storage.createKnowledgeBaseChunks(chunkRecords);
+
+          // Update embeddings
+          for (let i = 0; i < createdChunks.length; i++) {
+            const embeddingString = `[${embeddings[i].join(',')}]`;
+            await db.execute(sql`UPDATE knowledge_base_chunks SET embedding = ${embeddingString}::vector WHERE id = ${createdChunks[i].id}`);
+          }
+
+          // Update source with chunk and token counts
+          const tokenCount = estimateTokenCount(extractedText);
+          await db.execute(sql`UPDATE knowledge_base_sources SET chunk_count = ${chunks.length}, token_count = ${tokenCount}, is_indexed = true, indexed_at = NOW() WHERE id = ${source.id}`);
+
+          indexedCount++;
+          totalChunks += chunks.length;
+        } catch (docError: any) {
+          errors.push(`${source.title}: ${docError.message}`);
+        }
+      }
+
+      res.json({
+        message: `Successfully indexed ${indexedCount} documents with ${totalChunks} chunks`,
+        indexed: indexedCount,
+        totalChunks,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Error bulk re-indexing knowledge base:", error);
+      res.status(500).json({ message: "Failed to bulk re-index knowledge base" });
+    }
+  });
+
   // Semantic search across knowledge base
   app.post("/api/knowledge-base/search", isAuthenticated, async (req: any, res) => {
     try {
