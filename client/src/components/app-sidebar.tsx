@@ -22,6 +22,9 @@ import {
   Shield,
   Key,
   UserCheck,
+  Home,
+  Briefcase,
+  Cog,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -55,49 +58,71 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 
-// Navigation items based on design guidelines
-const mainMenuItems = [
+// Menu groups with collapsible sections
+const menuGroups = [
   {
-    title: "Dashboard",
-    url: "/",
-    icon: LayoutDashboard,
-    roles: ["sales_executive", "engineer", "support", "admin"],
+    id: "main",
+    label: "Main",
+    icon: Home,
+    items: [
+      {
+        title: "Dashboard",
+        url: "/",
+        icon: LayoutDashboard,
+        roles: ["sales_executive", "engineer", "support", "admin"],
+      },
+      {
+        title: "Tasks",
+        url: "/tasks",
+        icon: ListTodo,
+        roles: ["sales_executive", "engineer", "support", "admin"],
+      },
+    ],
   },
   {
-    title: "Tasks",
-    url: "/tasks",
-    icon: ListTodo,
-    roles: ["sales_executive", "engineer", "support", "admin"],
-  },
-  {
-    title: "Sales Pipeline",
-    url: "/sales",
+    id: "sales",
+    label: "Sales",
     icon: TrendingUp,
-    roles: ["sales_executive", "admin"],
+    items: [
+      {
+        title: "Sales Pipeline",
+        url: "/sales",
+        icon: TrendingUp,
+        roles: ["sales_executive", "admin"],
+      },
+    ],
   },
   {
-    title: "Implementations",
-    url: "/implementations",
-    icon: Wrench,
-    roles: ["engineer", "admin"],
+    id: "operations",
+    label: "Operations",
+    icon: Briefcase,
+    items: [
+      {
+        title: "Implementations",
+        url: "/implementations",
+        icon: Wrench,
+        roles: ["engineer", "admin"],
+      },
+      {
+        title: "Work Tracking",
+        url: "/implementation-dashboard",
+        icon: ClipboardCheck,
+        roles: ["engineer", "admin"],
+      },
+    ],
   },
   {
-    title: "Work Tracking",
-    url: "/implementation-dashboard",
-    icon: ClipboardCheck,
-    roles: ["engineer", "admin"],
-  },
-  {
-    title: "Support Tickets",
-    url: "/support",
+    id: "support",
+    label: "Support",
     icon: Headphones,
-    roles: ["support", "admin"],
-  },
-  {
-    title: "Masters",
-    url: "/masters",
-    icon: Database,
-    roles: ["admin"],
+    items: [
+      {
+        title: "Support Tickets",
+        url: "/support",
+        icon: Headphones,
+        roles: ["support", "admin"],
+      },
+    ],
   },
 ];
 
@@ -117,14 +142,6 @@ const reportsSubItems = [
     title: "Support Reports",
     url: "/reports/support",
     icon: TicketCheck,
-  },
-];
-
-const settingsItems = [
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: Settings,
   },
 ];
 
@@ -163,11 +180,6 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const { state, toggleSidebar, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
 
-  // Filter menu items based on user role
-  const visibleMainItems = mainMenuItems.filter((item) =>
-    user?.role ? item.roles.includes(user.role) : true
-  );
-
   // Check if user has access to reports (admin only)
   const canViewReports = user?.role === "admin";
   
@@ -176,6 +188,15 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   
   // Check if any user management sub-item is active
   const isUserManagementActive = location.startsWith("/admin/user");
+
+  // Check if a group has any visible items and if any item is active
+  const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
+    const visibleItems = items.filter((item) =>
+      user?.role ? item.roles.includes(user.role) : true
+    );
+    const hasActiveItem = visibleItems.some((item) => location === item.url);
+    return { visibleItems, hasActiveItem, hasItems: visibleItems.length > 0 };
+  };
 
   const getUserInitials = () => {
     if (!user) return "U";
@@ -260,24 +281,55 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
         </div>
       </SidebarHeader>
       <Separator className="bg-sidebar-border" />
-      <SidebarContent>
+      <SidebarContent className="overflow-hidden">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleMainItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+              {/* Dynamic Menu Groups */}
+              {menuGroups.map((group) => {
+                const { visibleItems, hasActiveItem, hasItems } = getGroupVisibility(group.id, group.items);
+                
+                if (!hasItems) return null;
+
+                return (
+                  <Collapsible 
+                    key={group.id} 
+                    defaultOpen={hasActiveItem || group.id === "main"} 
+                    className="group/collapsible"
                   >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton
+                          isActive={hasActiveItem}
+                          data-testid={`nav-group-${group.id}`}
+                        >
+                          <group.icon className="h-4 w-4" />
+                          <span>{group.label}</span>
+                          <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {visibleItems.map((item) => (
+                            <SidebarMenuSubItem key={item.title}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={location === item.url}
+                                data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                              >
+                                <Link href={item.url}>
+                                  <item.icon className="h-3.5 w-3.5" />
+                                  <span>{item.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                );
+              })}
               
               {/* Reports with collapsible sub-menu */}
               {canViewReports && (
@@ -314,64 +366,105 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                   </SidebarMenuItem>
                 </Collapsible>
               )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
 
-        <Separator className="my-2" />
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {settingsItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    data-testid="nav-settings"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              
-              {/* User Management with collapsible sub-menu (Admin only) */}
+              {/* Administration Group */}
               {user?.role === "admin" && (
-                <Collapsible defaultOpen={isUserManagementActive} className="group/collapsible">
+                <Collapsible 
+                  defaultOpen={location === "/masters" || location === "/settings" || isUserManagementActive} 
+                  className="group/collapsible"
+                >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        isActive={isUserManagementActive}
-                        data-testid="nav-user-management"
+                        isActive={location === "/masters" || location === "/settings" || isUserManagementActive}
+                        data-testid="nav-group-admin"
                       >
-                        <UserCog className="h-4 w-4" />
-                        <span>User Management</span>
+                        <Cog className="h-4 w-4" />
+                        <span>Administration</span>
                         <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {userManagementSubItems.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={location === subItem.url}
-                              data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
-                            >
-                              <Link href={subItem.url}>
-                                <subItem.icon className="h-3.5 w-3.5" />
-                                <span>{subItem.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === "/masters"}
+                            data-testid="nav-masters"
+                          >
+                            <Link href="/masters">
+                              <Database className="h-3.5 w-3.5" />
+                              <span>Masters</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === "/settings"}
+                            data-testid="nav-settings"
+                          >
+                            <Link href="/settings">
+                              <Settings className="h-3.5 w-3.5" />
+                              <span>Settings</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        
+                        {/* User Management nested collapsible */}
+                        <Collapsible defaultOpen={isUserManagementActive} className="group/usermgmt">
+                          <SidebarMenuSubItem>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuSubButton
+                                isActive={isUserManagementActive}
+                                data-testid="nav-user-management"
+                                className="cursor-pointer"
+                              >
+                                <UserCog className="h-3.5 w-3.5" />
+                                <span>User Management</span>
+                                <ChevronRight className="ml-auto h-3 w-3 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
+                              </SidebarMenuSubButton>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="pl-4 space-y-1 mt-1">
+                                {userManagementSubItems.map((subItem) => (
+                                  <SidebarMenuSubButton
+                                    key={subItem.title}
+                                    asChild
+                                    isActive={location === subItem.url}
+                                    data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                                    className="text-xs"
+                                  >
+                                    <Link href={subItem.url}>
+                                      <subItem.icon className="h-3 w-3" />
+                                      <span>{subItem.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
                           </SidebarMenuSubItem>
-                        ))}
+                        </Collapsible>
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
+              )}
+
+              {/* Settings for non-admin users */}
+              {user?.role !== "admin" && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/settings"}
+                    data-testid="nav-settings"
+                  >
+                    <Link href="/settings">
+                      <Settings className="h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               )}
             </SidebarMenu>
           </SidebarGroupContent>
