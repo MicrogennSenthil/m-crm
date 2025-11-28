@@ -748,6 +748,7 @@ export const userRoleAssignments = pgTable("user_role_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   roleId: varchar("role_id").notNull().references(() => userRoles.id, { onDelete: "cascade" }),
+  isPrimary: boolean("is_primary").default(false),
   assignedBy: varchar("assigned_by").references(() => users.id),
   assignedAt: timestamp("assigned_at").defaultNow(),
   isActive: boolean("is_active").default(true),

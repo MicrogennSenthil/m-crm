@@ -28,6 +28,11 @@ import {
   insertUserRoleRightSchema,
   insertTaskSchema,
   insertTaskCommentSchema,
+  insertDepartmentSchema,
+  insertSystemModuleSchema,
+  insertUserRoleAssignmentSchema,
+  insertRoleChangeHistorySchema,
+  insertUserModulePermissionSchema,
 } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
@@ -977,6 +982,431 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting user role right:", error);
       res.status(500).json({ message: "Failed to delete user role right" });
+    }
+  });
+
+  // =============================================
+  // DEPARTMENT ROUTES
+  // =============================================
+
+  app.get("/api/departments", isAuthenticated, async (req, res) => {
+    try {
+      const departmentsList = await storage.getDepartments();
+      res.json(departmentsList);
+    } catch (error) {
+      console.error("Error fetching departments:", error);
+      res.status(500).json({ message: "Failed to fetch departments" });
+    }
+  });
+
+  app.get("/api/departments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const dept = await storage.getDepartment(req.params.id);
+      if (!dept) {
+        return res.status(404).json({ message: "Department not found" });
+      }
+      res.json(dept);
+    } catch (error) {
+      console.error("Error fetching department:", error);
+      res.status(500).json({ message: "Failed to fetch department" });
+    }
+  });
+
+  app.post("/api/departments", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertDepartmentSchema.parse(req.body);
+      const newDept = await storage.createDepartment(validatedData);
+      
+      await storage.logActivity({
+        entityType: "department",
+        entityId: newDept.id,
+        action: "created",
+        description: `New department created: ${newDept.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newDept);
+    } catch (error) {
+      console.error("Error creating department:", error);
+      res.status(400).json({ message: "Failed to create department" });
+    }
+  });
+
+  app.patch("/api/departments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateDepartment(req.params.id, req.body);
+      
+      await storage.logActivity({
+        entityType: "department",
+        entityId: updated.id,
+        action: "updated",
+        description: `Department updated: ${updated.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating department:", error);
+      res.status(400).json({ message: "Failed to update department" });
+    }
+  });
+
+  app.delete("/api/departments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const dept = await storage.getDepartment(req.params.id);
+      if (!dept) {
+        return res.status(404).json({ message: "Department not found" });
+      }
+      
+      await storage.deleteDepartment(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "department",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Department deleted: ${dept.name}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Department deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting department:", error);
+      res.status(500).json({ message: "Failed to delete department" });
+    }
+  });
+
+  // =============================================
+  // SYSTEM MODULE ROUTES (for permissions)
+  // =============================================
+
+  app.get("/api/system-modules", isAuthenticated, async (req, res) => {
+    try {
+      const modulesList = await storage.getSystemModules();
+      res.json(modulesList);
+    } catch (error) {
+      console.error("Error fetching system modules:", error);
+      res.status(500).json({ message: "Failed to fetch system modules" });
+    }
+  });
+
+  app.get("/api/system-modules/:id", isAuthenticated, async (req, res) => {
+    try {
+      const module = await storage.getSystemModule(req.params.id);
+      if (!module) {
+        return res.status(404).json({ message: "System module not found" });
+      }
+      res.json(module);
+    } catch (error) {
+      console.error("Error fetching system module:", error);
+      res.status(500).json({ message: "Failed to fetch system module" });
+    }
+  });
+
+  app.post("/api/system-modules", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertSystemModuleSchema.parse(req.body);
+      const newModule = await storage.createSystemModule(validatedData);
+      
+      await storage.logActivity({
+        entityType: "system_module",
+        entityId: newModule.id,
+        action: "created",
+        description: `New system module created: ${newModule.displayName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newModule);
+    } catch (error) {
+      console.error("Error creating system module:", error);
+      res.status(400).json({ message: "Failed to create system module" });
+    }
+  });
+
+  app.patch("/api/system-modules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateSystemModule(req.params.id, req.body);
+      
+      await storage.logActivity({
+        entityType: "system_module",
+        entityId: updated.id,
+        action: "updated",
+        description: `System module updated: ${updated.displayName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating system module:", error);
+      res.status(400).json({ message: "Failed to update system module" });
+    }
+  });
+
+  app.delete("/api/system-modules/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const module = await storage.getSystemModule(req.params.id);
+      if (!module) {
+        return res.status(404).json({ message: "System module not found" });
+      }
+      
+      await storage.deleteSystemModule(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "system_module",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `System module deleted: ${module.displayName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "System module deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting system module:", error);
+      res.status(500).json({ message: "Failed to delete system module" });
+    }
+  });
+
+  // =============================================
+  // USER ROLE ASSIGNMENT ROUTES
+  // =============================================
+
+  app.get("/api/user-role-assignments", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const assignments = await storage.getUserRoleAssignments(userId as string);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching user role assignments:", error);
+      res.status(500).json({ message: "Failed to fetch user role assignments" });
+    }
+  });
+
+  app.get("/api/user-role-assignments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const assignment = await storage.getUserRoleAssignment(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ message: "User role assignment not found" });
+      }
+      res.json(assignment);
+    } catch (error) {
+      console.error("Error fetching user role assignment:", error);
+      res.status(500).json({ message: "Failed to fetch user role assignment" });
+    }
+  });
+
+  app.post("/api/user-role-assignments", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertUserRoleAssignmentSchema.parse(req.body);
+      
+      // Record the previous role if this is a role change
+      const existingAssignments = await storage.getUserRoleAssignments(validatedData.userId);
+      const previousPrimaryRole = existingAssignments.find(a => a.isPrimary);
+      
+      const newAssignment = await storage.assignRoleToUser({
+        ...validatedData,
+        assignedBy: req.user.claims.sub,
+      });
+      
+      // If this is a primary role change, create history record
+      if (validatedData.isPrimary && previousPrimaryRole && previousPrimaryRole.roleId !== validatedData.roleId) {
+        await storage.createRoleChangeHistory({
+          userId: validatedData.userId,
+          previousRoleId: previousPrimaryRole.roleId,
+          newRoleId: validatedData.roleId,
+          changedBy: req.user.claims.sub,
+          reason: req.body.reason || "Role assignment",
+        });
+        
+        // Deactivate previous primary role
+        await storage.removeRoleFromUser(previousPrimaryRole.id);
+      }
+      
+      const role = await storage.getUserRole(validatedData.roleId);
+      await storage.logActivity({
+        entityType: "user_role_assignment",
+        entityId: newAssignment.id,
+        action: "created",
+        description: `Role ${role?.displayName} assigned to user`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newAssignment);
+    } catch (error) {
+      console.error("Error assigning role to user:", error);
+      res.status(400).json({ message: "Failed to assign role to user" });
+    }
+  });
+
+  app.delete("/api/user-role-assignments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const assignment = await storage.getUserRoleAssignment(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ message: "User role assignment not found" });
+      }
+      
+      await storage.removeRoleFromUser(req.params.id);
+      
+      const role = await storage.getUserRole(assignment.roleId);
+      await storage.logActivity({
+        entityType: "user_role_assignment",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Role ${role?.displayName} removed from user`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Role removed from user successfully" });
+    } catch (error) {
+      console.error("Error removing role from user:", error);
+      res.status(500).json({ message: "Failed to remove role from user" });
+    }
+  });
+
+  // Get user with all assigned roles and effective permissions
+  app.get("/api/users/:id/roles", isAuthenticated, async (req, res) => {
+    try {
+      const userWithRoles = await storage.getUserWithRoles(req.params.id);
+      if (!userWithRoles) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(userWithRoles);
+    } catch (error) {
+      console.error("Error fetching user with roles:", error);
+      res.status(500).json({ message: "Failed to fetch user with roles" });
+    }
+  });
+
+  // =============================================
+  // ROLE CHANGE HISTORY ROUTES
+  // =============================================
+
+  app.get("/api/role-change-history", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.query;
+      const history = await storage.getRoleChangeHistory(userId as string);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching role change history:", error);
+      res.status(500).json({ message: "Failed to fetch role change history" });
+    }
+  });
+
+  // =============================================
+  // USER MODULE PERMISSION ROUTES
+  // =============================================
+
+  app.get("/api/user-module-permissions", isAuthenticated, async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
+      const permissions = await storage.getUserModulePermissions(userId as string);
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching user module permissions:", error);
+      res.status(500).json({ message: "Failed to fetch user module permissions" });
+    }
+  });
+
+  app.get("/api/user-module-permissions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const permission = await storage.getUserModulePermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ message: "User module permission not found" });
+      }
+      res.json(permission);
+    } catch (error) {
+      console.error("Error fetching user module permission:", error);
+      res.status(500).json({ message: "Failed to fetch user module permission" });
+    }
+  });
+
+  app.post("/api/user-module-permissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertUserModulePermissionSchema.parse(req.body);
+      const newPermission = await storage.setUserModulePermission(validatedData);
+      
+      const module = await storage.getSystemModule(validatedData.moduleId);
+      await storage.logActivity({
+        entityType: "user_module_permission",
+        entityId: newPermission.id,
+        action: "created",
+        description: `Permission set for module: ${module?.displayName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(newPermission);
+    } catch (error) {
+      console.error("Error setting user module permission:", error);
+      res.status(400).json({ message: "Failed to set user module permission" });
+    }
+  });
+
+  app.patch("/api/user-module-permissions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const updated = await storage.updateUserModulePermission(req.params.id, req.body);
+      
+      await storage.logActivity({
+        entityType: "user_module_permission",
+        entityId: updated.id,
+        action: "updated",
+        description: `User module permission updated`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user module permission:", error);
+      res.status(400).json({ message: "Failed to update user module permission" });
+    }
+  });
+
+  app.delete("/api/user-module-permissions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const permission = await storage.getUserModulePermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ message: "User module permission not found" });
+      }
+      
+      await storage.deleteUserModulePermission(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "user_module_permission",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `User module permission deleted`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "User module permission deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting user module permission:", error);
+      res.status(500).json({ message: "Failed to delete user module permission" });
+    }
+  });
+
+  // Get user's effective permissions (combined from roles and individual overrides)
+  app.get("/api/users/:id/effective-permissions", isAuthenticated, async (req, res) => {
+    try {
+      const permissions = await storage.getUserEffectivePermissions(req.params.id);
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching user effective permissions:", error);
+      res.status(500).json({ message: "Failed to fetch user effective permissions" });
+    }
+  });
+
+  // Get role with all its rights
+  app.get("/api/user-roles/:id/rights", isAuthenticated, async (req, res) => {
+    try {
+      const roleWithRights = await storage.getRoleWithRights(req.params.id);
+      if (!roleWithRights) {
+        return res.status(404).json({ message: "Role not found" });
+      }
+      res.json(roleWithRights);
+    } catch (error) {
+      console.error("Error fetching role with rights:", error);
+      res.status(500).json({ message: "Failed to fetch role with rights" });
     }
   });
 
