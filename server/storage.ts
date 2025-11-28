@@ -24,6 +24,11 @@ import {
   tasks,
   taskComments,
   otpVerifications,
+  departments,
+  systemModules,
+  userRoleAssignments,
+  roleChangeHistory,
+  userModulePermissions,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -80,6 +85,18 @@ import {
   type PlanningChangeLog,
   type InsertPlanningChangeLog,
   type CustomerWithLifecycle,
+  type Department,
+  type InsertDepartment,
+  type SystemModule,
+  type InsertSystemModule,
+  type UserRoleAssignment,
+  type InsertUserRoleAssignment,
+  type RoleChangeHistory,
+  type InsertRoleChangeHistory,
+  type UserModulePermission,
+  type InsertUserModulePermission,
+  type UserWithRoles,
+  type RoleWithRights,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -256,6 +273,56 @@ export interface IStorage {
   createTaskComment(comment: InsertTaskComment): Promise<TaskComment>;
   updateTaskComment(id: string, data: Partial<InsertTaskComment>): Promise<TaskComment>;
   deleteTaskComment(id: string): Promise<void>;
+
+  // Department operations (User Management)
+  getDepartments(): Promise<Department[]>;
+  getDepartment(id: string): Promise<Department | undefined>;
+  createDepartment(dept: InsertDepartment): Promise<Department>;
+  updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department>;
+  deleteDepartment(id: string): Promise<void>;
+
+  // System Module operations (for permissions)
+  getSystemModules(): Promise<SystemModule[]>;
+  getSystemModule(id: string): Promise<SystemModule | undefined>;
+  createSystemModule(module: InsertSystemModule): Promise<SystemModule>;
+  updateSystemModule(id: string, data: Partial<InsertSystemModule>): Promise<SystemModule>;
+  deleteSystemModule(id: string): Promise<void>;
+
+  // User Role Assignment operations
+  getUserRoleAssignments(userId?: string): Promise<(UserRoleAssignment & { role?: UserRole })[]>;
+  getUserRoleAssignment(id: string): Promise<UserRoleAssignment | undefined>;
+  assignRoleToUser(assignment: InsertUserRoleAssignment): Promise<UserRoleAssignment>;
+  removeRoleFromUser(id: string): Promise<void>;
+  getUserWithRoles(userId: string): Promise<UserWithRoles | undefined>;
+
+  // Role Change History operations
+  getRoleChangeHistory(userId?: string): Promise<(RoleChangeHistory & { 
+    previousRole?: UserRole; 
+    newRole?: UserRole;
+    changedByUser?: User;
+  })[]>;
+  createRoleChangeHistory(history: InsertRoleChangeHistory): Promise<RoleChangeHistory>;
+
+  // User Module Permission operations
+  getUserModulePermissions(userId: string): Promise<(UserModulePermission & { module?: SystemModule })[]>;
+  getUserModulePermission(id: string): Promise<UserModulePermission | undefined>;
+  setUserModulePermission(permission: InsertUserModulePermission): Promise<UserModulePermission>;
+  updateUserModulePermission(id: string, data: Partial<InsertUserModulePermission>): Promise<UserModulePermission>;
+  deleteUserModulePermission(id: string): Promise<void>;
+  
+  // Get user's effective permissions (combined from roles and individual overrides)
+  getUserEffectivePermissions(userId: string): Promise<{
+    module: string;
+    moduleName: string;
+    canView: boolean;
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    source: 'role' | 'user';
+  }[]>;
+
+  // Get role with all its rights
+  getRoleWithRights(roleId: string): Promise<RoleWithRights | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1725,6 +1792,283 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTaskComment(id: string): Promise<void> {
     await db.delete(taskComments).where(eq(taskComments.id, id));
+  }
+
+  // Department operations
+  async getDepartments(): Promise<Department[]> {
+    return await db.select().from(departments).orderBy(departments.name);
+  }
+
+  async getDepartment(id: string): Promise<Department | undefined> {
+    const [dept] = await db.select().from(departments).where(eq(departments.id, id));
+    return dept;
+  }
+
+  async createDepartment(dept: InsertDepartment): Promise<Department> {
+    const [newDept] = await db.insert(departments).values(dept).returning();
+    return newDept;
+  }
+
+  async updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department> {
+    const [updated] = await db
+      .update(departments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(departments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDepartment(id: string): Promise<void> {
+    await db.delete(departments).where(eq(departments.id, id));
+  }
+
+  // System Module operations
+  async getSystemModules(): Promise<SystemModule[]> {
+    return await db.select().from(systemModules).orderBy(systemModules.sortOrder);
+  }
+
+  async getSystemModule(id: string): Promise<SystemModule | undefined> {
+    const [module] = await db.select().from(systemModules).where(eq(systemModules.id, id));
+    return module;
+  }
+
+  async createSystemModule(module: InsertSystemModule): Promise<SystemModule> {
+    const [newModule] = await db.insert(systemModules).values(module).returning();
+    return newModule;
+  }
+
+  async updateSystemModule(id: string, data: Partial<InsertSystemModule>): Promise<SystemModule> {
+    const [updated] = await db
+      .update(systemModules)
+      .set(data)
+      .where(eq(systemModules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSystemModule(id: string): Promise<void> {
+    await db.delete(systemModules).where(eq(systemModules.id, id));
+  }
+
+  // User Role Assignment operations
+  async getUserRoleAssignments(userId?: string): Promise<(UserRoleAssignment & { role?: UserRole })[]> {
+    const query = userId 
+      ? db.select().from(userRoleAssignments).where(and(eq(userRoleAssignments.userId, userId), eq(userRoleAssignments.isActive, true)))
+      : db.select().from(userRoleAssignments).where(eq(userRoleAssignments.isActive, true));
+    
+    const assignments = await query;
+    
+    const enriched = await Promise.all(
+      assignments.map(async (assignment) => {
+        const [role] = await db.select().from(userRoles).where(eq(userRoles.id, assignment.roleId));
+        return { ...assignment, role };
+      })
+    );
+    
+    return enriched;
+  }
+
+  async getUserRoleAssignment(id: string): Promise<UserRoleAssignment | undefined> {
+    const [assignment] = await db.select().from(userRoleAssignments).where(eq(userRoleAssignments.id, id));
+    return assignment;
+  }
+
+  async assignRoleToUser(assignment: InsertUserRoleAssignment): Promise<UserRoleAssignment> {
+    const [newAssignment] = await db.insert(userRoleAssignments).values(assignment).returning();
+    return newAssignment;
+  }
+
+  async removeRoleFromUser(id: string): Promise<void> {
+    await db.update(userRoleAssignments).set({ isActive: false }).where(eq(userRoleAssignments.id, id));
+  }
+
+  async getUserWithRoles(userId: string): Promise<UserWithRoles | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return undefined;
+
+    const assignments = await this.getUserRoleAssignments(userId);
+    const roles = assignments.map(a => a.role).filter((r): r is UserRole => !!r);
+    
+    // Get effective permissions
+    const permissions = await this.getUserEffectivePermissions(userId);
+
+    return {
+      ...user,
+      roles,
+      permissions: permissions.map(p => ({
+        module: p.module,
+        canView: p.canView,
+        canCreate: p.canCreate,
+        canEdit: p.canEdit,
+        canDelete: p.canDelete,
+      })),
+    };
+  }
+
+  // Role Change History operations
+  async getRoleChangeHistory(userId?: string): Promise<(RoleChangeHistory & { 
+    previousRole?: UserRole; 
+    newRole?: UserRole;
+    changedByUser?: User;
+  })[]> {
+    const query = userId 
+      ? db.select().from(roleChangeHistory).where(eq(roleChangeHistory.userId, userId)).orderBy(desc(roleChangeHistory.createdAt))
+      : db.select().from(roleChangeHistory).orderBy(desc(roleChangeHistory.createdAt));
+    
+    const history = await query;
+    
+    const enriched = await Promise.all(
+      history.map(async (h) => {
+        const [previousRole] = h.previousRoleId 
+          ? await db.select().from(userRoles).where(eq(userRoles.id, h.previousRoleId))
+          : [undefined];
+        const [newRole] = h.newRoleId 
+          ? await db.select().from(userRoles).where(eq(userRoles.id, h.newRoleId))
+          : [undefined];
+        const [changedByUser] = await db.select().from(users).where(eq(users.id, h.changedBy));
+        return { ...h, previousRole, newRole, changedByUser };
+      })
+    );
+    
+    return enriched;
+  }
+
+  async createRoleChangeHistory(history: InsertRoleChangeHistory): Promise<RoleChangeHistory> {
+    const [newHistory] = await db.insert(roleChangeHistory).values(history).returning();
+    return newHistory;
+  }
+
+  // User Module Permission operations
+  async getUserModulePermissions(userId: string): Promise<(UserModulePermission & { module?: SystemModule })[]> {
+    const permissions = await db
+      .select()
+      .from(userModulePermissions)
+      .where(eq(userModulePermissions.userId, userId));
+    
+    const enriched = await Promise.all(
+      permissions.map(async (p) => {
+        const [module] = await db.select().from(systemModules).where(eq(systemModules.id, p.moduleId));
+        return { ...p, module };
+      })
+    );
+    
+    return enriched;
+  }
+
+  async getUserModulePermission(id: string): Promise<UserModulePermission | undefined> {
+    const [permission] = await db.select().from(userModulePermissions).where(eq(userModulePermissions.id, id));
+    return permission;
+  }
+
+  async setUserModulePermission(permission: InsertUserModulePermission): Promise<UserModulePermission> {
+    // Check if permission already exists for this user and module
+    const existing = await db
+      .select()
+      .from(userModulePermissions)
+      .where(and(
+        eq(userModulePermissions.userId, permission.userId),
+        eq(userModulePermissions.moduleId, permission.moduleId)
+      ));
+    
+    if (existing.length > 0) {
+      // Update existing
+      const [updated] = await db
+        .update(userModulePermissions)
+        .set({ ...permission, updatedAt: new Date() })
+        .where(eq(userModulePermissions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new
+    const [newPermission] = await db.insert(userModulePermissions).values(permission).returning();
+    return newPermission;
+  }
+
+  async updateUserModulePermission(id: string, data: Partial<InsertUserModulePermission>): Promise<UserModulePermission> {
+    const [updated] = await db
+      .update(userModulePermissions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userModulePermissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteUserModulePermission(id: string): Promise<void> {
+    await db.delete(userModulePermissions).where(eq(userModulePermissions.id, id));
+  }
+
+  async getUserEffectivePermissions(userId: string): Promise<{
+    module: string;
+    moduleName: string;
+    canView: boolean;
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    source: 'role' | 'user';
+  }[]> {
+    // Get all system modules
+    const allModules = await this.getSystemModules();
+    
+    // Get user's role assignments
+    const assignments = await this.getUserRoleAssignments(userId);
+    const roleIds = assignments.map(a => a.roleId);
+    
+    // Get role rights for all assigned roles
+    const allRoleRights = roleIds.length > 0 
+      ? await db.select().from(userRoleRights).where(sql`${userRoleRights.roleId} IN (${sql.join(roleIds.map(id => sql`${id}`), sql`, `)})`)
+      : [];
+    
+    // Get user's individual permissions
+    const userPermissions = await this.getUserModulePermissions(userId);
+    
+    // Combine permissions for each module
+    const effectivePermissions = allModules.map(module => {
+      // Check for user-specific override first
+      const userPerm = userPermissions.find(p => p.module?.name === module.name);
+      if (userPerm) {
+        return {
+          module: module.name,
+          moduleName: module.displayName,
+          canView: userPerm.canView || false,
+          canCreate: userPerm.canCreate || false,
+          canEdit: userPerm.canEdit || false,
+          canDelete: userPerm.canDelete || false,
+          source: 'user' as const,
+        };
+      }
+      
+      // Aggregate permissions from all roles (OR logic - if any role grants permission, user has it)
+      const rolePerms = allRoleRights.filter(r => r.module === module.name);
+      const hasView = rolePerms.some(r => r.canView);
+      const hasCreate = rolePerms.some(r => r.canCreate);
+      const hasEdit = rolePerms.some(r => r.canEdit);
+      const hasDelete = rolePerms.some(r => r.canDelete);
+      
+      return {
+        module: module.name,
+        moduleName: module.displayName,
+        canView: hasView,
+        canCreate: hasCreate,
+        canEdit: hasEdit,
+        canDelete: hasDelete,
+        source: 'role' as const,
+      };
+    });
+    
+    return effectivePermissions;
+  }
+
+  async getRoleWithRights(roleId: string): Promise<RoleWithRights | undefined> {
+    const [role] = await db.select().from(userRoles).where(eq(userRoles.id, roleId));
+    if (!role) return undefined;
+    
+    const rights = await db.select().from(userRoleRights).where(eq(userRoleRights.roleId, roleId));
+    
+    return {
+      ...role,
+      rights,
+    };
   }
 }
 
