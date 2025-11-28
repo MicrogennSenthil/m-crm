@@ -328,16 +328,7 @@ export default function AuthSignup() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center space-y-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or</span>
-              </div>
-            </div>
-
+          <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
               <button 
@@ -348,15 +339,6 @@ export default function AuthSignup() {
                 Sign in
               </button>
             </p>
-
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={() => setLocation("/api/login")}
-              data-testid="button-signup-with-replit"
-            >
-              Continue with Replit
-            </Button>
           </div>
         </CardContent>
       </Card>
