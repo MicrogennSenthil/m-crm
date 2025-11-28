@@ -985,6 +985,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk update role rights for a role
+  app.post("/api/user-roles/:roleId/rights/bulk", isAuthenticated, async (req: any, res) => {
+    try {
+      const { roleId } = req.params;
+      const { rights } = req.body;
+      
+      if (!Array.isArray(rights)) {
+        return res.status(400).json({ message: "Rights must be an array" });
+      }
+      
+      // Get existing rights for this role
+      const existingRights = await storage.getUserRoleRights(roleId);
+      
+      // Process each module permission
+      for (const right of rights) {
+        const existingRight = existingRights.find((r: any) => r.moduleId === right.moduleId);
+        
+        if (existingRight) {
+          // Update existing right
+          await storage.updateUserRoleRight(existingRight.id, {
+            canView: right.canView,
+            canCreate: right.canCreate,
+            canEdit: right.canEdit,
+            canDelete: right.canDelete,
+          });
+        } else {
+          // Create new right
+          await storage.createUserRoleRight({
+            roleId,
+            moduleId: right.moduleId,
+            module: "system", // Legacy field
+            canView: right.canView,
+            canCreate: right.canCreate,
+            canEdit: right.canEdit,
+            canDelete: right.canDelete,
+          });
+        }
+      }
+      
+      await storage.logActivity({
+        entityType: "user_role",
+        entityId: roleId,
+        action: "permissions_updated",
+        description: `Role permissions updated for ${rights.length} modules`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Role permissions updated successfully" });
+    } catch (error) {
+      console.error("Error updating role permissions:", error);
+      res.status(500).json({ message: "Failed to update role permissions" });
+    }
+  });
+
   // =============================================
   // DEPARTMENT ROUTES
   // =============================================
@@ -1162,6 +1216,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting system module:", error);
       res.status(500).json({ message: "Failed to delete system module" });
+    }
+  });
+
+  // Seed default system modules
+  app.post("/api/system-modules/seed", isAuthenticated, async (req: any, res) => {
+    try {
+      const defaultModules = [
+        { name: "dashboard", displayName: "Dashboard", description: "Main dashboard and analytics", icon: "LayoutDashboard", sortOrder: 1 },
+        { name: "leads", displayName: "Sales / Leads", description: "Lead management and sales pipeline", icon: "Target", sortOrder: 2 },
+        { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 3 },
+        { name: "projects", displayName: "Implementation", description: "Project implementation tracking", icon: "FolderKanban", sortOrder: 4 },
+        { name: "tickets", displayName: "Support Tickets", description: "Customer support ticket management", icon: "Ticket", sortOrder: 5 },
+        { name: "tasks", displayName: "Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 6 },
+        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 7 },
+        { name: "reports", displayName: "Reports", description: "Reports and analytics", icon: "BarChart3", sortOrder: 8 },
+        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 9 },
+        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 10 },
+      ];
+      
+      const existingModules = await storage.getSystemModules();
+      const existingNames = existingModules.map(m => m.name);
+      
+      const createdModules = [];
+      for (const mod of defaultModules) {
+        if (!existingNames.includes(mod.name)) {
+          const created = await storage.createSystemModule(mod);
+          createdModules.push(created);
+        }
+      }
+      
+      if (createdModules.length > 0) {
+        await storage.logActivity({
+          entityType: "system_module",
+          entityId: "seed",
+          action: "seeded",
+          description: `${createdModules.length} default system modules created`,
+          userId: req.user.claims.sub,
+        });
+      }
+      
+      res.json({ 
+        message: `Created ${createdModules.length} new modules`,
+        created: createdModules 
+      });
+    } catch (error) {
+      console.error("Error seeding system modules:", error);
+      res.status(500).json({ message: "Failed to seed system modules" });
     }
   });
 

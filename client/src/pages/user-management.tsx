@@ -211,6 +211,20 @@ export default function UserManagement() {
     },
   });
 
+  const seedModulesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/system-modules/seed", {});
+      return response.json();
+    },
+    onSuccess: (data: { message: string; created: SystemModule[] }) => {
+      toast({ title: "Modules Seeded", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-modules"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to seed modules", variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ type, id }: { type: string; id: string }) => {
       const endpoints: Record<string, string> = {
@@ -296,7 +310,7 @@ export default function UserManagement() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="users" className="flex items-center gap-2" data-testid="tab-users">
             <Users className="h-4 w-4" />
             Users
@@ -304,6 +318,10 @@ export default function UserManagement() {
           <TabsTrigger value="roles" className="flex items-center gap-2" data-testid="tab-roles">
             <ShieldCheck className="h-4 w-4" />
             Roles
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className="flex items-center gap-2" data-testid="tab-permissions">
+            <Key className="h-4 w-4" />
+            Permissions
           </TabsTrigger>
           <TabsTrigger value="departments" className="flex items-center gap-2" data-testid="tab-departments">
             <Building className="h-4 w-4" />
@@ -520,6 +538,26 @@ export default function UserManagement() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="permissions" className="mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Role Permissions</CardTitle>
+                  <CardDescription>Configure module access permissions for each role</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <PermissionMatrix 
+                roles={roles} 
+                modules={modules} 
+                isLoading={rolesLoading || modulesLoading} 
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="departments" className="mt-6">
           <Card>
             <CardHeader>
@@ -612,16 +650,27 @@ export default function UserManagement() {
                   <CardTitle>System Modules</CardTitle>
                   <CardDescription>Define system modules for permission control</CardDescription>
                 </div>
-                <Button
-                  onClick={() => {
-                    setEditingModule(null);
-                    setModuleDialogOpen(true);
-                  }}
-                  data-testid="button-add-module"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Module
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => seedModulesMutation.mutate()}
+                    disabled={seedModulesMutation.isPending}
+                    data-testid="button-seed-modules"
+                  >
+                    {seedModulesMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Seed Default Modules
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setEditingModule(null);
+                      setModuleDialogOpen(true);
+                    }}
+                    data-testid="button-add-module"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Module
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1095,5 +1144,236 @@ function ModuleFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PermissionMatrix({
+  roles,
+  modules,
+  isLoading,
+}: {
+  roles: UserRole[];
+  modules: SystemModule[];
+  isLoading: boolean;
+}) {
+  const { toast } = useToast();
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, { canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { data: roleRights = [], refetch: refetchRights, isLoading: rightsLoading } = useQuery<UserRoleRight[]>({
+    queryKey: ["/api/user-role-rights", selectedRole],
+    enabled: !!selectedRole,
+  });
+
+  useEffect(() => {
+    if (roles.length > 0 && !selectedRole) {
+      setSelectedRole(roles[0].id);
+    }
+  }, [roles, selectedRole]);
+
+  useEffect(() => {
+    if (roleRights && modules) {
+      const permMap: Record<string, { canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }> = {};
+      modules.forEach(mod => {
+        const right = roleRights.find((r: UserRoleRight) => r.moduleId === mod.id);
+        permMap[mod.id] = {
+          canView: right?.canView ?? false,
+          canCreate: right?.canCreate ?? false,
+          canEdit: right?.canEdit ?? false,
+          canDelete: right?.canDelete ?? false,
+        };
+      });
+      setPermissions(permMap);
+    }
+  }, [roleRights, modules]);
+
+  const togglePermission = (moduleId: string, permission: 'canView' | 'canCreate' | 'canEdit' | 'canDelete') => {
+    setPermissions(prev => ({
+      ...prev,
+      [moduleId]: {
+        ...prev[moduleId],
+        [permission]: !prev[moduleId]?.[permission],
+      }
+    }));
+  };
+
+  const toggleAllForModule = (moduleId: string, enable: boolean) => {
+    setPermissions(prev => ({
+      ...prev,
+      [moduleId]: {
+        canView: enable,
+        canCreate: enable,
+        canEdit: enable,
+        canDelete: enable,
+      }
+    }));
+  };
+
+  const savePermissions = async () => {
+    if (!selectedRole) return;
+    setIsSaving(true);
+    try {
+      const rightsToSave = Object.entries(permissions).map(([moduleId, perm]) => ({
+        moduleId,
+        ...perm,
+      }));
+
+      await apiRequest("POST", `/api/user-roles/${selectedRole}/rights/bulk`, { rights: rightsToSave });
+      toast({ title: "Success", description: "Permissions saved successfully" });
+      refetchRights();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to save permissions", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading || rightsLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (modules.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No system modules defined. Create modules in the Modules tab first.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="role-select">Select Role:</Label>
+          <Select value={selectedRole || ""} onValueChange={setSelectedRole}>
+            <SelectTrigger className="w-[200px]" data-testid="select-permission-role">
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map(role => (
+                <SelectItem key={role.id} value={role.id} data-testid={`option-role-${role.id}`}>
+                  {role.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button onClick={savePermissions} disabled={isSaving || !selectedRole} data-testid="button-save-permissions">
+          {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Save Permissions
+        </Button>
+      </div>
+
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Module</TableHead>
+              <TableHead className="text-center w-24">
+                <div className="flex flex-col items-center gap-1">
+                  <Eye className="h-4 w-4" />
+                  <span className="text-xs">View</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-24">
+                <div className="flex flex-col items-center gap-1">
+                  <FilePlus className="h-4 w-4" />
+                  <span className="text-xs">Create</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-24">
+                <div className="flex flex-col items-center gap-1">
+                  <FileEdit className="h-4 w-4" />
+                  <span className="text-xs">Edit</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-24">
+                <div className="flex flex-col items-center gap-1">
+                  <Trash className="h-4 w-4" />
+                  <span className="text-xs">Delete</span>
+                </div>
+              </TableHead>
+              <TableHead className="text-center w-24">All</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {modules.map((mod, index) => {
+              const perm = permissions[mod.id] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
+              const allEnabled = perm.canView && perm.canCreate && perm.canEdit && perm.canDelete;
+              
+              return (
+                <TableRow key={mod.id} className={index % 2 === 0 ? "bg-background" : "bg-muted/30"}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{mod.displayName}</span>
+                      <span className="text-xs text-muted-foreground">{mod.description}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={perm.canView}
+                      onCheckedChange={() => togglePermission(mod.id, 'canView')}
+                      data-testid={`checkbox-view-${mod.id}`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={perm.canCreate}
+                      onCheckedChange={() => togglePermission(mod.id, 'canCreate')}
+                      data-testid={`checkbox-create-${mod.id}`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={perm.canEdit}
+                      onCheckedChange={() => togglePermission(mod.id, 'canEdit')}
+                      data-testid={`checkbox-edit-${mod.id}`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={perm.canDelete}
+                      onCheckedChange={() => togglePermission(mod.id, 'canDelete')}
+                      data-testid={`checkbox-delete-${mod.id}`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={allEnabled}
+                      onCheckedChange={(checked) => toggleAllForModule(mod.id, !!checked)}
+                      data-testid={`checkbox-all-${mod.id}`}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <Eye className="h-4 w-4" />
+          <span>View: Can view records</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FilePlus className="h-4 w-4" />
+          <span>Create: Can create new records</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FileEdit className="h-4 w-4" />
+          <span>Edit: Can modify records</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Trash className="h-4 w-4" />
+          <span>Delete: Can delete records</span>
+        </div>
+      </div>
+    </div>
   );
 }
