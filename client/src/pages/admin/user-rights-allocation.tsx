@@ -54,7 +54,14 @@ export default function UserRightsAllocation() {
   });
 
   const { data: roleRights = [], isLoading: rightsLoading, refetch: refetchRights } = useQuery<UserRoleRight[]>({
-    queryKey: ["/api/user-role-rights", { roleId: selectedRoleId }],
+    queryKey: ["/api/user-role-rights", selectedRoleId],
+    queryFn: async () => {
+      const res = await fetch(`/api/user-role-rights?roleId=${selectedRoleId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch role rights");
+      return res.json();
+    },
     enabled: !!selectedRoleId && currentUser?.role === "admin",
   });
 
