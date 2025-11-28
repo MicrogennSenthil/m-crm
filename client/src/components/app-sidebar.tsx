@@ -50,7 +50,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import microgennLogo from "@assets/MG Logo_1764263883732.png";
 
 // Navigation items based on design guidelines
 const mainMenuItems = [
@@ -183,62 +182,51 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon" data-testid="sidebar-main">
       <SidebarHeader className="p-2">
-        <div className="flex items-center justify-between gap-2">
-          {!isCollapsed && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <img 
-                src={microgennLogo} 
-                alt="Microgenn" 
-                className="h-8 w-auto object-contain"
-              />
-            </div>
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-end'} gap-1`}>
+          {!isMobile && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handlePin}
+                    className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                    data-testid="button-sidebar-pin"
+                  >
+                    {isPinned ? (
+                      <Pin className="h-4 w-4 fill-current" />
+                    ) : (
+                      <PinOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {isPinned ? "Unpin sidebar" : "Pin sidebar"}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCollapse}
+                    className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                    data-testid="button-sidebar-collapse"
+                  >
+                    {isCollapsed ? (
+                      <PanelLeft className="h-4 w-4" />
+                    ) : (
+                      <PanelLeftClose className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                </TooltipContent>
+              </Tooltip>
+            </>
           )}
-          <div className={`flex items-center gap-1 ${isCollapsed ? 'flex-col' : ''}`}>
-            {!isMobile && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handlePin}
-                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                      data-testid="button-sidebar-pin"
-                    >
-                      {isPinned ? (
-                        <Pin className="h-4 w-4 fill-current" />
-                      ) : (
-                        <PinOff className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isPinned ? "Unpin sidebar" : "Pin sidebar"}
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleCollapse}
-                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                      data-testid="button-sidebar-collapse"
-                    >
-                      {isCollapsed ? (
-                        <PanelLeft className="h-4 w-4" />
-                      ) : (
-                        <PanelLeftClose className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  </TooltipContent>
-                </Tooltip>
-              </>
-            )}
-          </div>
         </div>
       </SidebarHeader>
       <Separator className="bg-sidebar-border" />

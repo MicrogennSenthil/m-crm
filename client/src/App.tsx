@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
+import microgennLogo from "@assets/MG Logo_1764263883732.png";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -50,7 +51,13 @@ function AuthenticatedLayout() {
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <img 
+                src={microgennLogo} 
+                alt="Microgenn" 
+                className="h-8 w-auto object-contain"
+                data-testid="logo-microgenn"
+              />
               <ThemeToggle />
             </div>
           </header>
