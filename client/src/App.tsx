@@ -51,11 +51,11 @@ function AuthenticatedLayout() {
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <img 
                 src={microgennLogo} 
                 alt="Microgenn" 
-                className="h-8 w-auto object-contain"
+                className="h-10 sm:h-12 w-auto object-contain"
                 data-testid="logo-microgenn"
               />
               <ThemeToggle />
