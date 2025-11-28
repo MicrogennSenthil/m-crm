@@ -127,7 +127,7 @@ const settingsItems = [
 const adminItems = [
   {
     title: "User Management",
-    url: "/admin/users",
+    url: "/admin/user-management",
     icon: UserCog,
   },
 ];

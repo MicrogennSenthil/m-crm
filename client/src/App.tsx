@@ -29,6 +29,7 @@ import AuthLogin from "@/pages/auth-login";
 import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
 import AdminUsers from "@/pages/admin-users";
+import UserManagement from "@/pages/user-management";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -77,6 +78,7 @@ function AuthenticatedLayout() {
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
               <Route path="/admin/users" component={AdminUsers} />
+              <Route path="/admin/user-management" component={UserManagement} />
               <Route component={NotFound} />
             </Switch>
           </main>
