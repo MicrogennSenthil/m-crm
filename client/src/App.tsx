@@ -6,9 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-import microgennLogo from "@assets/MG Logo_1764263883732.png";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -29,48 +29,26 @@ import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
 import AdminUsers from "@/pages/admin-users";
 
-function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <Switch>
-        <Route path="/auth/login" component={AuthLogin} />
-        <Route path="/auth/signup" component={AuthSignup} />
-        <Route path="/auth/forgot-password" component={AuthForgotPassword} />
-        <Route path="/" component={Landing} />
-        <Route component={Landing} />
-      </Switch>
-    );
-  }
-
+function AuthenticatedLayout() {
+  const { isPinned, setIsPinned } = useSidebarPinned();
+  
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
+    <SidebarProvider 
+      style={style as React.CSSProperties}
+      open={isPinned ? true : undefined}
+      onOpenChange={isPinned ? undefined : undefined}
+    >
       <div className="flex h-screen w-full">
-        <AppSidebar />
+        <AppSidebar isPinned={isPinned} onPinChange={setIsPinned} />
         <SidebarInset className="flex flex-col flex-1">
           <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 sm:p-4 border-b bg-background">
             <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px]" />
-              <img 
-                src={microgennLogo} 
-                alt="Microgenn - Empowering Your Hotel's Digital Evolution" 
-                className="h-10 w-auto object-contain"
-                data-testid="logo-microgenn"
-              />
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
@@ -99,6 +77,32 @@ function Router() {
       </div>
     </SidebarProvider>
   );
+}
+
+function Router() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Switch>
+        <Route path="/auth/login" component={AuthLogin} />
+        <Route path="/auth/signup" component={AuthSignup} />
+        <Route path="/auth/forgot-password" component={AuthForgotPassword} />
+        <Route path="/" component={Landing} />
+        <Route component={Landing} />
+      </Switch>
+    );
+  }
+
+  return <AuthenticatedLayout />;
 }
 
 export default function App() {
