@@ -336,9 +336,8 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
       )}
       
       <SidebarContent 
-        ref={scrollContainerRef}
-        className="overflow-y-auto scrollbar-none"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        ref={scrollContainerRef as any}
+        className="overflow-y-auto"
       >
         <SidebarGroup>
           <SidebarGroupContent>
