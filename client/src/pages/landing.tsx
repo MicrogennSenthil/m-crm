@@ -9,7 +9,7 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b-2 border-b-[#FF9933]">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={microgennLogo} alt="M-CRM" className="h-10 w-auto" />
