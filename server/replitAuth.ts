@@ -145,10 +145,30 @@ export async function setupAuth(app: Express) {
   });
 }
 
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
+export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
+  // Check for local authentication (email/password)
+  if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
+    // For local auth, set up req.user with claims for consistency
+    const userId = (req.session as any).userId;
+    const user = await storage.getUser(userId);
+    if (user) {
+      req.user = {
+        claims: {
+          sub: userId,
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          metadata: { role: user.role }
+        }
+      };
+      return next();
+    }
+  }
+
+  // Check for OIDC/Replit Auth
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated() || !user?.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
@@ -174,14 +194,16 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
 };
 
-export const isAdmin: RequestHandler = async (req, res, next) => {
+export const isAdmin: RequestHandler = async (req: any, res, next) => {
   const user = req.user as any;
   
-  if (!user?.claims?.metadata?.role) {
+  // Check if user has admin role from claims (set by isAuthenticated middleware)
+  const role = user?.claims?.metadata?.role;
+  
+  if (!role) {
     return res.status(403).json({ message: "Access denied. Admin privileges required." });
   }
   
-  const role = user.claims.metadata.role;
   if (role !== "admin") {
     return res.status(403).json({ message: "Access denied. Admin privileges required." });
   }
