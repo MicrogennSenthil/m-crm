@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { Task, User, Lead, TaskAttachment } from "@shared/schema";
+import type { Task, User, Lead, TaskAttachment, Customer } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -49,8 +49,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { 
   Mic, MicOff, Calendar as CalendarIcon, X, Check, ChevronsUpDown, Play, Pause, Trash2,
-  Video, VideoOff, Camera, Image, Paperclip, FileIcon, StopCircle, Clock
+  Video, VideoOff, Camera, Image, Paperclip, FileIcon, StopCircle, Clock, Plus, Building2
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 const taskFormSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -120,6 +121,17 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Customer selection state
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({
+    name: "",
+    contactPerson: "",
+    email: "",
+    phone: "",
+  });
 
   // Fetch all users for assignment and mentions
   const { data: users = [] } = useQuery<User[]>({
@@ -130,6 +142,14 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
   });
+  
+  // Fetch all customers
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+  
+  // Filter active customers
+  const activeCustomers = customers.filter((c) => c.isActive !== false);
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -146,6 +166,29 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       relatedEntityId: undefined,
     },
   });
+
+  // Handle customer selection
+  const handleCustomerSelect = (customerId: string | null) => {
+    if (customerId === "new") {
+      setIsNewCustomer(true);
+      setSelectedCustomerId(null);
+      setNewCustomerData({ name: "", contactPerson: "", email: "", phone: "" });
+    } else {
+      setIsNewCustomer(false);
+      setSelectedCustomerId(customerId);
+      if (customerId) {
+        const customer = activeCustomers.find(c => c.id === customerId);
+        if (customer) {
+          form.setValue("relatedEntityType", "customer");
+          form.setValue("relatedEntityId", customerId);
+        }
+      } else {
+        form.setValue("relatedEntityType", undefined);
+        form.setValue("relatedEntityId", undefined);
+      }
+    }
+    setCustomerOpen(false);
+  };
 
   // Fetch next followup date when lead is selected
   const handleLeadSelect = async (leadId: string | null) => {
@@ -242,6 +285,10 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       setAudioUrl(null);
       setRecordingDuration(0);
       setSelectedLeadId(null);
+      // Reset customer state
+      setSelectedCustomerId(null);
+      setIsNewCustomer(false);
+      setNewCustomerData({ name: "", contactPerson: "", email: "", phone: "" });
       // Reset video/photo/attachment state
       setVideoBlob(null);
       setVideoUrl(null);
@@ -258,6 +305,25 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       setAttachments(task.attachments);
     }
   }, [task, form, open]);
+
+  // Create customer mutation
+  const createCustomerMutation = useMutation({
+    mutationFn: async (data: { name: string; contactPerson: string; email: string; phone: string }) => {
+      const response = await apiRequest("POST", "/api/customers", data);
+      return response.json();
+    },
+    onSuccess: (newCustomer) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      setSelectedCustomerId(newCustomer.id);
+      setIsNewCustomer(false);
+      form.setValue("relatedEntityType", "customer");
+      form.setValue("relatedEntityId", newCustomer.id);
+      toast({ title: "Customer created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create customer", variant: "destructive" });
+    },
+  });
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: TaskFormValues & { voiceNoteUrl?: string; voiceNoteDuration?: number }) => {
@@ -704,6 +770,160 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                 </p>
               )}
             </div>
+
+            {/* Customer Selection Section */}
+            <div className="space-y-2">
+              <FormLabel>Link to Customer (Optional)</FormLabel>
+              <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                    data-testid="select-customer"
+                  >
+                    {isNewCustomer 
+                      ? "Adding new customer..."
+                      : selectedCustomerId 
+                        ? activeCustomers.find(c => c.id === selectedCustomerId)?.name || "Select customer..."
+                        : "Select customer or add new..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search customers..." />
+                    <CommandList>
+                      <CommandEmpty>No customers found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => handleCustomerSelect(null)}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${!selectedCustomerId && !isNewCustomer ? "opacity-100" : "opacity-0"}`}
+                          />
+                          <span className="text-muted-foreground">No customer linked</span>
+                        </CommandItem>
+                        <Separator className="my-1" />
+                        <CommandItem
+                          onSelect={() => handleCustomerSelect("new")}
+                          className="text-primary"
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          <span className="font-medium">Add New Customer</span>
+                        </CommandItem>
+                        <Separator className="my-1" />
+                        {activeCustomers.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            onSelect={() => handleCustomerSelect(customer.id)}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selectedCustomerId === customer.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <div className="flex flex-col">
+                              <span className="flex items-center gap-2">
+                                <Building2 className="h-3 w-3" />
+                                {customer.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {customer.contactPerson} {customer.email && `- ${customer.email}`}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedCustomerId && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  Task will be linked to: {activeCustomers.find(c => c.id === selectedCustomerId)?.name}
+                </p>
+              )}
+            </div>
+
+            {/* New Customer Form Fields */}
+            {isNewCustomer && (
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/50">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    New Customer Details
+                  </h4>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsNewCustomer(false);
+                      setNewCustomerData({ name: "", contactPerson: "", email: "", phone: "" });
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <FormLabel className="text-xs">Company Name *</FormLabel>
+                    <Input
+                      placeholder="Company name"
+                      value={newCustomerData.name}
+                      onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                      data-testid="input-new-customer-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FormLabel className="text-xs">Contact Person</FormLabel>
+                    <Input
+                      placeholder="Contact person name"
+                      value={newCustomerData.contactPerson}
+                      onChange={(e) => setNewCustomerData({ ...newCustomerData, contactPerson: e.target.value })}
+                      data-testid="input-new-customer-contact"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FormLabel className="text-xs">Email</FormLabel>
+                    <Input
+                      type="email"
+                      placeholder="email@company.com"
+                      value={newCustomerData.email}
+                      onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                      data-testid="input-new-customer-email"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FormLabel className="text-xs">Phone</FormLabel>
+                    <Input
+                      placeholder="Phone number"
+                      value={newCustomerData.phone}
+                      onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                      data-testid="input-new-customer-phone"
+                    />
+                  </div>
+                </div>
+                
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (!newCustomerData.name.trim()) {
+                      toast({ title: "Company name is required", variant: "destructive" });
+                      return;
+                    }
+                    createCustomerMutation.mutate(newCustomerData);
+                  }}
+                  disabled={createCustomerMutation.isPending || !newCustomerData.name.trim()}
+                  data-testid="button-create-customer"
+                >
+                  {createCustomerMutation.isPending ? "Creating..." : "Create Customer"}
+                </Button>
+              </div>
+            )}
             
             <FormField
               control={form.control}
