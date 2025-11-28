@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -10,6 +11,8 @@ import {
   LogOut,
   ListTodo,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   FileText,
   Package,
   TicketCheck,
@@ -179,6 +182,42 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const { user } = useAuth();
   const { state, toggleSidebar, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
+  
+  // Scroll navigation
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+
+  const checkScrollability = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      setCanScrollUp(container.scrollTop > 0);
+      setCanScrollDown(container.scrollTop + container.clientHeight < container.scrollHeight - 5);
+    }
+  };
+
+  useEffect(() => {
+    checkScrollability();
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', checkScrollability);
+      // Check on resize too
+      const resizeObserver = new ResizeObserver(checkScrollability);
+      resizeObserver.observe(container);
+      return () => {
+        container.removeEventListener('scroll', checkScrollability);
+        resizeObserver.disconnect();
+      };
+    }
+  }, []);
+
+  const scrollUp = () => {
+    scrollContainerRef.current?.scrollBy({ top: -100, behavior: 'smooth' });
+  };
+
+  const scrollDown = () => {
+    scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
+  };
 
   // Check if user has access to reports (admin only)
   const canViewReports = user?.role === "admin";
@@ -280,7 +319,27 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
           </div>
         </div>
       </SidebarHeader>
-      <SidebarContent className="overflow-hidden">
+      
+      {/* Scroll Up Arrow - only show when can scroll up */}
+      {canScrollUp && !isCollapsed && (
+        <div className="flex justify-center py-1 bg-sidebar border-b border-sidebar-border">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={scrollUp}
+            className="h-6 w-full max-w-[80%] text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            data-testid="button-scroll-up"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+      
+      <SidebarContent 
+        ref={scrollContainerRef}
+        className="overflow-y-auto scrollbar-none"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -469,6 +528,21 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {/* Scroll Down Arrow - only show when can scroll down */}
+      {canScrollDown && !isCollapsed && (
+        <div className="flex justify-center py-1 bg-sidebar border-t border-sidebar-border">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={scrollDown}
+            className="h-6 w-full max-w-[80%] text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+            data-testid="button-scroll-down"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3 mb-3">

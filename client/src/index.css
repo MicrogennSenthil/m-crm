@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide scrollbar utility */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* LIGHT MODE - M-CRM Brand Colors */
 /* Primary: Navy Blue (#1a2b6d) - HSL: 228, 65%, 26% */
 /* Accent: Golden Yellow (#f5a623) - HSL: 42, 92%, 55% */
