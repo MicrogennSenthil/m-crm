@@ -285,7 +285,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon" data-testid="sidebar-main">
-      <SidebarHeader className="h-[52px] px-3 flex items-center">
+      <SidebarHeader className="h-[52px] px-3 flex items-center border-b-2 border-b-white">
         <div className="flex items-center justify-between gap-2 w-full">
           {!isCollapsed && (
             <h1 className="text-lg font-bold text-sidebar-primary truncate" data-testid="text-sidebar-title">
