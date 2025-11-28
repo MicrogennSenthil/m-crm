@@ -36,6 +36,7 @@ import {
   insertKnowledgeBaseSourceSchema,
   knowledgeBaseCategories,
   knowledgeBaseContentTypes,
+  supportedLanguages,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -4248,11 +4249,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get categories and content types for dropdowns
+  // Get categories, content types, and languages for dropdowns
   app.get("/api/knowledge-base/metadata", isAuthenticated, async (req: any, res) => {
     res.json({
       categories: knowledgeBaseCategories,
       contentTypes: knowledgeBaseContentTypes,
+      languages: supportedLanguages,
     });
   });
 
@@ -4260,7 +4262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/knowledge-base/sources", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { title, content, category, contentType, description } = req.body;
+      const { title, content, category, contentType, description, languageCode = "en", translationGroupId } = req.body;
 
       if (!title || !content || !category || !contentType) {
         return res.status(400).json({ message: "Title, content, category, and content type are required" });
@@ -4276,9 +4278,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid content type" });
       }
 
+      // Validate language code
+      const validLanguage = supportedLanguages.find(l => l.code === languageCode);
+      if (!validLanguage) {
+        return res.status(400).json({ message: "Invalid language code" });
+      }
+
       // Extract text from content
       const extractedText = extractTextFromContent(content, contentType);
       const totalTokens = estimateTokenCount(extractedText);
+
+      // Generate translation group ID if not provided (for original documents)
+      const groupId = translationGroupId || `tg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const isTranslation = !!translationGroupId;
 
       // Create the source record
       const source = await storage.createKnowledgeBaseSource({
@@ -4287,6 +4299,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contentType,
         description,
         originalContent: content,
+        languageCode,
+        translationGroupId: groupId,
+        translationStatus: isTranslation ? "translated" : "original",
         isActive: true,
         createdBy: userId,
       });
@@ -4307,6 +4322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sourceId: source.id,
         chunkIndex: index,
         content: chunk.text,
+        languageCode,
         tokenCount: estimateTokenCount(chunk.text),
         metadata: {
           startPosition: chunk.metadata.startChar,
@@ -4442,7 +4458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/knowledge-base/search", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const { query, category, limit = 10 } = req.body;
+      const { query, category, limit = 10, languageCode, includeCrossLanguage = false } = req.body;
 
       if (!query || typeof query !== 'string' || query.trim().length === 0) {
         return res.status(400).json({ message: "Search query is required" });
@@ -4453,23 +4469,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate embedding for the query
       const queryEmbedding = await generateEmbedding(query.trim());
 
-      // Search for similar chunks
+      // Search for similar chunks with language filtering
       const results = await storage.searchKnowledgeBase(
         queryEmbedding,
         Math.min(limit, 20),
-        category
+        category,
+        languageCode,
+        includeCrossLanguage
       );
 
       const searchDuration = Date.now() - startTime;
 
-      // Log the query for analytics
+      // Log the query for analytics with language info
       await storage.createKnowledgeBaseQuery({
         queryText: query.trim(),
         userId,
+        languageCode: languageCode || "en",
+        includeCrossLanguage,
         resultsCount: results.length,
         topResults: results.slice(0, 5).map(r => ({
           sourceId: r.sourceId,
           title: r.source?.title || 'Unknown',
+          languageCode: r.source?.languageCode,
           score: r.similarity,
         })),
         searchDurationMs: searchDuration,

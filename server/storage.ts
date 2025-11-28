@@ -345,7 +345,7 @@ export interface IStorage {
   createKnowledgeBaseChunk(chunk: InsertKnowledgeBaseChunk): Promise<KnowledgeBaseChunk>;
   createKnowledgeBaseChunks(chunks: InsertKnowledgeBaseChunk[]): Promise<KnowledgeBaseChunk[]>;
   deleteKnowledgeBaseChunksBySource(sourceId: string): Promise<void>;
-  searchKnowledgeBase(embedding: number[], limit?: number, category?: string): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]>;
+  searchKnowledgeBase(embedding: number[], limit?: number, category?: string, languageCode?: string, includeCrossLanguage?: boolean): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]>;
 
   // Knowledge Base Query operations (for analytics)
   createKnowledgeBaseQuery(query: InsertKnowledgeBaseQuery): Promise<KnowledgeBaseQuery>;
@@ -2146,7 +2146,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(knowledgeBaseChunks).where(eq(knowledgeBaseChunks.sourceId, sourceId));
   }
 
-  async searchKnowledgeBase(embedding: number[], limit: number = 10, category?: string): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]> {
+  async searchKnowledgeBase(embedding: number[], limit: number = 10, category?: string, languageCode?: string, includeCrossLanguage: boolean = false): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]> {
     const embeddingString = `[${embedding.join(',')}]`;
     
     let query = sql`
@@ -2156,6 +2156,8 @@ export class DatabaseStorage implements IStorage {
         s.title as source_title,
         s.category as source_category,
         s.content_type as source_content_type,
+        s.language_code as source_language_code,
+        s.translation_group_id as source_translation_group_id,
         s.created_by as source_created_by,
         s.created_at as source_created_at,
         1 - (c.embedding <=> ${embeddingString}::vector) as similarity
@@ -2168,6 +2170,12 @@ export class DatabaseStorage implements IStorage {
       query = sql`${query} AND s.category = ${category}`;
     }
     
+    // Apply language filter if specified and cross-language search is disabled
+    // Handle null/empty language codes by matching default 'en' or the specified language
+    if (languageCode && !includeCrossLanguage) {
+      query = sql`${query} AND (c.language_code = ${languageCode} OR c.language_code IS NULL OR c.language_code = '')`;
+    }
+    
     query = sql`${query} ORDER BY c.embedding <=> ${embeddingString}::vector LIMIT ${limit}`;
     
     const results = await db.execute(query);
@@ -2177,6 +2185,7 @@ export class DatabaseStorage implements IStorage {
       sourceId: row.source_id,
       chunkIndex: row.chunk_index,
       content: row.content,
+      languageCode: row.language_code,
       metadata: row.metadata,
       tokenCount: row.token_count,
       createdAt: row.created_at,
@@ -2186,6 +2195,8 @@ export class DatabaseStorage implements IStorage {
         title: row.source_title,
         category: row.source_category,
         contentType: row.source_content_type,
+        languageCode: row.source_language_code,
+        translationGroupId: row.source_translation_group_id,
         createdBy: row.source_created_by,
         createdAt: row.source_created_at,
       } as KnowledgeBaseSource,

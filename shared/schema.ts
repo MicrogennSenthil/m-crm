@@ -827,6 +827,27 @@ export type RoleWithRights = UserRole & {
 
 // ==================== Knowledge Base (Vector Database) ====================
 
+// Supported languages for knowledge base content
+export const supportedLanguages = [
+  { code: "en", name: "English", nativeName: "English" },
+  { code: "es", name: "Spanish", nativeName: "Español" },
+  { code: "fr", name: "French", nativeName: "Français" },
+  { code: "de", name: "German", nativeName: "Deutsch" },
+  { code: "pt", name: "Portuguese", nativeName: "Português" },
+  { code: "zh", name: "Chinese", nativeName: "中文" },
+  { code: "ja", name: "Japanese", nativeName: "日本語" },
+  { code: "ko", name: "Korean", nativeName: "한국어" },
+  { code: "ar", name: "Arabic", nativeName: "العربية" },
+  { code: "hi", name: "Hindi", nativeName: "हिन्दी" },
+  { code: "ta", name: "Tamil", nativeName: "தமிழ்" },
+  { code: "te", name: "Telugu", nativeName: "తెలుగు" },
+  { code: "ru", name: "Russian", nativeName: "Русский" },
+  { code: "it", name: "Italian", nativeName: "Italiano" },
+  { code: "nl", name: "Dutch", nativeName: "Nederlands" },
+] as const;
+
+export type SupportedLanguageCode = typeof supportedLanguages[number]["code"];
+
 // Knowledge Base Sources - stores original documents/content
 export const knowledgeBaseSources = pgTable("knowledge_base_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -835,6 +856,10 @@ export const knowledgeBaseSources = pgTable("knowledge_base_sources", {
   category: varchar("category", { length: 100 }).notNull().default("general"), // general, sales, implementation, support, product, faq
   contentType: varchar("content_type", { length: 50 }).notNull().default("document"), // document, faq, guide, article, policy
   originalContent: text("original_content").notNull(), // The full original content
+  // Multilingual support
+  languageCode: varchar("language_code", { length: 10 }).notNull().default("en"), // ISO 639-1 language code
+  translationGroupId: varchar("translation_group_id"), // UUID to link translations of the same content
+  translationStatus: varchar("translation_status", { length: 20 }).default("original"), // original, translated, pending_review
   sourceUrl: text("source_url"), // Optional external URL
   fileUrl: text("file_url"), // If uploaded as a file
   fileName: text("file_name"),
@@ -870,6 +895,7 @@ export const knowledgeBaseChunks = pgTable("knowledge_base_chunks", {
   sourceId: varchar("source_id").notNull().references(() => knowledgeBaseSources.id, { onDelete: "cascade" }),
   chunkIndex: integer("chunk_index").notNull(), // Order within the source document
   content: text("content").notNull(), // The chunked text content
+  languageCode: varchar("language_code", { length: 10 }).notNull().default("en"), // Language of this chunk for filtering
   tokenCount: integer("token_count"), // Tokens in this chunk
   // Note: embedding column is added via raw SQL as vector(1536)
   metadata: jsonb("metadata").$type<{
@@ -894,11 +920,14 @@ export const knowledgeBaseQueries = pgTable("knowledge_base_queries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
   queryText: text("query_text").notNull(),
+  languageCode: varchar("language_code", { length: 10 }).default("en"), // Language used for the search
+  includeCrossLanguage: boolean("include_cross_language").default(false), // Whether cross-language search was enabled
   resultsCount: integer("results_count"),
   topResults: jsonb("top_results").$type<{
     sourceId: string;
     title: string;
     score: number;
+    languageCode?: string;
   }[]>(),
   searchDurationMs: integer("search_duration_ms"),
   createdAt: timestamp("created_at").defaultNow(),

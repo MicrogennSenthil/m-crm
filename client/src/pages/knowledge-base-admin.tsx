@@ -23,6 +23,9 @@ interface KnowledgeBaseSource {
   description: string | null;
   category: string;
   contentType: string;
+  languageCode: string;
+  translationGroupId: string | null;
+  translationStatus: string;
   isActive: boolean;
   isIndexed: boolean;
   tokenCount: number | null;
@@ -31,9 +34,16 @@ interface KnowledgeBaseSource {
   createdBy: string | null;
 }
 
+interface SupportedLanguage {
+  code: string;
+  name: string;
+  nativeName: string;
+}
+
 interface KnowledgeBaseMetadata {
   categories: string[];
   contentTypes: string[];
+  languages: SupportedLanguage[];
 }
 
 interface Analytics {
@@ -57,6 +67,7 @@ const formSchema = z.object({
   description: z.string().optional(),
   category: z.string().min(1, "Category is required"),
   contentType: z.string().min(1, "Content type is required"),
+  languageCode: z.string().min(1, "Language is required"),
   content: z.string().min(100, "Content must be at least 100 characters"),
 });
 
@@ -87,6 +98,7 @@ export default function KnowledgeBaseAdmin() {
       description: "",
       category: "general",
       contentType: "document",
+      languageCode: "en",
       content: "",
     },
   });
@@ -227,7 +239,7 @@ export default function KnowledgeBaseAdmin() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="category"
@@ -268,6 +280,30 @@ export default function KnowledgeBaseAdmin() {
                             {metadata?.contentTypes.map((type) => (
                               <SelectItem key={type} value={type}>
                                 {getContentTypeLabel(type)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="languageCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Language</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-language">
+                              <SelectValue placeholder="Select language" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {metadata?.languages?.map((lang) => (
+                              <SelectItem key={lang.code} value={lang.code}>
+                                {lang.nativeName} ({lang.name})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -369,6 +405,9 @@ export default function KnowledgeBaseAdmin() {
                     <div className="flex flex-wrap gap-2 mb-3">
                       <Badge variant="outline">{getCategoryLabel(source.category)}</Badge>
                       <Badge variant="outline">{getContentTypeLabel(source.contentType)}</Badge>
+                      <Badge variant="secondary">
+                        {metadata?.languages?.find(l => l.code === source.languageCode)?.nativeName || source.languageCode}
+                      </Badge>
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <div className="flex justify-between">

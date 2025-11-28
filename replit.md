@@ -34,6 +34,11 @@ The CRM includes:
   - **User Role Master** (/admin/user-roles): Create and manage user roles with custom names and descriptions
   - **User Rights Allocation** (/admin/user-rights): Configure module permissions per role (View/Create/Edit/Delete) with bulk update capability
   - **User Approval** (/admin/user-approval): Approval workflow for new users - approve, reject, or revoke user access with audit logging
+- **Knowledge Base (Multilingual)**: AI-powered semantic search documentation system with pgvector:
+  - **Admin Page** (/knowledge-base): Document management with category, content type, and language selection
+  - **Search Page** (/knowledge-base/search): Natural language search with language filtering and cross-language toggle
+  - **Features**: OpenAI text-embedding-3-small (1536 dimensions), 800-1000 token chunks with 200 overlap, 15 supported languages (English, Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Tamil, Telugu, Russian, Italian, Dutch)
+  - **Multilingual Support**: Translation group IDs link documents across languages, language-specific embeddings for accurate retrieval, optional cross-language search
 
 ### System Design Choices
 The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.
@@ -46,7 +51,8 @@ The database schema consists of 14 tables, including `users` (with role-based ac
 
 ## External Dependencies
 - **Authentication**: Replit Auth (OpenID Connect)
-- **Database**: PostgreSQL (via Drizzle ORM)
+- **Database**: PostgreSQL with pgvector extension (via Drizzle ORM)
+- **AI/Embeddings**: OpenAI text-embedding-3-small for semantic search
 - **Email Service**: Resend
 - **UI Components**: Shadcn UI (built on Radix UI)
 - **Icons**: Lucide React

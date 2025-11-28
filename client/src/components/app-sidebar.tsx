@@ -335,10 +335,11 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
         </div>
       )}
       
-      <SidebarContent 
-        ref={scrollContainerRef}
-        className="overflow-y-auto"
-      >
+      <SidebarContent className="overflow-hidden p-0">
+        <div 
+          ref={scrollContainerRef}
+          className="overflow-y-auto h-full px-2 py-1"
+        >
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -526,6 +527,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        </div>
       </SidebarContent>
 
       {/* Scroll Down Arrow - only show when can scroll down */}

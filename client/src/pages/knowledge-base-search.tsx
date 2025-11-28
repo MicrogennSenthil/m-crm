@@ -1,22 +1,38 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Search, Loader2, BookOpen, ArrowRight, Sparkles, FileText } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Search, Loader2, BookOpen, ArrowRight, Sparkles, FileText, Globe } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+
+interface SupportedLanguage {
+  code: string;
+  name: string;
+  nativeName: string;
+}
+
+interface KnowledgeBaseMetadata {
+  categories: string[];
+  contentTypes: string[];
+  languages: SupportedLanguage[];
+}
 
 interface SearchResult {
   id: string;
   content: string;
+  languageCode?: string;
   similarity: number;
   source: {
     id: string;
     title: string;
     category: string;
+    languageCode?: string;
   } | null;
 }
 
@@ -41,13 +57,26 @@ export default function KnowledgeBaseSearch() {
   const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
+  const [languageCode, setLanguageCode] = useState("en");
+  const [includeCrossLanguage, setIncludeCrossLanguage] = useState(false);
   const [results, setResults] = useState<SearchResponse | null>(null);
 
+  const { data: metadata } = useQuery<KnowledgeBaseMetadata>({
+    queryKey: ["/api/knowledge-base/metadata"],
+  });
+
   const searchMutation = useMutation({
-    mutationFn: async ({ query, category }: { query: string; category?: string }) => {
+    mutationFn: async ({ query, category, languageCode, includeCrossLanguage }: { 
+      query: string; 
+      category?: string; 
+      languageCode?: string;
+      includeCrossLanguage?: boolean;
+    }) => {
       const response = await apiRequest("POST", "/api/knowledge-base/search", {
         query,
         category: category || undefined,
+        languageCode,
+        includeCrossLanguage,
         limit: 10,
       });
       return response.json() as Promise<SearchResponse>;
@@ -66,7 +95,12 @@ export default function KnowledgeBaseSearch() {
       toast({ title: "Please enter a search query", variant: "destructive" });
       return;
     }
-    searchMutation.mutate({ query: query.trim(), category });
+    searchMutation.mutate({ query: query.trim(), category, languageCode, includeCrossLanguage });
+  };
+
+  const getLanguageName = (code: string) => {
+    const lang = metadata?.languages?.find(l => l.code === code);
+    return lang?.nativeName || code;
   };
 
   const getCategoryLabel = (cat: string) => {
@@ -97,7 +131,7 @@ export default function KnowledgeBaseSearch() {
         </p>
       </div>
 
-      <form onSubmit={handleSearch} className="max-w-2xl mx-auto">
+      <form onSubmit={handleSearch} className="max-w-3xl mx-auto space-y-4">
         <div className="flex gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -110,8 +144,20 @@ export default function KnowledgeBaseSearch() {
               data-testid="input-search-query"
             />
           </div>
+          <Button type="submit" size="lg" disabled={searchMutation.isPending} data-testid="button-search">
+            {searchMutation.isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                Search
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </>
+            )}
+          </Button>
+        </div>
+        <div className="flex items-center justify-center gap-4 flex-wrap">
           <Select value={category || "all"} onValueChange={(val) => setCategory(val === "all" ? "" : val)}>
-            <SelectTrigger className="w-[180px] h-12" data-testid="select-search-category">
+            <SelectTrigger className="w-[160px]" data-testid="select-search-category">
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
@@ -124,16 +170,30 @@ export default function KnowledgeBaseSearch() {
               <SelectItem value="faq">FAQ</SelectItem>
             </SelectContent>
           </Select>
-          <Button type="submit" size="lg" disabled={searchMutation.isPending} data-testid="button-search">
-            {searchMutation.isPending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                Search
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </>
-            )}
-          </Button>
+          <Select value={languageCode} onValueChange={setLanguageCode}>
+            <SelectTrigger className="w-[160px]" data-testid="select-search-language">
+              <Globe className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Select language" />
+            </SelectTrigger>
+            <SelectContent>
+              {metadata?.languages?.map((lang) => (
+                <SelectItem key={lang.code} value={lang.code}>
+                  {lang.nativeName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="cross-language"
+              checked={includeCrossLanguage}
+              onCheckedChange={setIncludeCrossLanguage}
+              data-testid="switch-cross-language"
+            />
+            <Label htmlFor="cross-language" className="text-sm cursor-pointer">
+              Include all languages
+            </Label>
+          </div>
         </div>
       </form>
 
@@ -170,10 +230,15 @@ export default function KnowledgeBaseSearch() {
                           {result.source?.title || "Untitled Document"}
                         </CardTitle>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {result.source?.category && (
                           <Badge variant="outline">
                             {getCategoryLabel(result.source.category)}
+                          </Badge>
+                        )}
+                        {result.source?.languageCode && (
+                          <Badge variant="secondary">
+                            {getLanguageName(result.source.languageCode)}
                           </Badge>
                         )}
                         <Badge className={getSimilarityColor(result.similarity)}>
