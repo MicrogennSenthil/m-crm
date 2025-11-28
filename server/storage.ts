@@ -29,6 +29,9 @@ import {
   userRoleAssignments,
   roleChangeHistory,
   userModulePermissions,
+  knowledgeBaseSources,
+  knowledgeBaseChunks,
+  knowledgeBaseQueries,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -97,6 +100,12 @@ import {
   type InsertUserModulePermission,
   type UserWithRoles,
   type RoleWithRights,
+  type KnowledgeBaseSource,
+  type InsertKnowledgeBaseSource,
+  type KnowledgeBaseChunk,
+  type InsertKnowledgeBaseChunk,
+  type KnowledgeBaseQuery,
+  type InsertKnowledgeBaseQuery,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -323,6 +332,24 @@ export interface IStorage {
 
   // Get role with all its rights
   getRoleWithRights(roleId: string): Promise<RoleWithRights | undefined>;
+
+  // Knowledge Base Source operations
+  getKnowledgeBaseSources(): Promise<KnowledgeBaseSource[]>;
+  getKnowledgeBaseSource(id: string): Promise<KnowledgeBaseSource | undefined>;
+  createKnowledgeBaseSource(source: InsertKnowledgeBaseSource): Promise<KnowledgeBaseSource>;
+  updateKnowledgeBaseSource(id: string, data: Partial<InsertKnowledgeBaseSource>): Promise<KnowledgeBaseSource>;
+  deleteKnowledgeBaseSource(id: string): Promise<void>;
+
+  // Knowledge Base Chunk operations
+  getKnowledgeBaseChunks(sourceId: string): Promise<KnowledgeBaseChunk[]>;
+  createKnowledgeBaseChunk(chunk: InsertKnowledgeBaseChunk): Promise<KnowledgeBaseChunk>;
+  createKnowledgeBaseChunks(chunks: InsertKnowledgeBaseChunk[]): Promise<KnowledgeBaseChunk[]>;
+  deleteKnowledgeBaseChunksBySource(sourceId: string): Promise<void>;
+  searchKnowledgeBase(embedding: number[], limit?: number, category?: string): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]>;
+
+  // Knowledge Base Query operations (for analytics)
+  createKnowledgeBaseQuery(query: InsertKnowledgeBaseQuery): Promise<KnowledgeBaseQuery>;
+  getKnowledgeBaseQueries(limit?: number): Promise<(KnowledgeBaseQuery & { user?: User })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2069,6 +2096,124 @@ export class DatabaseStorage implements IStorage {
       ...role,
       rights,
     };
+  }
+
+  // Knowledge Base Source operations
+  async getKnowledgeBaseSources(): Promise<KnowledgeBaseSource[]> {
+    return await db.select().from(knowledgeBaseSources).orderBy(desc(knowledgeBaseSources.createdAt));
+  }
+
+  async getKnowledgeBaseSource(id: string): Promise<KnowledgeBaseSource | undefined> {
+    const [source] = await db.select().from(knowledgeBaseSources).where(eq(knowledgeBaseSources.id, id));
+    return source;
+  }
+
+  async createKnowledgeBaseSource(source: InsertKnowledgeBaseSource): Promise<KnowledgeBaseSource> {
+    const [created] = await db.insert(knowledgeBaseSources).values(source).returning();
+    return created;
+  }
+
+  async updateKnowledgeBaseSource(id: string, data: Partial<InsertKnowledgeBaseSource>): Promise<KnowledgeBaseSource> {
+    const [updated] = await db
+      .update(knowledgeBaseSources)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(knowledgeBaseSources.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteKnowledgeBaseSource(id: string): Promise<void> {
+    await db.delete(knowledgeBaseSources).where(eq(knowledgeBaseSources.id, id));
+  }
+
+  // Knowledge Base Chunk operations
+  async getKnowledgeBaseChunks(sourceId: string): Promise<KnowledgeBaseChunk[]> {
+    return await db.select().from(knowledgeBaseChunks).where(eq(knowledgeBaseChunks.sourceId, sourceId));
+  }
+
+  async createKnowledgeBaseChunk(chunk: InsertKnowledgeBaseChunk): Promise<KnowledgeBaseChunk> {
+    const [created] = await db.insert(knowledgeBaseChunks).values(chunk as any).returning();
+    return created;
+  }
+
+  async createKnowledgeBaseChunks(chunks: InsertKnowledgeBaseChunk[]): Promise<KnowledgeBaseChunk[]> {
+    if (chunks.length === 0) return [];
+    const created = await db.insert(knowledgeBaseChunks).values(chunks as any).returning();
+    return created;
+  }
+
+  async deleteKnowledgeBaseChunksBySource(sourceId: string): Promise<void> {
+    await db.delete(knowledgeBaseChunks).where(eq(knowledgeBaseChunks.sourceId, sourceId));
+  }
+
+  async searchKnowledgeBase(embedding: number[], limit: number = 10, category?: string): Promise<(KnowledgeBaseChunk & { similarity: number; source?: KnowledgeBaseSource })[]> {
+    const embeddingString = `[${embedding.join(',')}]`;
+    
+    let query = sql`
+      SELECT 
+        c.*,
+        s.id as source_id,
+        s.title as source_title,
+        s.category as source_category,
+        s.content_type as source_content_type,
+        s.created_by as source_created_by,
+        s.created_at as source_created_at,
+        1 - (c.embedding <=> ${embeddingString}::vector) as similarity
+      FROM knowledge_base_chunks c
+      JOIN knowledge_base_sources s ON c.source_id = s.id
+      WHERE s.is_active = true
+    `;
+    
+    if (category) {
+      query = sql`${query} AND s.category = ${category}`;
+    }
+    
+    query = sql`${query} ORDER BY c.embedding <=> ${embeddingString}::vector LIMIT ${limit}`;
+    
+    const results = await db.execute(query);
+    
+    return (results.rows as any[]).map(row => ({
+      id: row.id,
+      sourceId: row.source_id,
+      chunkIndex: row.chunk_index,
+      content: row.content,
+      metadata: row.metadata,
+      tokenCount: row.token_count,
+      createdAt: row.created_at,
+      similarity: parseFloat(row.similarity),
+      source: {
+        id: row.source_id,
+        title: row.source_title,
+        category: row.source_category,
+        contentType: row.source_content_type,
+        createdBy: row.source_created_by,
+        createdAt: row.source_created_at,
+      } as KnowledgeBaseSource,
+    })) as any;
+  }
+
+  // Knowledge Base Query operations (for analytics)
+  async createKnowledgeBaseQuery(query: InsertKnowledgeBaseQuery): Promise<KnowledgeBaseQuery> {
+    const [created] = await db.insert(knowledgeBaseQueries).values(query as any).returning();
+    return created;
+  }
+
+  async getKnowledgeBaseQueries(limit: number = 100): Promise<(KnowledgeBaseQuery & { user?: User })[]> {
+    const queries = await db
+      .select()
+      .from(knowledgeBaseQueries)
+      .orderBy(desc(knowledgeBaseQueries.createdAt))
+      .limit(limit);
+    
+    const queriesWithUsers = await Promise.all(
+      queries.map(async (q) => {
+        if (!q.userId) return { ...q, user: undefined };
+        const user = await this.getUser(q.userId);
+        return { ...q, user };
+      })
+    );
+    
+    return queriesWithUsers;
   }
 }
 

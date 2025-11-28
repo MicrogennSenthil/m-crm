@@ -5,7 +5,7 @@ import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail } from "./email";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   insertCustomerSchema,
@@ -33,7 +33,11 @@ import {
   insertUserRoleAssignmentSchema,
   insertRoleChangeHistorySchema,
   insertUserModulePermissionSchema,
+  insertKnowledgeBaseSourceSchema,
+  knowledgeBaseCategories,
+  knowledgeBaseContentTypes,
 } from "@shared/schema";
+import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 
@@ -4212,6 +4216,318 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending report email:", error);
       res.status(500).json({ message: "Failed to send report email" });
+    }
+  });
+
+  // =============================================
+  // KNOWLEDGE BASE ROUTES
+  // =============================================
+
+  // Get all knowledge base sources
+  app.get("/api/knowledge-base/sources", isAuthenticated, async (req: any, res) => {
+    try {
+      const sources = await storage.getKnowledgeBaseSources();
+      res.json(sources);
+    } catch (error) {
+      console.error("Error fetching knowledge base sources:", error);
+      res.status(500).json({ message: "Failed to fetch knowledge base sources" });
+    }
+  });
+
+  // Get a single knowledge base source
+  app.get("/api/knowledge-base/sources/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const source = await storage.getKnowledgeBaseSource(req.params.id);
+      if (!source) {
+        return res.status(404).json({ message: "Source not found" });
+      }
+      res.json(source);
+    } catch (error) {
+      console.error("Error fetching knowledge base source:", error);
+      res.status(500).json({ message: "Failed to fetch knowledge base source" });
+    }
+  });
+
+  // Get categories and content types for dropdowns
+  app.get("/api/knowledge-base/metadata", isAuthenticated, async (req: any, res) => {
+    res.json({
+      categories: knowledgeBaseCategories,
+      contentTypes: knowledgeBaseContentTypes,
+    });
+  });
+
+  // Create a new knowledge base source and index its content
+  app.post("/api/knowledge-base/sources", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { title, content, category, contentType, description } = req.body;
+
+      if (!title || !content || !category || !contentType) {
+        return res.status(400).json({ message: "Title, content, category, and content type are required" });
+      }
+
+      // Validate category
+      if (!knowledgeBaseCategories.includes(category)) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+
+      // Validate content type
+      if (!knowledgeBaseContentTypes.includes(contentType)) {
+        return res.status(400).json({ message: "Invalid content type" });
+      }
+
+      // Extract text from content
+      const extractedText = extractTextFromContent(content, contentType);
+      const totalTokens = estimateTokenCount(extractedText);
+
+      // Create the source record
+      const source = await storage.createKnowledgeBaseSource({
+        title,
+        category,
+        contentType,
+        description,
+        originalContent: content,
+        isActive: true,
+        createdBy: userId,
+      });
+
+      // Chunk the content
+      const chunks = chunkText(extractedText);
+
+      if (chunks.length === 0) {
+        return res.status(400).json({ message: "Content is too short to index" });
+      }
+
+      // Generate embeddings for all chunks
+      const chunkTexts = chunks.map(c => c.text);
+      const embeddings = await generateEmbeddings(chunkTexts);
+
+      // Create chunk records with embeddings
+      const chunkRecords = chunks.map((chunk, index) => ({
+        sourceId: source.id,
+        chunkIndex: index,
+        content: chunk.text,
+        tokenCount: estimateTokenCount(chunk.text),
+        metadata: {
+          startPosition: chunk.metadata.startChar,
+          endPosition: chunk.metadata.endChar,
+        },
+      }));
+
+      const createdChunks = await storage.createKnowledgeBaseChunks(chunkRecords);
+
+      // Update embeddings directly in the database
+      for (let i = 0; i < createdChunks.length; i++) {
+        const embeddingString = `[${embeddings[i].join(',')}]`;
+        await db.execute(sql`UPDATE knowledge_base_chunks SET embedding = ${embeddingString}::vector WHERE id = ${createdChunks[i].id}`);
+      }
+
+      // Update source with chunk and token counts
+      await db.execute(sql`UPDATE knowledge_base_sources SET chunk_count = ${chunks.length}, token_count = ${totalTokens}, is_indexed = true, indexed_at = NOW() WHERE id = ${source.id}`);
+
+      res.status(201).json({
+        ...source,
+        totalChunks: chunks.length,
+        message: `Successfully indexed ${chunks.length} chunks`,
+      });
+    } catch (error) {
+      console.error("Error creating knowledge base source:", error);
+      res.status(500).json({ message: "Failed to create knowledge base source" });
+    }
+  });
+
+  // Update a knowledge base source
+  app.patch("/api/knowledge-base/sources/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { title, description, category, isActive } = req.body;
+
+      const existing = await storage.getKnowledgeBaseSource(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Source not found" });
+      }
+
+      const updated = await storage.updateKnowledgeBaseSource(id, {
+        title,
+        description,
+        category,
+        isActive,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating knowledge base source:", error);
+      res.status(500).json({ message: "Failed to update knowledge base source" });
+    }
+  });
+
+  // Delete a knowledge base source (cascades to chunks)
+  app.delete("/api/knowledge-base/sources/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const existing = await storage.getKnowledgeBaseSource(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Source not found" });
+      }
+
+      await storage.deleteKnowledgeBaseSource(id);
+      res.json({ message: "Source deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting knowledge base source:", error);
+      res.status(500).json({ message: "Failed to delete knowledge base source" });
+    }
+  });
+
+  // Re-index a knowledge base source
+  app.post("/api/knowledge-base/sources/:id/reindex", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const source = await storage.getKnowledgeBaseSource(id);
+      if (!source) {
+        return res.status(404).json({ message: "Source not found" });
+      }
+
+      // Delete existing chunks
+      await storage.deleteKnowledgeBaseChunksBySource(id);
+
+      // Extract and chunk the content
+      const extractedText = extractTextFromContent(source.originalContent || '', source.contentType);
+      const chunks = chunkText(extractedText);
+
+      if (chunks.length === 0) {
+        return res.status(400).json({ message: "Content is too short to index" });
+      }
+
+      // Generate embeddings
+      const chunkTexts = chunks.map(c => c.text);
+      const embeddings = await generateEmbeddings(chunkTexts);
+
+      // Create chunk records
+      const chunkRecords = chunks.map((chunk, index) => ({
+        sourceId: id,
+        chunkIndex: index,
+        content: chunk.text,
+        tokenCount: estimateTokenCount(chunk.text),
+        metadata: {
+          startPosition: chunk.metadata.startChar,
+          endPosition: chunk.metadata.endChar,
+        },
+      }));
+
+      const createdChunks = await storage.createKnowledgeBaseChunks(chunkRecords);
+
+      // Update embeddings
+      for (let i = 0; i < createdChunks.length; i++) {
+        const embeddingString = `[${embeddings[i].join(',')}]`;
+        await db.execute(sql`UPDATE knowledge_base_chunks SET embedding = ${embeddingString}::vector WHERE id = ${createdChunks[i].id}`);
+      }
+
+      // Update source with chunk and token counts
+      const tokenCount = estimateTokenCount(extractedText);
+      await db.execute(sql`UPDATE knowledge_base_sources SET chunk_count = ${chunks.length}, token_count = ${tokenCount}, is_indexed = true, indexed_at = NOW() WHERE id = ${id}`);
+
+      res.json({
+        message: `Successfully re-indexed ${chunks.length} chunks`,
+        totalChunks: chunks.length,
+      });
+    } catch (error) {
+      console.error("Error re-indexing knowledge base source:", error);
+      res.status(500).json({ message: "Failed to re-index knowledge base source" });
+    }
+  });
+
+  // Semantic search across knowledge base
+  app.post("/api/knowledge-base/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { query, category, limit = 10 } = req.body;
+
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+
+      const startTime = Date.now();
+
+      // Generate embedding for the query
+      const queryEmbedding = await generateEmbedding(query.trim());
+
+      // Search for similar chunks
+      const results = await storage.searchKnowledgeBase(
+        queryEmbedding,
+        Math.min(limit, 20),
+        category
+      );
+
+      const searchDuration = Date.now() - startTime;
+
+      // Log the query for analytics
+      await storage.createKnowledgeBaseQuery({
+        queryText: query.trim(),
+        userId,
+        resultsCount: results.length,
+        topResults: results.slice(0, 5).map(r => ({
+          sourceId: r.sourceId,
+          title: r.source?.title || 'Unknown',
+          score: r.similarity,
+        })),
+        searchDurationMs: searchDuration,
+      });
+
+      res.json({
+        query: query.trim(),
+        results: results.map(r => ({
+          id: r.id,
+          content: r.content,
+          similarity: r.similarity,
+          source: r.source ? {
+            id: r.source.id,
+            title: r.source.title,
+            category: r.source.category,
+          } : null,
+        })),
+        searchDurationMs: searchDuration,
+        totalResults: results.length,
+      });
+    } catch (error) {
+      console.error("Error searching knowledge base:", error);
+      res.status(500).json({ message: "Failed to search knowledge base" });
+    }
+  });
+
+  // Get search analytics (admin only)
+  app.get("/api/knowledge-base/analytics", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const queries = await storage.getKnowledgeBaseQueries(100);
+      const sources = await storage.getKnowledgeBaseSources();
+
+      const totalSources = sources.length;
+      const activeSources = sources.filter(s => s.isActive).length;
+      const totalChunks = sources.reduce((sum, s) => sum + (s.chunkCount || 0), 0);
+      const totalQueries = queries.length;
+      const avgSearchTime = queries.length > 0 
+        ? queries.reduce((sum, q) => sum + (q.searchDurationMs || 0), 0) / queries.length 
+        : 0;
+
+      res.json({
+        totalSources,
+        activeSources,
+        totalChunks,
+        totalQueries,
+        avgSearchTimeMs: Math.round(avgSearchTime),
+        recentQueries: queries.slice(0, 20).map(q => ({
+          id: q.id,
+          query: q.queryText,
+          resultsCount: q.resultsCount,
+          searchDurationMs: q.searchDurationMs,
+          createdAt: q.createdAt,
+          user: q.user ? { id: q.user.id, name: `${q.user.firstName || ''} ${q.user.lastName || ''}`.trim() } : null,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching knowledge base analytics:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
 
