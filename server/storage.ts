@@ -110,7 +110,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
   createUser(user: InsertUser): Promise<User>;
   createUserWithPassword(user: InsertUser & { passwordHash: string }): Promise<User>;
-  updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date }>): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
 
@@ -368,7 +368,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users).orderBy(desc(users.createdAt));
   }
 
-  async updateUser(id: string, data: Partial<InsertUser>): Promise<User> {
+  async updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User> {
     const [updated] = await db
       .update(users)
       .set({ ...data, updatedAt: new Date() })

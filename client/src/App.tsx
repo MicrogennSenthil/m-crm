@@ -30,6 +30,10 @@ import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
 import AdminUsers from "@/pages/admin-users";
 import UserManagement from "@/pages/user-management";
+import UserMaster from "@/pages/admin/user-master";
+import UserRoleMaster from "@/pages/admin/user-role-master";
+import UserRightsAllocation from "@/pages/admin/user-rights-allocation";
+import UserApproval from "@/pages/admin/user-approval";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -77,7 +81,10 @@ function AuthenticatedLayout() {
               <Route path="/reports/support" component={SupportReports} />
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
-              <Route path="/admin/users" component={AdminUsers} />
+              <Route path="/admin/users" component={UserMaster} />
+              <Route path="/admin/user-roles" component={UserRoleMaster} />
+              <Route path="/admin/user-rights" component={UserRightsAllocation} />
+              <Route path="/admin/user-approval" component={UserApproval} />
               <Route path="/admin/user-management" component={UserManagement} />
               <Route component={NotFound} />
             </Switch>

@@ -551,7 +551,7 @@ export default function UserManagement() {
             <CardContent>
               <PermissionMatrix 
                 roles={roles} 
-                modules={modules} 
+                modules={systemModules} 
                 isLoading={rolesLoading || modulesLoading} 
               />
             </CardContent>

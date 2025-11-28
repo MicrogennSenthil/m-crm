@@ -29,6 +29,11 @@ The CRM includes:
   - All reports include: export to CSV/Excel functionality, send via email (using Resend), search, and comprehensive filtering
 - **Settings & Customization**: User profile display, light/dark mode toggle, and placeholder for notification preferences.
 - **Master Data Management (Admin Only)**: CRUD operations for customer records and implementation modules via a tabbed interface.
+- **User Management (Admin Only)**: Comprehensive user administration with 4 sub-modules accessible via collapsible sidebar menu:
+  - **User Master** (/admin/users): CRUD operations for system users, role assignment, active status management
+  - **User Role Master** (/admin/user-roles): Create and manage user roles with custom names and descriptions
+  - **User Rights Allocation** (/admin/user-rights): Configure module permissions per role (View/Create/Edit/Delete) with bulk update capability
+  - **User Approval** (/admin/user-approval): Approval workflow for new users - approve, reject, or revoke user access with audit logging
 
 ### System Design Choices
 The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.

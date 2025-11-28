@@ -18,6 +18,10 @@ import {
   PinOff,
   PanelLeftClose,
   PanelLeft,
+  Users,
+  Shield,
+  Key,
+  UserCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -124,11 +128,27 @@ const settingsItems = [
   },
 ];
 
-const adminItems = [
+// User Management sub-menu items
+const userManagementSubItems = [
   {
-    title: "User Management",
-    url: "/admin/user-management",
-    icon: UserCog,
+    title: "User",
+    url: "/admin/users",
+    icon: Users,
+  },
+  {
+    title: "User Role",
+    url: "/admin/user-roles",
+    icon: Shield,
+  },
+  {
+    title: "User Rights Allocation",
+    url: "/admin/user-rights",
+    icon: Key,
+  },
+  {
+    title: "User Approval",
+    url: "/admin/user-approval",
+    icon: UserCheck,
   },
 ];
 
@@ -153,6 +173,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   
   // Check if any reports sub-item is active
   const isReportsActive = location.startsWith("/reports");
+  
+  // Check if any user management sub-item is active
+  const isUserManagementActive = location.startsWith("/admin/user");
 
   const getUserInitials = () => {
     if (!user) return "U";
@@ -315,20 +338,41 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                 </SidebarMenuItem>
               ))}
               
-              {user?.role === "admin" && adminItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {/* User Management with collapsible sub-menu (Admin only) */}
+              {user?.role === "admin" && (
+                <Collapsible defaultOpen={isUserManagementActive} className="group/collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={isUserManagementActive}
+                        data-testid="nav-user-management"
+                      >
+                        <UserCog className="h-4 w-4" />
+                        <span>User Management</span>
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {userManagementSubItems.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.title}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === subItem.url}
+                              data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                            >
+                              <Link href={subItem.url}>
+                                <subItem.icon className="h-3.5 w-3.5" />
+                                <span>{subItem.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

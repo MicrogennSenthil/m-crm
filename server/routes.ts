@@ -804,6 +804,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User Approval routes (Admin only)
+  app.post("/api/users/:id/approve", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const updated = await storage.updateUser(req.params.id, {
+        isApproved: true,
+        isActive: true,
+        approvedAt: new Date(),
+        approvedBy: req.user.claims.sub,
+      });
+
+      await storage.logActivity({
+        entityType: "user",
+        entityId: updated.id,
+        action: "approved",
+        description: `User approved: ${updated.firstName} ${updated.lastName}`,
+        userId: req.user.claims.sub,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error approving user:", error);
+      res.status(500).json({ message: "Failed to approve user" });
+    }
+  });
+
+  app.post("/api/users/:id/reject", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const updated = await storage.updateUser(req.params.id, {
+        isApproved: false,
+        isActive: false,
+      });
+
+      await storage.logActivity({
+        entityType: "user",
+        entityId: updated.id,
+        action: "rejected",
+        description: `User rejected: ${updated.firstName} ${updated.lastName}. Reason: ${req.body.reason || "No reason provided"}`,
+        userId: req.user.claims.sub,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      res.status(500).json({ message: "Failed to reject user" });
+    }
+  });
+
+  app.post("/api/users/:id/revoke-approval", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Prevent revoking super admin approval
+      if (user.email === "senthil@microgenn.com") {
+        return res.status(403).json({ message: "Cannot revoke super admin approval" });
+      }
+
+      const updated = await storage.updateUser(req.params.id, {
+        isApproved: false,
+      });
+
+      await storage.logActivity({
+        entityType: "user",
+        entityId: updated.id,
+        action: "approval_revoked",
+        description: `User approval revoked: ${updated.firstName} ${updated.lastName}`,
+        userId: req.user.claims.sub,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error revoking user approval:", error);
+      res.status(500).json({ message: "Failed to revoke user approval" });
+    }
+  });
+
   // User Role routes (admin only for write operations)
   app.get("/api/user-roles", isAuthenticated, async (req, res) => {
     try {
@@ -1008,8 +1096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Create new right
           await storage.createUserRoleRight({
             roleId,
-            moduleId: right.moduleId,
-            module: "system", // Legacy field
+            module: right.moduleId, // moduleId from frontend maps to module field
             canView: right.canView,
             canCreate: right.canCreate,
             canEdit: right.canEdit,

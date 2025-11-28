@@ -35,6 +35,9 @@ export const users = pgTable("users", {
   passwordHash: varchar("password_hash"), // Bcrypt hashed password
   isEmailVerified: boolean("is_email_verified").default(false),
   isActive: boolean("is_active").default(true),
+  isApproved: boolean("is_approved").default(false), // Admin approval required for login
+  approvedBy: varchar("approved_by"), // Admin user ID who approved this user
+  approvedAt: timestamp("approved_at"), // When the user was approved
   authProvider: varchar("auth_provider", { length: 20 }).default("local"), // local, replit
   lastLoginAt: timestamp("last_login_at"),
   // Impersonation tracking
