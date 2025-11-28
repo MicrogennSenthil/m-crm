@@ -212,9 +212,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           profileImageUrl: user.profileImageUrl
         } 
       });
-    } catch (error) {
-      console.error("Error logging in:", error);
-      res.status(500).json({ message: "Login failed" });
+    } catch (error: any) {
+      console.error("Error logging in:", error?.message || error, error?.stack);
+      res.status(500).json({ message: "Login failed", error: error?.message });
     }
   });
 
