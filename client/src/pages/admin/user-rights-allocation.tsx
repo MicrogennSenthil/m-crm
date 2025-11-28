@@ -76,8 +76,9 @@ export default function UserRightsAllocation() {
   // Initialize permissions when role or modules change
   useEffect(() => {
     if (selectedRoleId && systemModules.length > 0) {
+      // Map by 'module' field (which stores the module ID) - database uses 'module' not 'moduleId'
       const existingRightsMap = new Map(
-        roleRights.map((r: any) => [r.moduleId, r])
+        roleRights.map((r: any) => [r.module, r])
       );
 
       const newPermissions = systemModules.map((mod) => {

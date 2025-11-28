@@ -1087,7 +1087,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Process each module permission
       for (const right of rights) {
-        const existingRight = existingRights.find((r: any) => r.moduleId === right.moduleId);
+        // Match by 'module' field (which stores the module ID) - database uses 'module' not 'moduleId'
+        const existingRight = existingRights.find((r: any) => r.module === right.moduleId);
         
         if (existingRight) {
           // Update existing right
