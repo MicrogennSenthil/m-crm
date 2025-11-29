@@ -4,6 +4,16 @@ import { Resend } from 'resend';
 let connectionSettings: any;
 
 async function getCredentials() {
+  // First try environment variable (preferred)
+  if (process.env.RESEND_API_KEY) {
+    console.log('📧 Using RESEND_API_KEY from environment');
+    return {
+      apiKey: process.env.RESEND_API_KEY,
+      fromEmail: 'onboarding@resend.dev' // Default sender for unverified domains
+    };
+  }
+  
+  // Fallback to Replit connector
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
@@ -26,7 +36,7 @@ async function getCredentials() {
   ).then(res => res.json()).then(data => data.items?.[0]);
 
   if (!connectionSettings || (!connectionSettings.settings.api_key)) {
-    throw new Error('Resend not connected');
+    throw new Error('Resend not connected - please set RESEND_API_KEY environment variable');
   }
   return {apiKey: connectionSettings.settings.api_key, fromEmail: connectionSettings.settings.from_email};
 }
