@@ -310,7 +310,9 @@ export async function sendOtpEmail(
       password_reset: 'Password Reset Code - Microgenn CRM'
     }[purpose];
 
-    await client.emails.send({
+    console.log(`📧 Sending OTP email from: ${fromEmail} to: ${toEmail}`);
+    
+    const result = await client.emails.send({
       from: fromEmail,
       to: toEmail,
       subject: subjectText,
@@ -345,11 +347,18 @@ export async function sendOtpEmail(
       `
     });
     
-    console.log(`✅ OTP email sent to ${toEmail}`);
+    console.log(`📬 Resend response for ${toEmail}:`, JSON.stringify(result));
+    
+    if (result.error) {
+      console.error(`❌ Resend error for ${toEmail}:`, result.error);
+      throw new Error(result.error.message || 'Failed to send email');
+    }
+    
+    console.log(`✅ OTP email sent successfully to ${toEmail}`);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to send OTP email:', error);
-    return { success: false, error };
+    throw error;
   }
 }
 
