@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ import {
   Image,
   Paperclip,
   Mic,
+  Calendar,
+  ExternalLink,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { Lead, Project, Ticket, ActivityLog, Task, User } from "@shared/schema";
@@ -399,6 +402,20 @@ export default function Home() {
                 </p>
               )}
             </CardContent>
+            <CardFooter className="p-4 sm:p-6 pt-0 flex gap-2 justify-end">
+              <Button variant="outline" size="sm" asChild data-testid="link-todays-tasks">
+                <Link href="/tasks/today">
+                  <Calendar className="h-3.5 w-3.5 mr-1" />
+                  Today's Tasks
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild data-testid="link-all-tasks">
+                <Link href="/tasks">
+                  View All
+                  <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                </Link>
+              </Button>
+            </CardFooter>
           </Card>
 
           {/* Recent Leads */}
