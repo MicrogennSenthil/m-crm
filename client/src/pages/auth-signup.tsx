@@ -61,11 +61,22 @@ export default function AuthSignup() {
       window.location.reload();
     },
     onError: (error: any) => {
-      toast({
-        title: "Verification Failed",
-        description: error.message || "Invalid or expired OTP",
-        variant: "destructive",
-      });
+      // Check if we should redirect to login
+      if (error.redirect === "/auth/login") {
+        toast({
+          title: "Account Exists",
+          description: error.message || "This email is already registered. Redirecting to login...",
+          variant: "destructive",
+        });
+        // Redirect after a short delay
+        setTimeout(() => setLocation("/auth/login"), 2000);
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: error.message || "Invalid or expired OTP",
+          variant: "destructive",
+        });
+      }
     },
   });
 

@@ -122,20 +122,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No pending signup found. Please start again." });
       }
       
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser && existingUser.isEmailVerified) {
+        // User already exists and is verified - they should log in instead
+        delete (req.session as any).pendingSignup;
+        return res.status(400).json({ 
+          message: "An account with this email already exists. Please log in instead.",
+          redirect: "/auth/login"
+        });
+      }
+      
       // Determine role - super admin gets admin role automatically
       const userRole = pendingSignup.email === "senthil@microgenn.com" ? "admin" : "sales_executive";
       
-      // Create user
-      const user = await storage.createUserWithPassword({
-        email: pendingSignup.email,
-        firstName: pendingSignup.firstName,
-        lastName: pendingSignup.lastName,
-        passwordHash: pendingSignup.passwordHash,
-        role: userRole,
-      });
+      let user;
       
-      // Mark email as verified
-      await storage.updateUser(user.id, { isEmailVerified: true });
+      if (existingUser && !existingUser.isEmailVerified) {
+        // User exists but not verified - update their info and verify
+        await storage.updateUser(existingUser.id, {
+          firstName: pendingSignup.firstName,
+          lastName: pendingSignup.lastName,
+          passwordHash: pendingSignup.passwordHash,
+          role: userRole,
+          isEmailVerified: true,
+        });
+        user = await storage.getUser(existingUser.id);
+      } else {
+        // Create new user
+        user = await storage.createUserWithPassword({
+          email: pendingSignup.email,
+          firstName: pendingSignup.firstName,
+          lastName: pendingSignup.lastName,
+          passwordHash: pendingSignup.passwordHash,
+          role: userRole,
+        });
+        
+        // Mark email as verified
+        await storage.updateUser(user!.id, { isEmailVerified: true });
+      }
+      
+      if (!user) {
+        return res.status(500).json({ message: "Failed to create account" });
+      }
       
       // Clear pending signup
       delete (req.session as any).pendingSignup;
