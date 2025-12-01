@@ -30,6 +30,8 @@ import {
   Cog,
   BookOpen,
   Search,
+  Mail,
+  ServerCog,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -201,6 +203,15 @@ const userManagementSubItems = [
   },
 ];
 
+// System Settings sub-menu items
+const systemSettingsSubItems = [
+  {
+    title: "SMTP Configuration",
+    url: "/admin/smtp-config",
+    icon: Mail,
+  },
+];
+
 interface AppSidebarProps {
   isPinned: boolean;
   onPinChange: (pinned: boolean) => void;
@@ -256,6 +267,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   
   // Check if any user management sub-item is active
   const isUserManagementActive = location.startsWith("/admin/user");
+  
+  // Check if any system settings sub-item is active
+  const isSystemSettingsActive = location === "/admin/smtp-config";
 
   // Check if a group has any visible items and if any item is active
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
@@ -491,13 +505,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
               {/* Administration Group */}
               {user?.role === "admin" && (
                 <Collapsible 
-                  defaultOpen={location === "/masters" || location === "/settings" || isUserManagementActive} 
+                  defaultOpen={location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive} 
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        isActive={location === "/masters" || location === "/settings" || isUserManagementActive}
+                        isActive={location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive}
                         data-testid="nav-group-admin"
                       >
                         <Cog className="h-4 w-4" />
@@ -549,6 +563,41 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                             <CollapsibleContent>
                               <div className="pl-4 space-y-1 mt-1">
                                 {userManagementSubItems.map((subItem) => (
+                                  <SidebarMenuSubButton
+                                    key={subItem.title}
+                                    asChild
+                                    isActive={location === subItem.url}
+                                    data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                                    className="text-xs"
+                                  >
+                                    <Link href={subItem.url}>
+                                      <subItem.icon className="h-3 w-3" />
+                                      <span>{subItem.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          </SidebarMenuSubItem>
+                        </Collapsible>
+
+                        {/* System Settings nested collapsible */}
+                        <Collapsible defaultOpen={isSystemSettingsActive} className="group/syssettings">
+                          <SidebarMenuSubItem>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuSubButton
+                                isActive={isSystemSettingsActive}
+                                data-testid="nav-system-settings"
+                                className="cursor-pointer"
+                              >
+                                <ServerCog className="h-3.5 w-3.5" />
+                                <span>System Settings</span>
+                                <ChevronRight className="ml-auto h-3 w-3 transition-transform group-data-[state=open]/syssettings:rotate-90" />
+                              </SidebarMenuSubButton>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="pl-4 space-y-1 mt-1">
+                                {systemSettingsSubItems.map((subItem) => (
                                   <SidebarMenuSubButton
                                     key={subItem.title}
                                     asChild
