@@ -4881,8 +4881,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "system_settings",
         entityId: "smtp_config",
         action: "updated",
+        description: "SMTP configuration updated",
         userId,
-        details: { description: "SMTP configuration updated" },
       });
 
       res.json({ success: true, message: "SMTP configuration saved successfully" });
@@ -4966,8 +4966,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "system_settings",
         entityId: "smtp_config",
         action: "deleted",
+        description: "SMTP configuration deleted",
         userId,
-        details: { description: "SMTP configuration deleted" },
       });
 
       res.json({ success: true, message: "SMTP configuration deleted" });
