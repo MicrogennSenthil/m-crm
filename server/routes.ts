@@ -849,25 +849,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error deleting user:", error);
       
-      // Handle foreign key constraint violation
+      // Handle foreign key constraint violation - auto-deactivate user instead
       if (error.code === '23503') {
         const constraintMap: Record<string, string> = {
-          'leads_sales_executive_id_users_id_fk': 'leads assigned',
-          'leads_assigned_to_users_id_fk': 'leads assigned',
-          'projects_assigned_to_users_id_fk': 'projects assigned',
-          'tickets_assigned_to_users_id_fk': 'support tickets assigned',
-          'tickets_created_by_users_id_fk': 'support tickets created',
-          'tasks_assigned_to_users_id_fk': 'tasks assigned',
-          'tasks_created_by_users_id_fk': 'tasks created',
-          'follow_ups_created_by_users_id_fk': 'follow-ups created',
+          'leads_sales_executive_id_users_id_fk': 'leads',
+          'leads_assigned_to_users_id_fk': 'leads',
+          'projects_assigned_to_users_id_fk': 'projects',
+          'tickets_assigned_to_users_id_fk': 'support tickets',
+          'tickets_created_by_users_id_fk': 'support tickets',
+          'tasks_assigned_to_users_id_fk': 'tasks',
+          'tasks_created_by_users_id_fk': 'tasks',
+          'follow_ups_created_by_users_id_fk': 'follow-ups',
           'training_records_conducted_by_users_id_fk': 'training records',
         };
         
         const constraint = error.constraint || '';
-        const reason = constraintMap[constraint] || 'records in the system';
+        const reason = constraintMap[constraint] || 'records';
+        
+        try {
+          // Get the user again to ensure we have latest data
+          const userToDeactivate = await storage.getUser(req.params.id);
+          if (userToDeactivate) {
+            // Deactivate the user instead of deleting
+            await storage.updateUser(req.params.id, { isActive: false });
+            
+            await storage.logActivity({
+              entityType: "user",
+              entityId: req.params.id,
+              action: "deactivated",
+              description: `User deactivated (has ${reason} assigned): ${userToDeactivate.firstName} ${userToDeactivate.lastName}`,
+              userId: req.user.claims.sub,
+            });
+            
+            return res.json({ 
+              message: `User has ${reason} assigned and cannot be deleted. The user has been deactivated instead.`,
+              deactivated: true
+            });
+          }
+        } catch (deactivateError) {
+          console.error("Error deactivating user:", deactivateError);
+        }
         
         return res.status(400).json({ 
-          message: `Cannot delete user: This user has ${reason}. Please reassign or remove these records first, or deactivate the user instead.` 
+          message: `Cannot delete user: This user has ${reason} assigned. Please try again.` 
         });
       }
       

@@ -134,8 +134,16 @@ export default function UserMaster() {
       const response = await apiRequest("DELETE", `/api/users/${id}`);
       return response.json();
     },
-    onSuccess: () => {
-      toast({ title: "User Deleted", description: "User has been deleted successfully" });
+    onSuccess: (data: { message: string; deactivated?: boolean }) => {
+      if (data.deactivated) {
+        toast({ 
+          title: "User Deactivated", 
+          description: data.message,
+          variant: "default"
+        });
+      } else {
+        toast({ title: "User Deleted", description: "User has been deleted successfully" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
