@@ -113,6 +113,18 @@ import {
   type SystemSetting,
   type InsertSystemSetting,
   type SmtpConfig,
+  pointCategories,
+  pointCategoryDepartmentSettings,
+  userPointLedger,
+  userPointBalances,
+  type PointCategory,
+  type InsertPointCategory,
+  type PointCategoryDepartmentSetting,
+  type InsertPointCategoryDepartmentSetting,
+  type UserPointLedger,
+  type InsertUserPointLedger,
+  type UserPointBalance,
+  type InsertUserPointBalance,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -382,6 +394,31 @@ export interface IStorage {
   // SMTP Configuration helpers
   getSmtpConfig(): Promise<SmtpConfig | null>;
   saveSmtpConfig(config: SmtpConfig, userId: string): Promise<void>;
+
+  // Point Categories operations
+  getPointCategories(): Promise<PointCategory[]>;
+  getPointCategoriesByModule(moduleType: string): Promise<PointCategory[]>;
+  getPointCategory(id: string): Promise<PointCategory | undefined>;
+  createPointCategory(category: InsertPointCategory): Promise<PointCategory>;
+  updatePointCategory(id: string, category: Partial<InsertPointCategory>): Promise<PointCategory | undefined>;
+  deletePointCategory(id: string): Promise<void>;
+
+  // Point Category Department Settings operations
+  getPointCategoryDepartmentSettings(categoryId: string): Promise<PointCategoryDepartmentSetting[]>;
+  createPointCategoryDepartmentSetting(setting: InsertPointCategoryDepartmentSetting): Promise<PointCategoryDepartmentSetting>;
+  updatePointCategoryDepartmentSetting(id: string, setting: Partial<InsertPointCategoryDepartmentSetting>): Promise<PointCategoryDepartmentSetting | undefined>;
+  deletePointCategoryDepartmentSetting(id: string): Promise<void>;
+
+  // User Point Ledger operations
+  getUserPointLedger(userId: string): Promise<UserPointLedger[]>;
+  getPointLedgerByEntity(moduleType: string, entityId: string): Promise<UserPointLedger[]>;
+  createPointLedgerEntry(entry: InsertUserPointLedger): Promise<UserPointLedger>;
+
+  // User Point Balance operations
+  getUserPointBalance(userId: string): Promise<UserPointBalance | undefined>;
+  getUserPointBalances(): Promise<UserPointBalance[]>;
+  updateUserPointBalance(userId: string, points: number, moduleType: string): Promise<UserPointBalance>;
+  initializeUserPointBalance(userId: string): Promise<UserPointBalance>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2644,6 +2681,146 @@ export class DatabaseStorage implements IStorage {
     for (const setting of smtpSettings) {
       await this.upsertSystemSetting(setting);
     }
+  }
+
+  // Point Categories operations
+  async getPointCategories(): Promise<PointCategory[]> {
+    return await db.select().from(pointCategories).orderBy(pointCategories.name);
+  }
+
+  async getPointCategoriesByModule(moduleType: string): Promise<PointCategory[]> {
+    return await db.select().from(pointCategories)
+      .where(eq(pointCategories.moduleType, moduleType))
+      .orderBy(pointCategories.name);
+  }
+
+  async getPointCategory(id: string): Promise<PointCategory | undefined> {
+    const [category] = await db.select().from(pointCategories).where(eq(pointCategories.id, id));
+    return category;
+  }
+
+  async createPointCategory(category: InsertPointCategory): Promise<PointCategory> {
+    const [created] = await db.insert(pointCategories).values(category).returning();
+    return created;
+  }
+
+  async updatePointCategory(id: string, category: Partial<InsertPointCategory>): Promise<PointCategory | undefined> {
+    const [updated] = await db.update(pointCategories)
+      .set({ ...category, updatedAt: new Date() })
+      .where(eq(pointCategories.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePointCategory(id: string): Promise<void> {
+    await db.delete(pointCategories).where(eq(pointCategories.id, id));
+  }
+
+  // Point Category Department Settings operations
+  async getPointCategoryDepartmentSettings(categoryId: string): Promise<PointCategoryDepartmentSetting[]> {
+    return await db.select().from(pointCategoryDepartmentSettings)
+      .where(eq(pointCategoryDepartmentSettings.pointCategoryId, categoryId));
+  }
+
+  async createPointCategoryDepartmentSetting(setting: InsertPointCategoryDepartmentSetting): Promise<PointCategoryDepartmentSetting> {
+    const [created] = await db.insert(pointCategoryDepartmentSettings).values(setting).returning();
+    return created;
+  }
+
+  async updatePointCategoryDepartmentSetting(id: string, setting: Partial<InsertPointCategoryDepartmentSetting>): Promise<PointCategoryDepartmentSetting | undefined> {
+    const [updated] = await db.update(pointCategoryDepartmentSettings)
+      .set({ ...setting, updatedAt: new Date() })
+      .where(eq(pointCategoryDepartmentSettings.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePointCategoryDepartmentSetting(id: string): Promise<void> {
+    await db.delete(pointCategoryDepartmentSettings).where(eq(pointCategoryDepartmentSettings.id, id));
+  }
+
+  // User Point Ledger operations
+  async getUserPointLedger(userId: string): Promise<UserPointLedger[]> {
+    return await db.select().from(userPointLedger)
+      .where(eq(userPointLedger.userId, userId))
+      .orderBy(desc(userPointLedger.createdAt));
+  }
+
+  async getPointLedgerByEntity(moduleType: string, entityId: string): Promise<UserPointLedger[]> {
+    return await db.select().from(userPointLedger)
+      .where(and(
+        eq(userPointLedger.moduleType, moduleType),
+        eq(userPointLedger.entityId, entityId)
+      ))
+      .orderBy(desc(userPointLedger.createdAt));
+  }
+
+  async createPointLedgerEntry(entry: InsertUserPointLedger): Promise<UserPointLedger> {
+    const [created] = await db.insert(userPointLedger).values(entry).returning();
+    return created;
+  }
+
+  // User Point Balance operations
+  async getUserPointBalance(userId: string): Promise<UserPointBalance | undefined> {
+    const [balance] = await db.select().from(userPointBalances)
+      .where(eq(userPointBalances.userId, userId));
+    return balance;
+  }
+
+  async getUserPointBalances(): Promise<UserPointBalance[]> {
+    return await db.select().from(userPointBalances).orderBy(desc(userPointBalances.totalPoints));
+  }
+
+  async updateUserPointBalance(userId: string, points: number, moduleType: string): Promise<UserPointBalance> {
+    // First, try to get existing balance
+    let balance = await this.getUserPointBalance(userId);
+    
+    if (!balance) {
+      // Initialize balance if not exists
+      balance = await this.initializeUserPointBalance(userId);
+    }
+
+    // Update the appropriate module points and total
+    const updateData: Partial<UserPointBalance> = {
+      totalPoints: balance.totalPoints + points,
+      updatedAt: new Date(),
+    };
+
+    switch (moduleType) {
+      case 'lead':
+        updateData.leadPoints = balance.leadPoints + points;
+        break;
+      case 'task':
+        updateData.taskPoints = balance.taskPoints + points;
+        break;
+      case 'ticket':
+        updateData.ticketPoints = balance.ticketPoints + points;
+        break;
+      case 'project':
+        updateData.projectPoints = balance.projectPoints + points;
+        break;
+    }
+
+    const [updated] = await db.update(userPointBalances)
+      .set(updateData)
+      .where(eq(userPointBalances.userId, userId))
+      .returning();
+    
+    return updated;
+  }
+
+  async initializeUserPointBalance(userId: string): Promise<UserPointBalance> {
+    const [created] = await db.insert(userPointBalances)
+      .values({
+        userId,
+        totalPoints: 0,
+        leadPoints: 0,
+        taskPoints: 0,
+        ticketPoints: 0,
+        projectPoints: 0,
+      })
+      .returning();
+    return created;
   }
 }
 
