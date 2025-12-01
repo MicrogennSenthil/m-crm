@@ -61,14 +61,14 @@ function AuthenticatedLayout() {
           <header className="sticky top-0 z-50 h-[52px] flex items-center justify-between gap-2 px-2 sm:px-4 border-b-2 border-b-[#FF9933] bg-background">
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4">
               <img 
                 src={microgennLogo} 
                 alt="M-CRM" 
-                className="h-10 sm:h-12 w-auto object-contain"
+                className="h-8 sm:h-10 w-auto object-contain"
                 data-testid="logo-mcrm"
               />
+            </div>
+            <div className="flex items-center gap-2 sm:gap-4">
               <ThemeToggle />
               <UserProfileMenu />
             </div>
