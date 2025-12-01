@@ -1036,3 +1036,94 @@ export const smtpConfigSchema = z.object({
 });
 
 export type SmtpConfig = z.infer<typeof smtpConfigSchema>;
+
+// ============================================
+// Points Management System
+// ============================================
+
+// Point Categories - defines point values for different task/lead types
+export const pointCategories = pgTable("point_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  moduleType: varchar("module_type", { length: 20 }).notNull(), // lead, task, ticket, project
+  basePoints: integer("base_points").notNull().default(1), // Default points for assignment
+  reassignPenalty: integer("reassign_penalty").notNull().default(1), // Points deducted from original assignee on reassign
+  completionBonus: integer("completion_bonus").notNull().default(0), // Bonus points on completion
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPointCategorySchema = createInsertSchema(pointCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPointCategory = z.infer<typeof insertPointCategorySchema>;
+export type PointCategory = typeof pointCategories.$inferSelect;
+
+// Department-specific point overrides
+export const pointCategoryDepartmentSettings = pgTable("point_category_department_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pointCategoryId: varchar("point_category_id").notNull().references(() => pointCategories.id, { onDelete: "cascade" }),
+  department: varchar("department", { length: 50 }).notNull(), // sales, support, engineering, admin
+  basePoints: integer("base_points").notNull(),
+  reassignPenalty: integer("reassign_penalty").notNull(),
+  completionBonus: integer("completion_bonus").notNull().default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPointCategoryDepartmentSettingSchema = createInsertSchema(pointCategoryDepartmentSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPointCategoryDepartmentSetting = z.infer<typeof insertPointCategoryDepartmentSettingSchema>;
+export type PointCategoryDepartmentSetting = typeof pointCategoryDepartmentSettings.$inferSelect;
+
+// User Point Ledger - immutable log of all point transactions
+export const userPointLedger = pgTable("user_point_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  moduleType: varchar("module_type", { length: 20 }).notNull(), // lead, task, ticket, project
+  entityId: varchar("entity_id").notNull(), // ID of the lead/task/ticket/project
+  categoryId: varchar("category_id").references(() => pointCategories.id),
+  action: varchar("action", { length: 20 }).notNull(), // assign, reassign_from, reassign_to, complete, adjustment
+  points: integer("points").notNull(), // Positive for earned, negative for deducted
+  reason: text("reason"), // Description of why points were awarded/deducted
+  createdBy: varchar("created_by").references(() => users.id), // Who triggered the action
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserPointLedgerSchema = createInsertSchema(userPointLedger).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertUserPointLedger = z.infer<typeof insertUserPointLedgerSchema>;
+export type UserPointLedger = typeof userPointLedger.$inferSelect;
+
+// User Point Balances - aggregated point totals per user (for fast reads)
+export const userPointBalances = pgTable("user_point_balances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  totalPoints: integer("total_points").notNull().default(0),
+  leadPoints: integer("lead_points").notNull().default(0),
+  taskPoints: integer("task_points").notNull().default(0),
+  ticketPoints: integer("ticket_points").notNull().default(0),
+  projectPoints: integer("project_points").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserPointBalanceSchema = createInsertSchema(userPointBalances).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertUserPointBalance = z.infer<typeof insertUserPointBalanceSchema>;
+export type UserPointBalance = typeof userPointBalances.$inferSelect;
