@@ -173,7 +173,7 @@ export default function UserRightsAllocation() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">User Rights Allocation</h1>
+          <h1 className="text-lg sm:text-xl font-bold" data-testid="text-page-title">User Rights Allocation</h1>
           <p className="text-muted-foreground">Configure module permissions for each role</p>
         </div>
         <div className="flex gap-2">

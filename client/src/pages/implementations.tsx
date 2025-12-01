@@ -47,7 +47,7 @@ export default function Implementations() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Implementations</h1>
+          <h1 className="text-lg sm:text-xl font-bold mb-1">Implementations</h1>
           <p className="text-sm text-muted-foreground">
             Track project implementation progress and training
           </p>

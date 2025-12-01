@@ -123,7 +123,7 @@ export default function KnowledgeBaseSearch() {
       <div className="text-center max-w-2xl mx-auto">
         <div className="flex items-center justify-center gap-2 mb-4">
           <Sparkles className="w-8 h-8 text-primary" />
-          <h1 className="text-2xl font-bold" data-testid="text-search-title">Knowledge Base</h1>
+          <h1 className="text-lg sm:text-xl font-bold" data-testid="text-search-title">Knowledge Base</h1>
         </div>
         <p className="text-muted-foreground">
           Search our documentation, FAQs, and guides using natural language. 

@@ -291,8 +291,8 @@ export default function SupportReports() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2 flex items-center gap-2">
-            <TicketCheck className="h-6 w-6 text-primary" />
+          <h1 className="text-lg sm:text-xl font-bold mb-1 flex items-center gap-2">
+            <TicketCheck className="h-5 w-5 text-primary" />
             Support Reports
           </h1>
           <p className="text-sm text-muted-foreground">

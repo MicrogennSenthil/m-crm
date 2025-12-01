@@ -145,7 +145,7 @@ export default function Reports() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Reports & Analytics</h1>
+          <h1 className="text-lg sm:text-xl font-bold mb-1">Reports & Analytics</h1>
           <p className="text-sm text-muted-foreground">
             Comprehensive insights and performance metrics
           </p>

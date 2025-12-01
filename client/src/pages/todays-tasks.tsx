@@ -241,8 +241,8 @@ export default function TodaysTasksPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <CalendarDays className="h-6 w-6 text-primary" />
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2" data-testid="text-page-title">
+            <CalendarDays className="h-5 w-5 text-primary" />
             Today's Tasks
           </h1>
           <p className="text-muted-foreground mt-1">

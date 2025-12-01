@@ -238,7 +238,7 @@ export default function ImplementationDashboard() {
       <div className="space-y-6 p-6" data-testid="implementation-dashboard">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Implementation Dashboard</h1>
+            <h1 className="text-lg sm:text-xl font-bold">Implementation Dashboard</h1>
             <p className="text-muted-foreground">Track work progress, schedules, and handoffs</p>
           </div>
           <div className="flex gap-2 flex-wrap">

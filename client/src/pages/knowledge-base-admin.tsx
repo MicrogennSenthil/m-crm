@@ -214,7 +214,7 @@ export default function KnowledgeBaseAdmin() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-knowledge-base-title">Knowledge Base Management</h1>
+          <h1 className="text-lg sm:text-xl font-bold" data-testid="text-knowledge-base-title">Knowledge Base Management</h1>
           <p className="text-muted-foreground">Manage documents for semantic search</p>
         </div>
         <div className="flex items-center gap-2">

@@ -115,7 +115,7 @@ export default function Sales() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Sales Pipeline</h1>
+          <h1 className="text-lg sm:text-xl font-bold mb-1">Sales Pipeline</h1>
           <p className="text-sm text-muted-foreground">
             Track and manage leads through your sales process
           </p>

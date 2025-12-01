@@ -197,7 +197,7 @@ export default function Home() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2" data-testid="text-greeting">
+        <h1 className="text-lg sm:text-xl font-bold mb-1" data-testid="text-greeting">
           Hi {userName}, {greeting}!
         </h1>
         <p className="text-sm text-muted-foreground">

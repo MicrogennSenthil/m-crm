@@ -196,7 +196,7 @@ export default function SmtpConfigPage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">SMTP Configuration</h1>
+        <h1 className="text-lg sm:text-xl font-bold" data-testid="text-page-title">SMTP Configuration</h1>
         <p className="text-muted-foreground">
           Configure email sending via SMTP server (Gmail, custom mail server, etc.)
         </p>

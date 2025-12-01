@@ -323,7 +323,7 @@ export default function UserMaster() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">User Master</h1>
+          <h1 className="text-lg sm:text-xl font-bold" data-testid="text-page-title">User Master</h1>
           <p className="text-muted-foreground">Manage system users</p>
         </div>
         <Button 

@@ -437,7 +437,7 @@ export default function Settings() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Settings</h1>
+        <h1 className="text-lg sm:text-xl font-bold mb-1">Settings</h1>
         <p className="text-sm text-muted-foreground">
           Manage your account, preferences, and integrations
         </p>

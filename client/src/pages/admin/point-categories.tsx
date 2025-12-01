@@ -346,8 +346,8 @@ export default function PointCategoriesPage() {
     <div className="p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Star className="h-6 w-6 text-yellow-500" />
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+            <Star className="h-5 w-5 text-yellow-500" />
             Points Management
           </h1>
           <p className="text-muted-foreground">
