@@ -1268,6 +1268,10 @@ function UsersTab() {
     queryKey: ["/api/user-roles"],
   });
 
+  const { data: departmentsList = [] } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data: Partial<User>) => {
       return await apiRequest("POST", "/api/users", data);
@@ -1322,6 +1326,12 @@ function UsersTab() {
     return role?.displayName || roleName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
+  const getDepartmentName = (departmentId: string | null) => {
+    if (!departmentId) return "-";
+    const dept = departmentsList.find(d => d.id === departmentId);
+    return dept?.name || "-";
+  };
+
   return (
     <Card>
       <CardHeader className="p-4 sm:p-6">
@@ -1341,6 +1351,7 @@ function UsersTab() {
               {isAddOpen && (
                 <UserForm
                   roles={rolesList}
+                  departments={departmentsList}
                   onSubmit={(data) => createMutation.mutate(data)}
                   isPending={createMutation.isPending}
                   onCancel={() => setIsAddOpen(false)}
@@ -1382,6 +1393,7 @@ function UsersTab() {
                   <TableHead>Name</TableHead>
                   <TableHead className="hidden sm:table-cell">Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1396,6 +1408,9 @@ function UsersTab() {
                       <Badge variant="outline">
                         {getRoleDisplayName(user.role)}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {getDepartmentName(user.departmentId)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -1431,6 +1446,7 @@ function UsersTab() {
             <UserForm
               user={editingUser}
               roles={rolesList}
+              departments={departmentsList}
               onSubmit={(data) => updateMutation.mutate({ id: editingUser.id, data })}
               isPending={updateMutation.isPending}
               onCancel={() => setEditingUser(null)}
@@ -1465,12 +1481,14 @@ function UsersTab() {
 function UserForm({
   user,
   roles,
+  departments,
   onSubmit,
   isPending,
   onCancel,
 }: {
   user?: User;
   roles: UserRole[];
+  departments: Department[];
   onSubmit: (data: Partial<User>) => void;
   isPending: boolean;
   onCancel: () => void;
@@ -1481,11 +1499,15 @@ function UserForm({
     lastName: user?.lastName || "",
     email: user?.email || "",
     role: user?.role || "sales_executive",
+    departmentId: user?.departmentId || "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({
+      ...formData,
+      departmentId: formData.departmentId || null,
+    });
   };
 
   const isEditing = !!user;
@@ -1532,32 +1554,53 @@ function UserForm({
             data-testid="input-user-email"
           />
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="user-role">Role *</Label>
-          <Select
-            value={formData.role}
-            onValueChange={(value) => setFormData({ ...formData, role: value })}
-          >
-            <SelectTrigger data-testid="select-user-role">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.length > 0 ? (
-                roles.map((role) => (
-                  <SelectItem key={role.id} value={role.name}>
-                    {role.displayName}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="user-role">Role *</Label>
+            <Select
+              value={formData.role}
+              onValueChange={(value) => setFormData({ ...formData, role: value })}
+            >
+              <SelectTrigger data-testid="select-user-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.length > 0 ? (
+                  roles.map((role) => (
+                    <SelectItem key={role.id} value={role.name}>
+                      {role.displayName}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="sales_executive">Sales Executive</SelectItem>
+                    <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="support">Support</SelectItem>
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="user-department">Department</Label>
+            <Select
+              value={formData.departmentId || "_none"}
+              onValueChange={(value) => setFormData({ ...formData, departmentId: value === "_none" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-user-department">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">No Department</SelectItem>
+                {departments.filter(d => d.isActive).map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id}>
+                    {dept.name}
                   </SelectItem>
-                ))
-              ) : (
-                <>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="sales_executive">Sales Executive</SelectItem>
-                  <SelectItem value="engineer">Engineer</SelectItem>
-                  <SelectItem value="support">Support</SelectItem>
-                </>
-              )}
-            </SelectContent>
-          </Select>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
       <DialogFooter>
