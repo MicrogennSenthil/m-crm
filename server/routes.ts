@@ -95,9 +95,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       res.json({ success: true, message: "OTP sent to your email" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error requesting signup OTP:", error);
-      res.status(500).json({ message: "Failed to send OTP" });
+      
+      // Check if it's a Resend domain verification error
+      if (error.message && error.message.includes("only send testing emails")) {
+        return res.status(400).json({ 
+          message: "Email service is in test mode. Please contact the administrator to verify the email domain, or use snayagamk@gmail.com for testing.",
+          isEmailRestriction: true
+        });
+      }
+      
+      res.status(500).json({ message: "Failed to send OTP. Please try again." });
     }
   });
 
