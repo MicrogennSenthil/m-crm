@@ -129,6 +129,8 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
+  getUserAssignments(userId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number; total: number }>;
+  reassignUserItems(fromUserId: string, toUserId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number }>;
 
   // OTP operations
   createOtp(email: string, otpCode: string, purpose: string, expiresAt: Date): Promise<void>;
@@ -436,6 +438,81 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: string): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getUserAssignments(userId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number; total: number }> {
+    // Count leads assigned to user (as sales executive)
+    const [leadsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(eq(leads.salesExecutiveId, userId));
+    
+    // Count tasks assigned to user
+    const [tasksResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(eq(tasks.assignedTo, userId));
+    
+    // Count tickets assigned to user (using assignedEngineerId)
+    const [ticketsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tickets)
+      .where(eq(tickets.assignedEngineerId, userId));
+    
+    // Count project engineer assignments
+    const [projectsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(projectEngineers)
+      .where(eq(projectEngineers.engineerId, userId));
+
+    const leadsCount = leadsResult?.count || 0;
+    const tasksCount = tasksResult?.count || 0;
+    const ticketsCount = ticketsResult?.count || 0;
+    const projectsCount = projectsResult?.count || 0;
+
+    return {
+      leads: leadsCount,
+      tasks: tasksCount,
+      tickets: ticketsCount,
+      projects: projectsCount,
+      total: leadsCount + tasksCount + ticketsCount + projectsCount,
+    };
+  }
+
+  async reassignUserItems(fromUserId: string, toUserId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number }> {
+    // Get original counts before reassignment
+    const originalCounts = await this.getUserAssignments(fromUserId);
+    
+    // Reassign leads
+    await db
+      .update(leads)
+      .set({ salesExecutiveId: toUserId })
+      .where(eq(leads.salesExecutiveId, fromUserId));
+    
+    // Reassign tasks
+    await db
+      .update(tasks)
+      .set({ assignedTo: toUserId })
+      .where(eq(tasks.assignedTo, fromUserId));
+    
+    // Reassign tickets (using assignedEngineerId)
+    await db
+      .update(tickets)
+      .set({ assignedEngineerId: toUserId })
+      .where(eq(tickets.assignedEngineerId, fromUserId));
+    
+    // Reassign project engineer assignments
+    await db
+      .update(projectEngineers)
+      .set({ engineerId: toUserId })
+      .where(eq(projectEngineers.engineerId, fromUserId));
+    
+    return {
+      leads: originalCounts.leads,
+      tasks: originalCounts.tasks,
+      tickets: originalCounts.tickets,
+      projects: originalCounts.projects,
+    };
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {

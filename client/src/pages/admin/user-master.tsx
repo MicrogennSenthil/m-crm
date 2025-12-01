@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { 
-  Loader2, Search, Plus, Pencil, Trash2, CheckCircle, XCircle
+  Loader2, Search, Plus, Pencil, Trash2, CheckCircle, XCircle, AlertTriangle, ArrowRightLeft
 } from "lucide-react";
 import { format } from "date-fns";
 import type { User, UserRole, Department } from "@shared/schema";
@@ -51,14 +51,27 @@ import { Switch } from "@/components/ui/switch";
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
+interface UserAssignments {
+  leads: number;
+  tasks: number;
+  tickets: number;
+  projects: number;
+  total: number;
+}
+
 export default function UserMaster() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<User | null>(null);
+  const [reassignToUserId, setReassignToUserId] = useState<string>("");
+  const [userAssignments, setUserAssignments] = useState<UserAssignments | null>(null);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -152,6 +165,98 @@ export default function UserMaster() {
       toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
     },
   });
+
+  const reassignMutation = useMutation({
+    mutationFn: async ({ fromUserId, toUserId }: { fromUserId: string; toUserId: string }) => {
+      const response = await apiRequest("POST", `/api/users/${fromUserId}/reassign`, { toUserId });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Items Reassigned", 
+        description: data.message,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setReassignDialogOpen(false);
+      setReassignTarget(null);
+      setReassignToUserId("");
+      setUserAssignments(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reassign items", variant: "destructive" });
+    },
+  });
+
+  // Function to check user assignments before delete
+  const handleDeleteClick = async (user: User) => {
+    setDeleteTarget(user);
+    setLoadingAssignments(true);
+    
+    try {
+      const response = await apiRequest("GET", `/api/users/${user.id}/assignments`);
+      const assignments = await response.json() as UserAssignments;
+      setUserAssignments(assignments);
+      
+      if (assignments.total > 0) {
+        // User has assignments, show reassign dialog
+        setReassignTarget(user);
+        setReassignDialogOpen(true);
+      } else {
+        // No assignments, show regular delete dialog
+        setDeleteDialogOpen(true);
+      }
+    } catch (error) {
+      // If error, just show regular delete dialog
+      setDeleteDialogOpen(true);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const handleReassignAndDeactivate = () => {
+    if (reassignTarget && reassignToUserId) {
+      reassignMutation.mutate(
+        { fromUserId: reassignTarget.id, toUserId: reassignToUserId },
+        {
+          onSuccess: () => {
+            // After reassignment, deactivate the user
+            updateUserMutation.mutate({ 
+              id: reassignTarget.id, 
+              data: { isActive: false } 
+            });
+          }
+        }
+      );
+    }
+  };
+
+  const handleDeactivateWithoutReassign = () => {
+    if (reassignTarget) {
+      updateUserMutation.mutate(
+        { id: reassignTarget.id, data: { isActive: false } },
+        {
+          onSuccess: () => {
+            toast({ 
+              title: "User Deactivated", 
+              description: "User has been deactivated. Their assigned items remain unchanged.",
+            });
+            setReassignDialogOpen(false);
+            setReassignTarget(null);
+            setUserAssignments(null);
+          }
+        }
+      );
+    }
+  };
+
+  // Get active users for reassignment (excluding the user being deleted)
+  const activeUsersForReassign = users.filter(
+    u => u.isActive && u.id !== reassignTarget?.id
+  );
 
   const handleSubmit = () => {
     if (!formData.email || !formData.firstName || !formData.lastName) {
@@ -306,8 +411,8 @@ export default function UserMaster() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => { setDeleteTarget(user); setDeleteDialogOpen(true); }}
-                          disabled={user.email === SUPER_ADMIN_EMAIL}
+                          onClick={() => handleDeleteClick(user)}
+                          disabled={user.email === SUPER_ADMIN_EMAIL || loadingAssignments}
                           data-testid={`button-delete-user-${user.id}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -437,6 +542,123 @@ export default function UserMaster() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reassignment Dialog */}
+      <Dialog open={reassignDialogOpen} onOpenChange={(open) => {
+        setReassignDialogOpen(open);
+        if (!open) {
+          setReassignTarget(null);
+          setReassignToUserId("");
+          setUserAssignments(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              User Has Assigned Items
+            </DialogTitle>
+            <DialogDescription>
+              {reassignTarget?.firstName} {reassignTarget?.lastName} has items assigned that need to be handled before deactivation.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {userAssignments && (
+            <div className="space-y-4">
+              <div className="bg-muted p-4 rounded-lg space-y-2">
+                <h4 className="font-medium text-sm">Assigned Items:</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {userAssignments.leads > 0 && (
+                    <div className="flex justify-between">
+                      <span>Leads:</span>
+                      <Badge variant="secondary">{userAssignments.leads}</Badge>
+                    </div>
+                  )}
+                  {userAssignments.tasks > 0 && (
+                    <div className="flex justify-between">
+                      <span>Tasks:</span>
+                      <Badge variant="secondary">{userAssignments.tasks}</Badge>
+                    </div>
+                  )}
+                  {userAssignments.tickets > 0 && (
+                    <div className="flex justify-between">
+                      <span>Tickets:</span>
+                      <Badge variant="secondary">{userAssignments.tickets}</Badge>
+                    </div>
+                  )}
+                  {userAssignments.projects > 0 && (
+                    <div className="flex justify-between">
+                      <span>Projects:</span>
+                      <Badge variant="secondary">{userAssignments.projects}</Badge>
+                    </div>
+                  )}
+                </div>
+                <div className="border-t pt-2 mt-2 flex justify-between font-medium">
+                  <span>Total:</span>
+                  <Badge>{userAssignments.total}</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-4 w-4" />
+                  Reassign items to:
+                </Label>
+                <Select
+                  value={reassignToUserId}
+                  onValueChange={setReassignToUserId}
+                >
+                  <SelectTrigger data-testid="select-reassign-user">
+                    <SelectValue placeholder="Select an active user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeUsersForReassign.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.firstName} {user.lastName} ({user.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setReassignDialogOpen(false);
+                setReassignTarget(null);
+                setReassignToUserId("");
+                setUserAssignments(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleDeactivateWithoutReassign}
+              disabled={updateUserMutation.isPending}
+              data-testid="button-deactivate-only"
+            >
+              {updateUserMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Deactivate Only
+            </Button>
+            <Button
+              onClick={handleReassignAndDeactivate}
+              disabled={!reassignToUserId || reassignMutation.isPending}
+              data-testid="button-reassign-deactivate"
+            >
+              {reassignMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Reassign & Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

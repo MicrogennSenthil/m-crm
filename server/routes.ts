@@ -828,6 +828,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user assignments count (leads, tasks, tickets, projects)
+  app.get("/api/users/:id/assignments", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      const assignments = await storage.getUserAssignments(userId);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error getting user assignments:", error);
+      res.status(500).json({ message: "Failed to get user assignments" });
+    }
+  });
+
+  // Reassign user's items to another user
+  app.post("/api/users/:id/reassign", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const fromUserId = req.params.id;
+      const { toUserId } = req.body;
+      
+      if (!toUserId) {
+        return res.status(400).json({ message: "Target user ID is required" });
+      }
+
+      const targetUser = await storage.getUser(toUserId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Target user not found" });
+      }
+
+      if (!targetUser.isActive) {
+        return res.status(400).json({ message: "Cannot reassign to an inactive user" });
+      }
+
+      const result = await storage.reassignUserItems(fromUserId, toUserId);
+      
+      await storage.logActivity({
+        entityType: "user",
+        entityId: fromUserId,
+        action: "reassigned",
+        description: `User items reassigned to ${targetUser.firstName} ${targetUser.lastName}: ${result.leads} leads, ${result.tasks} tasks, ${result.tickets} tickets, ${result.projects} projects`,
+        userId: req.user.claims.sub,
+      });
+
+      res.json({ 
+        success: true, 
+        message: `Successfully reassigned ${result.leads} leads, ${result.tasks} tasks, ${result.tickets} tickets, ${result.projects} projects`,
+        ...result
+      });
+    } catch (error) {
+      console.error("Error reassigning user items:", error);
+      res.status(500).json({ message: "Failed to reassign user items" });
+    }
+  });
+
   app.delete("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.params.id);
