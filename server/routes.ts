@@ -846,8 +846,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json({ message: "User deleted successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting user:", error);
+      
+      // Handle foreign key constraint violation
+      if (error.code === '23503') {
+        const constraintMap: Record<string, string> = {
+          'leads_sales_executive_id_users_id_fk': 'leads assigned',
+          'leads_assigned_to_users_id_fk': 'leads assigned',
+          'projects_assigned_to_users_id_fk': 'projects assigned',
+          'tickets_assigned_to_users_id_fk': 'support tickets assigned',
+          'tickets_created_by_users_id_fk': 'support tickets created',
+          'tasks_assigned_to_users_id_fk': 'tasks assigned',
+          'tasks_created_by_users_id_fk': 'tasks created',
+          'follow_ups_created_by_users_id_fk': 'follow-ups created',
+          'training_records_conducted_by_users_id_fk': 'training records',
+        };
+        
+        const constraint = error.constraint || '';
+        const reason = constraintMap[constraint] || 'records in the system';
+        
+        return res.status(400).json({ 
+          message: `Cannot delete user: This user has ${reason}. Please reassign or remove these records first, or deactivate the user instead.` 
+        });
+      }
+      
       res.status(500).json({ message: "Failed to delete user" });
     }
   });
