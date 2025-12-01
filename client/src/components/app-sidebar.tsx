@@ -61,7 +61,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import logoImage from "@assets/Logo_1764615397514.png";
 
 // Menu groups with collapsible sections
 const menuGroups = [
@@ -297,22 +296,10 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     <Sidebar collapsible="icon" data-testid="sidebar-main">
       <SidebarHeader className="h-[52px] px-3 flex items-center border-b-2 border-b-white">
         <div className="flex items-center justify-between gap-2 w-full">
-          {!isCollapsed ? (
-            <div className="flex items-center gap-2" data-testid="logo-container">
-              <img 
-                src={logoImage} 
-                alt="M-CRM Logo" 
-                className="h-8 w-auto object-contain"
-                data-testid="img-logo"
-              />
-            </div>
-          ) : (
-            <img 
-              src={logoImage} 
-              alt="M-CRM" 
-              className="h-7 w-auto object-contain mx-auto"
-              data-testid="img-logo-collapsed"
-            />
+          {!isCollapsed && (
+            <h1 className="text-lg font-bold text-sidebar-primary-foreground" data-testid="text-sidebar-title">
+              M-CRM
+            </h1>
           )}
           <div className={`flex items-center gap-1 ${isCollapsed ? 'mx-auto' : ''}`}>
             {!isMobile && (
