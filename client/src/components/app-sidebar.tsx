@@ -32,6 +32,7 @@ import {
   Search,
   Mail,
   ServerCog,
+  Star,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -210,6 +211,11 @@ const systemSettingsSubItems = [
     url: "/admin/smtp-config",
     icon: Mail,
   },
+  {
+    title: "Point Categories",
+    url: "/admin/point-categories",
+    icon: Star,
+  },
 ];
 
 interface AppSidebarProps {
@@ -269,7 +275,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const isUserManagementActive = location.startsWith("/admin/user");
   
   // Check if any system settings sub-item is active
-  const isSystemSettingsActive = location === "/admin/smtp-config";
+  const isSystemSettingsActive = location === "/admin/smtp-config" || location === "/admin/point-categories";
 
   // Check if a group has any visible items and if any item is active
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
