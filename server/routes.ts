@@ -45,6 +45,7 @@ import {
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
+import { handleAssignment, handleCompletion } from "./pointsService";
 
 // Generate 6-digit OTP
 function generateOtp(): string {
@@ -1884,6 +1885,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updated = await storage.updateLead(req.params.id, updateData);
       
+      // Handle points for sales executive assignment changes
+      if (updateData.salesExecutiveId !== undefined && 
+          currentLead && 
+          updateData.salesExecutiveId !== currentLead.salesExecutiveId) {
+        if (updateData.salesExecutiveId) {
+          await handleAssignment({
+            module: "leads",
+            entityId: req.params.id,
+            newAssigneeId: updateData.salesExecutiveId,
+            previousAssigneeId: currentLead.salesExecutiveId,
+            assignedById: req.user.claims.sub,
+          });
+        }
+      }
+      
+      // Handle completion bonus for closed_won
+      if (updateData.stage === "closed_won" && currentLead?.stage !== "closed_won" && updated.salesExecutiveId) {
+        await handleCompletion({
+          module: "leads",
+          entityId: req.params.id,
+          completedById: updated.salesExecutiveId,
+        });
+      }
+      
       // Default activity description if not set
       if (!activityDescription) {
         activityDescription = `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`;
@@ -2823,6 +2848,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updated = await storage.updateProjectModule(req.params.id, updateData);
       
+      // Handle points for engineer assignment changes
+      if (updateData.assignedEngineerId !== undefined && 
+          updateData.assignedEngineerId !== currentModule.assignedEngineerId) {
+        if (updateData.assignedEngineerId) {
+          await handleAssignment({
+            module: "projects",
+            entityId: req.params.id,
+            newAssigneeId: updateData.assignedEngineerId,
+            previousAssigneeId: currentModule.assignedEngineerId,
+            assignedById: changedBy || '',
+            department: currentModule.departmentName,
+          });
+        }
+      }
+      
+      // Handle completion bonus for module completion
+      if (updateData.completed && !currentModule.completed && updated.assignedEngineerId) {
+        await handleCompletion({
+          module: "projects",
+          entityId: req.params.id,
+          completedById: updated.assignedEngineerId,
+          department: updated.departmentName,
+        });
+      }
+      
       // Recalculate project completion percentage based on purchased modules only
       if (updated.projectId) {
         const project = await storage.getProject(updated.projectId);
@@ -3440,6 +3490,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newTicket = await storage.createTicket(validatedData);
       
+      // Award points if ticket is assigned
+      if (newTicket.assignedEngineerId) {
+        await handleAssignment({
+          module: "tickets",
+          entityId: newTicket.id,
+          newAssigneeId: newTicket.assignedEngineerId,
+          previousAssigneeId: null,
+          assignedById: req.user.claims.sub,
+        });
+      }
+      
       // Log activity
       await storage.logActivity({
         entityType: "ticket",
@@ -3458,7 +3519,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tickets/:id", isAuthenticated, async (req: any, res) => {
     try {
+      // Get current ticket for comparison
+      const currentTicket = await storage.getTicket(req.params.id);
+      if (!currentTicket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
       const updated = await storage.updateTicket(req.params.id, req.body);
+      
+      // Handle points for engineer assignment changes
+      if (req.body.assignedEngineerId !== undefined && 
+          req.body.assignedEngineerId !== currentTicket.assignedEngineerId) {
+        if (req.body.assignedEngineerId) {
+          await handleAssignment({
+            module: "tickets",
+            entityId: req.params.id,
+            newAssigneeId: req.body.assignedEngineerId,
+            previousAssigneeId: currentTicket.assignedEngineerId,
+            assignedById: req.user.claims.sub,
+          });
+        }
+      }
+      
+      // Handle completion bonus for resolved tickets
+      if (req.body.status === "resolved" && currentTicket.status !== "resolved" && updated.assignedEngineerId) {
+        await handleCompletion({
+          module: "tickets",
+          entityId: req.params.id,
+          completedById: updated.assignedEngineerId,
+        });
+      }
       
       // Log activity
       await storage.logActivity({
@@ -4063,6 +4153,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTaskSchema.parse(taskData);
       const newTask = await storage.createTask(validatedData);
       
+      // Award points if task is assigned
+      if (newTask.assignedTo) {
+        await handleAssignment({
+          module: "tasks",
+          entityId: newTask.id,
+          newAssigneeId: newTask.assignedTo,
+          previousAssigneeId: null,
+          assignedById: userId,
+        });
+      }
+      
       // Log activity
       await storage.logActivity({
         entityType: "task",
@@ -4107,11 +4208,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Set assignedAt when task is newly assigned or assignment changes
-      if (req.body.assignedTo && req.body.assignedTo !== task.assignedTo) {
+      const assignmentChanged = req.body.assignedTo && req.body.assignedTo !== task.assignedTo;
+      if (assignmentChanged) {
         updateData.assignedAt = new Date();
       }
       
       const updatedTask = await storage.updateTask(req.params.id, updateData);
+      
+      // Handle points for assignment changes
+      if (assignmentChanged) {
+        await handleAssignment({
+          module: "tasks",
+          entityId: task.id,
+          newAssigneeId: req.body.assignedTo,
+          previousAssigneeId: task.assignedTo,
+          assignedById: userId,
+        });
+      }
+      
+      // Handle completion bonus
+      if (req.body.status === "completed" && task.status !== "completed" && updatedTask.assignedTo) {
+        await handleCompletion({
+          module: "tasks",
+          entityId: task.id,
+          completedById: updatedTask.assignedTo,
+        });
+      }
       
       // Log activity
       await storage.logActivity({

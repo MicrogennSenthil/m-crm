@@ -73,7 +73,8 @@ import {
   Award,
   Users,
 } from "lucide-react";
-import type { PointCategory, PointCategoryDepartmentSetting } from "@shared/schema";
+import type { PointCategory, PointCategoryDepartmentSetting, UserPointBalance, UserPointLedger, User } from "@shared/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const pointCategorySchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -113,12 +114,14 @@ const departments = [
 export default function PointCategoriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [mainTab, setMainTab] = useState<"categories" | "user-points">("categories");
   const [activeTab, setActiveTab] = useState("lead");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeptDialogOpen, setIsDeptDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<PointCategory | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<PointCategory | null>(null);
   const [deleteCategory, setDeleteCategory] = useState<PointCategory | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const form = useForm<PointCategoryFormData>({
     resolver: zodResolver(pointCategorySchema),
@@ -158,6 +161,25 @@ export default function PointCategoriesPage() {
           )
         : Promise.resolve([]),
     enabled: !!selectedCategory,
+  });
+
+  const { data: userBalances = [], isLoading: loadingBalances } = useQuery<UserPointBalance[]>({
+    queryKey: ["/api/point-balances"],
+    enabled: user?.role === "admin" && mainTab === "user-points",
+  });
+
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    enabled: user?.role === "admin" && mainTab === "user-points",
+  });
+
+  const { data: userLedger = [] } = useQuery<UserPointLedger[]>({
+    queryKey: ["/api/point-ledger", selectedUserId],
+    queryFn: () =>
+      selectedUserId
+        ? fetch(`/api/point-ledger/${selectedUserId}`).then((r) => r.json())
+        : Promise.resolve([]),
+    enabled: !!selectedUserId,
   });
 
   const createMutation = useMutation({
@@ -297,29 +319,185 @@ export default function PointCategoriesPage() {
     );
   }
 
+  const getUserName = (userId: string) => {
+    const u = allUsers.find((u) => u.id === userId);
+    if (u?.firstName && u?.lastName) {
+      return `${u.firstName} ${u.lastName}`;
+    }
+    return u?.email || userId.slice(0, 8);
+  };
+
+  const getActionLabel = (action: string) => {
+    const labels: Record<string, { label: string; color: string }> = {
+      assign: { label: "Assignment", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
+      reassign_from: { label: "Reassign Penalty", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+      reassign_to: { label: "Reassignment", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
+      complete: { label: "Completion Bonus", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300" },
+      adjustment: { label: "Adjustment", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
+    };
+    return labels[action] || { label: action, color: "bg-gray-100 text-gray-800" };
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Star className="h-6 w-6 text-yellow-500" />
-            Point Categories
+            Points Management
           </h1>
           <p className="text-muted-foreground">
-            Configure point values for task assignments across all modules
+            Configure point values and view user point balances
           </p>
         </div>
-        <Button
-          onClick={() => {
-            form.setValue("moduleType", activeTab as any);
-            setIsDialogOpen(true);
-          }}
-          data-testid="button-add-category"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Category
-        </Button>
+        {mainTab === "categories" && (
+          <Button
+            onClick={() => {
+              form.setValue("moduleType", activeTab as any);
+              setIsDialogOpen(true);
+            }}
+            data-testid="button-add-category"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Category
+          </Button>
+        )}
       </div>
+
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="categories" data-testid="tab-categories">
+            <Settings className="h-4 w-4 mr-2" />
+            Categories
+          </TabsTrigger>
+          <TabsTrigger value="user-points" data-testid="tab-user-points">
+            <Users className="h-4 w-4 mr-2" />
+            User Points
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="user-points" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  User Point Balances
+                </CardTitle>
+                <CardDescription>
+                  View total and module-specific points for all users
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingBalances ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : userBalances.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    No point data available yet
+                  </p>
+                ) : (
+                  <ScrollArea className="h-[400px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="text-right">Leads</TableHead>
+                          <TableHead className="text-right">Tasks</TableHead>
+                          <TableHead className="text-right">Tickets</TableHead>
+                          <TableHead className="text-right">Projects</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {userBalances.map((balance) => (
+                          <TableRow
+                            key={balance.id}
+                            className={`cursor-pointer hover-elevate ${selectedUserId === balance.userId ? "bg-muted" : ""}`}
+                            onClick={() => setSelectedUserId(balance.userId)}
+                            data-testid={`row-user-balance-${balance.userId}`}
+                          >
+                            <TableCell className="font-medium">
+                              {getUserName(balance.userId)}
+                            </TableCell>
+                            <TableCell className="text-right font-bold">
+                              {balance.totalPoints}
+                            </TableCell>
+                            <TableCell className="text-right">{balance.leadPoints}</TableCell>
+                            <TableCell className="text-right">{balance.taskPoints}</TableCell>
+                            <TableCell className="text-right">{balance.ticketPoints}</TableCell>
+                            <TableCell className="text-right">{balance.projectPoints}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Transaction History
+                </CardTitle>
+                <CardDescription>
+                  {selectedUserId
+                    ? `Point history for ${getUserName(selectedUserId)}`
+                    : "Select a user to view their transaction history"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!selectedUserId ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    Click on a user to view their point history
+                  </p>
+                ) : userLedger.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">
+                    No transactions found for this user
+                  </p>
+                ) : (
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-3">
+                      {userLedger.map((entry) => {
+                        const actionInfo = getActionLabel(entry.action);
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-start gap-3 p-3 border rounded-lg"
+                            data-testid={`ledger-entry-${entry.id}`}
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge className={actionInfo.color}>{actionInfo.label}</Badge>
+                                <Badge variant="outline" className="capitalize">
+                                  {entry.moduleType}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {entry.reason}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {entry.createdAt && new Date(entry.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className={`text-lg font-bold ${entry.points >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                              {entry.points >= 0 ? "+" : ""}{entry.points}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-6">
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -517,6 +695,8 @@ export default function PointCategoriesPage() {
             </Card>
           </TabsContent>
         ))}
+      </Tabs>
+        </TabsContent>
       </Tabs>
 
       <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
