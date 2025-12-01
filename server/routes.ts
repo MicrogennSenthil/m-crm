@@ -39,6 +39,8 @@ import {
   knowledgeBaseContentTypes,
   supportedLanguages,
   smtpConfigSchema,
+  insertPointCategorySchema,
+  insertPointCategoryDepartmentSettingSchema,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -5073,6 +5075,405 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting SMTP config:", error);
       res.status(500).json({ message: "Failed to delete SMTP configuration" });
+    }
+  });
+
+  // =============================================
+  // POINT CATEGORIES MANAGEMENT ROUTES
+  // =============================================
+
+  // Get all point categories
+  app.get("/api/point-categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const categories = await storage.getPointCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error getting point categories:", error);
+      res.status(500).json({ message: "Failed to get point categories" });
+    }
+  });
+
+  // Get point categories by module type
+  app.get("/api/point-categories/module/:moduleType", isAuthenticated, async (req: any, res) => {
+    try {
+      const { moduleType } = req.params;
+      const categories = await storage.getPointCategoriesByModule(moduleType);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error getting point categories by module:", error);
+      res.status(500).json({ message: "Failed to get point categories" });
+    }
+  });
+
+  // Get single point category
+  app.get("/api/point-categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const category = await storage.getPointCategory(id);
+      if (!category) {
+        return res.status(404).json({ message: "Point category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error("Error getting point category:", error);
+      res.status(500).json({ message: "Failed to get point category" });
+    }
+  });
+
+  // Create point category (Admin only)
+  app.post("/api/point-categories", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const validatedData = insertPointCategorySchema.parse(req.body);
+      const category = await storage.createPointCategory(validatedData);
+      
+      await storage.logActivity({
+        entityType: "point_category",
+        entityId: category.id,
+        action: "created",
+        description: `Created point category: ${category.name}`,
+        userId,
+      });
+      
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Error creating point category:", error);
+      res.status(500).json({ message: "Failed to create point category" });
+    }
+  });
+
+  // Update point category (Admin only)
+  app.patch("/api/point-categories/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+      const validatedData = insertPointCategorySchema.partial().parse(req.body);
+      const category = await storage.updatePointCategory(id, validatedData);
+      
+      if (!category) {
+        return res.status(404).json({ message: "Point category not found" });
+      }
+      
+      await storage.logActivity({
+        entityType: "point_category",
+        entityId: category.id,
+        action: "updated",
+        description: `Updated point category: ${category.name}`,
+        userId,
+      });
+      
+      res.json(category);
+    } catch (error) {
+      console.error("Error updating point category:", error);
+      res.status(500).json({ message: "Failed to update point category" });
+    }
+  });
+
+  // Delete point category (Admin only)
+  app.delete("/api/point-categories/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+      const category = await storage.getPointCategory(id);
+      
+      if (!category) {
+        return res.status(404).json({ message: "Point category not found" });
+      }
+      
+      await storage.deletePointCategory(id);
+      
+      await storage.logActivity({
+        entityType: "point_category",
+        entityId: id,
+        action: "deleted",
+        description: `Deleted point category: ${category.name}`,
+        userId,
+      });
+      
+      res.json({ message: "Point category deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting point category:", error);
+      res.status(500).json({ message: "Failed to delete point category" });
+    }
+  });
+
+  // =============================================
+  // POINT CATEGORY DEPARTMENT SETTINGS ROUTES
+  // =============================================
+
+  // Get department settings for a category
+  app.get("/api/point-categories/:categoryId/department-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const { categoryId } = req.params;
+      const settings = await storage.getPointCategoryDepartmentSettings(categoryId);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting department settings:", error);
+      res.status(500).json({ message: "Failed to get department settings" });
+    }
+  });
+
+  // Create department setting (Admin only)
+  app.post("/api/point-categories/:categoryId/department-settings", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { categoryId } = req.params;
+      const userId = req.user?.id;
+      const validatedData = insertPointCategoryDepartmentSettingSchema.parse({
+        ...req.body,
+        pointCategoryId: categoryId,
+      });
+      const setting = await storage.createPointCategoryDepartmentSetting(validatedData);
+      
+      await storage.logActivity({
+        entityType: "point_category_department_setting",
+        entityId: setting.id,
+        action: "created",
+        description: `Created department setting for category: ${categoryId}`,
+        userId,
+      });
+      
+      res.status(201).json(setting);
+    } catch (error) {
+      console.error("Error creating department setting:", error);
+      res.status(500).json({ message: "Failed to create department setting" });
+    }
+  });
+
+  // Update department setting (Admin only)
+  app.patch("/api/point-category-department-settings/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+      const validatedData = insertPointCategoryDepartmentSettingSchema.partial().parse(req.body);
+      const setting = await storage.updatePointCategoryDepartmentSetting(id, validatedData);
+      
+      if (!setting) {
+        return res.status(404).json({ message: "Department setting not found" });
+      }
+      
+      await storage.logActivity({
+        entityType: "point_category_department_setting",
+        entityId: id,
+        action: "updated",
+        description: `Updated department setting`,
+        userId,
+      });
+      
+      res.json(setting);
+    } catch (error) {
+      console.error("Error updating department setting:", error);
+      res.status(500).json({ message: "Failed to update department setting" });
+    }
+  });
+
+  // Delete department setting (Admin only)
+  app.delete("/api/point-category-department-settings/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+      
+      await storage.deletePointCategoryDepartmentSetting(id);
+      
+      await storage.logActivity({
+        entityType: "point_category_department_setting",
+        entityId: id,
+        action: "deleted",
+        description: `Deleted department setting`,
+        userId,
+      });
+      
+      res.json({ message: "Department setting deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting department setting:", error);
+      res.status(500).json({ message: "Failed to delete department setting" });
+    }
+  });
+
+  // =============================================
+  // USER POINTS ROUTES
+  // =============================================
+
+  // Get all user point balances
+  app.get("/api/user-point-balances", isAuthenticated, async (req: any, res) => {
+    try {
+      const balances = await storage.getUserPointBalances();
+      res.json(balances);
+    } catch (error) {
+      console.error("Error getting user point balances:", error);
+      res.status(500).json({ message: "Failed to get user point balances" });
+    }
+  });
+
+  // Get user's point balance
+  app.get("/api/user-point-balances/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const balance = await storage.getUserPointBalance(userId);
+      if (!balance) {
+        // Initialize if not exists
+        const newBalance = await storage.initializeUserPointBalance(userId);
+        return res.json(newBalance);
+      }
+      res.json(balance);
+    } catch (error) {
+      console.error("Error getting user point balance:", error);
+      res.status(500).json({ message: "Failed to get user point balance" });
+    }
+  });
+
+  // Get user's point ledger (history)
+  app.get("/api/user-point-ledger/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const ledger = await storage.getUserPointLedger(userId);
+      res.json(ledger);
+    } catch (error) {
+      console.error("Error getting user point ledger:", error);
+      res.status(500).json({ message: "Failed to get user point ledger" });
+    }
+  });
+
+  // Manual point adjustment (Admin only)
+  app.post("/api/user-points/adjust", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { userId, points, moduleType, reason } = req.body;
+      const adminId = req.user?.id;
+
+      if (!userId || points === undefined || !moduleType) {
+        return res.status(400).json({ message: "userId, points, and moduleType are required" });
+      }
+
+      // Create ledger entry
+      const ledgerEntry = await storage.createPointLedgerEntry({
+        userId,
+        moduleType,
+        entityId: "manual_adjustment",
+        action: "adjustment",
+        points,
+        reason: reason || "Manual adjustment by admin",
+        createdBy: adminId,
+      });
+
+      // Update user balance
+      const balance = await storage.updateUserPointBalance(userId, points, moduleType);
+
+      await storage.logActivity({
+        entityType: "user_points",
+        entityId: userId,
+        action: "adjusted",
+        description: `Manual point adjustment: ${points > 0 ? '+' : ''}${points} points (${moduleType})`,
+        userId: adminId,
+      });
+
+      res.json({ ledgerEntry, balance });
+    } catch (error) {
+      console.error("Error adjusting user points:", error);
+      res.status(500).json({ message: "Failed to adjust user points" });
+    }
+  });
+
+  // Award points on assignment (internal endpoint for module integrations)
+  app.post("/api/user-points/award", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId, moduleType, entityId, categoryId, reason } = req.body;
+      const createdBy = req.user?.id;
+
+      if (!userId || !moduleType || !entityId) {
+        return res.status(400).json({ message: "userId, moduleType, and entityId are required" });
+      }
+
+      // Get category to determine points
+      let basePoints = 1; // Default
+      if (categoryId) {
+        const category = await storage.getPointCategory(categoryId);
+        if (category) {
+          basePoints = category.basePoints;
+        }
+      }
+
+      // Create ledger entry
+      const ledgerEntry = await storage.createPointLedgerEntry({
+        userId,
+        moduleType,
+        entityId,
+        categoryId: categoryId || null,
+        action: "assign",
+        points: basePoints,
+        reason: reason || `Assigned ${moduleType}`,
+        createdBy,
+      });
+
+      // Update user balance
+      const balance = await storage.updateUserPointBalance(userId, basePoints, moduleType);
+
+      res.json({ ledgerEntry, balance, pointsAwarded: basePoints });
+    } catch (error) {
+      console.error("Error awarding points:", error);
+      res.status(500).json({ message: "Failed to award points" });
+    }
+  });
+
+  // Deduct points on reassignment (internal endpoint for module integrations)
+  app.post("/api/user-points/deduct-reassign", isAuthenticated, async (req: any, res) => {
+    try {
+      const { fromUserId, toUserId, moduleType, entityId, categoryId, reason } = req.body;
+      const createdBy = req.user?.id;
+
+      if (!fromUserId || !toUserId || !moduleType || !entityId) {
+        return res.status(400).json({ message: "fromUserId, toUserId, moduleType, and entityId are required" });
+      }
+
+      // Get category to determine points
+      let basePoints = 1;
+      let reassignPenalty = 1;
+      if (categoryId) {
+        const category = await storage.getPointCategory(categoryId);
+        if (category) {
+          basePoints = category.basePoints;
+          reassignPenalty = category.reassignPenalty;
+        }
+      }
+
+      const penaltyPoints = basePoints + reassignPenalty;
+
+      // Deduct from original assignee
+      const deductLedger = await storage.createPointLedgerEntry({
+        userId: fromUserId,
+        moduleType,
+        entityId,
+        categoryId: categoryId || null,
+        action: "reassign_from",
+        points: -penaltyPoints,
+        reason: reason || `Reassigned ${moduleType} to another user`,
+        createdBy,
+      });
+
+      await storage.updateUserPointBalance(fromUserId, -penaltyPoints, moduleType);
+
+      // Award to new assignee
+      const awardLedger = await storage.createPointLedgerEntry({
+        userId: toUserId,
+        moduleType,
+        entityId,
+        categoryId: categoryId || null,
+        action: "reassign_to",
+        points: basePoints,
+        reason: reason || `Received reassigned ${moduleType}`,
+        createdBy,
+      });
+
+      const newBalance = await storage.updateUserPointBalance(toUserId, basePoints, moduleType);
+
+      res.json({ 
+        deductLedger, 
+        awardLedger, 
+        newBalance,
+        penaltyDeducted: penaltyPoints,
+        pointsAwarded: basePoints
+      });
+    } catch (error) {
+      console.error("Error processing reassignment points:", error);
+      res.status(500).json({ message: "Failed to process reassignment points" });
     }
   });
 
