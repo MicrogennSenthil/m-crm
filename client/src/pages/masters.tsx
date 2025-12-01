@@ -956,14 +956,14 @@ function DepartmentForm({
         <div className="grid gap-2">
           <Label htmlFor="managerId">Department Manager</Label>
           <Select
-            value={formData.managerId}
-            onValueChange={(value) => setFormData({ ...formData, managerId: value })}
+            value={formData.managerId || "_none"}
+            onValueChange={(value) => setFormData({ ...formData, managerId: value === "_none" ? "" : value })}
           >
             <SelectTrigger data-testid="select-department-manager">
               <SelectValue placeholder="Select a manager" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">No Manager</SelectItem>
+              <SelectItem value="_none">No Manager</SelectItem>
               {users.filter(u => u.isActive).map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.firstName} {user.lastName} ({user.email})

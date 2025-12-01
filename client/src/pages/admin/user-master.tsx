@@ -78,6 +78,7 @@ export default function UserMaster() {
     firstName: "",
     lastName: "",
     role: "sales_executive",
+    departmentId: "",
     isActive: true,
   });
 
@@ -90,6 +91,10 @@ export default function UserMaster() {
     queryKey: ["/api/user-roles"],
   });
 
+  const { data: departments = [] } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
   useEffect(() => {
     if (editingUser) {
       setFormData({
@@ -97,6 +102,7 @@ export default function UserMaster() {
         firstName: editingUser.firstName || "",
         lastName: editingUser.lastName || "",
         role: editingUser.role || "sales_executive",
+        departmentId: editingUser.departmentId || "",
         isActive: editingUser.isActive ?? true,
       });
     } else {
@@ -105,6 +111,7 @@ export default function UserMaster() {
         firstName: "",
         lastName: "",
         role: "sales_executive",
+        departmentId: "",
         isActive: true,
       });
     }
@@ -264,10 +271,15 @@ export default function UserMaster() {
       return;
     }
 
+    const submitData = {
+      ...formData,
+      departmentId: formData.departmentId || null,
+    };
+
     if (editingUser) {
-      updateUserMutation.mutate({ id: editingUser.id, data: formData });
+      updateUserMutation.mutate({ id: editingUser.id, data: submitData });
     } else {
-      createUserMutation.mutate(formData);
+      createUserMutation.mutate(submitData);
     }
   };
 
@@ -285,6 +297,12 @@ export default function UserMaster() {
     const first = user.firstName?.[0] || "";
     const last = user.lastName?.[0] || "";
     return (first + last).toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
+  };
+
+  const getDepartmentName = (departmentId: string | null) => {
+    if (!departmentId) return "-";
+    const dept = departments.find(d => d.id === departmentId);
+    return dept?.name || "-";
   };
 
   if (currentUser?.role !== "admin") {
@@ -345,9 +363,10 @@ export default function UserMaster() {
                   <TableHead>User</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead className="hidden md:table-cell">Department</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Approved</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="hidden sm:table-cell">Approved</TableHead>
+                  <TableHead className="hidden lg:table-cell">Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -374,6 +393,9 @@ export default function UserMaster() {
                         {user.role?.replace("_", " ")}
                       </Badge>
                     </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {getDepartmentName(user.departmentId)}
+                    </TableCell>
                     <TableCell>
                       {user.isActive ? (
                         <Badge variant="default" className="bg-green-500">
@@ -387,14 +409,14 @@ export default function UserMaster() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {user.isApproved ? (
                         <Badge variant="default" className="bg-green-500">Approved</Badge>
                       ) : (
                         <Badge variant="outline" className="text-orange-500 border-orange-500">Pending</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -423,7 +445,7 @@ export default function UserMaster() {
                 ))}
                 {filteredUsers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No users found
                     </TableCell>
                   </TableRow>
@@ -474,22 +496,43 @@ export default function UserMaster() {
                 data-testid="input-user-email"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
-              >
-                <SelectTrigger data-testid="select-user-role">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="sales_executive">Sales Executive</SelectItem>
-                  <SelectItem value="engineer">Engineer</SelectItem>
-                  <SelectItem value="support">Support</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => setFormData({ ...formData, role: value })}
+                >
+                  <SelectTrigger data-testid="select-user-role">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="sales_executive">Sales Executive</SelectItem>
+                    <SelectItem value="engineer">Engineer</SelectItem>
+                    <SelectItem value="support">Support</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={formData.departmentId || "_none"}
+                  onValueChange={(value) => setFormData({ ...formData, departmentId: value === "_none" ? "" : value })}
+                >
+                  <SelectTrigger data-testid="select-user-department">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">No Department</SelectItem>
+                    {departments.filter(d => d.isActive).map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <Label>Active Status</Label>
