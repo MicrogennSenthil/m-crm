@@ -73,11 +73,11 @@ import {
   Award,
   Users,
 } from "lucide-react";
-import type { PointCategory, PointCategoryDepartmentSetting, UserPointBalance, UserPointLedger, User } from "@shared/schema";
+import type { PointCategory, PointCategoryDepartmentSetting, UserPointBalance, UserPointLedger, User, Department } from "@shared/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const pointCategorySchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  departmentId: z.string().min(1, "Department is required"),
   description: z.string().optional(),
   moduleType: z.enum(["lead", "task", "ticket", "project"]),
   basePoints: z.coerce.number().min(0, "Base points must be 0 or greater"),
@@ -104,13 +104,6 @@ const moduleTypes = [
   { value: "project", label: "Project", icon: Briefcase },
 ];
 
-const departments = [
-  { value: "sales", label: "Sales" },
-  { value: "support", label: "Support" },
-  { value: "engineering", label: "Engineering" },
-  { value: "admin", label: "Administration" },
-];
-
 export default function PointCategoriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -126,7 +119,7 @@ export default function PointCategoriesPage() {
   const form = useForm<PointCategoryFormData>({
     resolver: zodResolver(pointCategorySchema),
     defaultValues: {
-      name: "",
+      departmentId: "",
       description: "",
       moduleType: "lead",
       basePoints: 1,
@@ -149,6 +142,11 @@ export default function PointCategoriesPage() {
 
   const { data: categories = [], isLoading } = useQuery<PointCategory[]>({
     queryKey: ["/api/point-categories"],
+    enabled: user?.role === "admin",
+  });
+
+  const { data: departmentsList = [] } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
     enabled: user?.role === "admin",
   });
 
@@ -261,7 +259,7 @@ export default function PointCategoriesPage() {
     setIsDialogOpen(false);
     setEditingCategory(null);
     form.reset({
-      name: "",
+      departmentId: "",
       description: "",
       moduleType: "lead",
       basePoints: 1,
@@ -274,7 +272,7 @@ export default function PointCategoriesPage() {
   const handleEdit = (category: PointCategory) => {
     setEditingCategory(category);
     form.reset({
-      name: category.name,
+      departmentId: category.departmentId || "",
       description: category.description || "",
       moduleType: category.moduleType as any,
       basePoints: category.basePoints,
@@ -298,6 +296,12 @@ export default function PointCategoriesPage() {
   };
 
   const filteredCategories = categories.filter((c) => c.moduleType === activeTab);
+
+  const getDepartmentName = (departmentId: string | null | undefined) => {
+    if (!departmentId) return "-";
+    const dept = departmentsList.find((d) => d.id === departmentId);
+    return dept?.name || "-";
+  };
 
   const getModuleIcon = (moduleType: string) => {
     const module = moduleTypes.find((m) => m.value === moduleType);
@@ -715,17 +719,24 @@ export default function PointCategoriesPage() {
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="name"
+                name="departmentId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Category Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Fresh Support Task"
-                        {...field}
-                        data-testid="input-category-name"
-                      />
-                    </FormControl>
+                    <FormLabel>Department</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-department">
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {departmentsList.filter(d => d.isActive).map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
