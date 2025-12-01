@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserProfileMenu } from "@/components/user-profile-menu";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
@@ -61,7 +62,7 @@ function AuthenticatedLayout() {
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <img 
                 src={microgennLogo} 
                 alt="M-CRM" 
@@ -69,6 +70,7 @@ function AuthenticatedLayout() {
                 data-testid="logo-mcrm"
               />
               <ThemeToggle />
+              <UserProfileMenu />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-3 sm:p-6">

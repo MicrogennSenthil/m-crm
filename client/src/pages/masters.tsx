@@ -45,8 +45,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog } from "lucide-react";
-import type { Customer, Module, User, UserRole, UserRoleRight } from "@shared/schema";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2 } from "lucide-react";
+import type { Customer, Module, User, UserRole, UserRoleRight, Department } from "@shared/schema";
 
 export default function Masters() {
   const [activeTab, setActiveTab] = useState("customers");
@@ -65,6 +65,10 @@ export default function Masters() {
           <TabsTrigger value="customers" data-testid="tab-customers" className="flex-1 sm:flex-none">
             <Users className="w-4 h-4 mr-2" />
             Customer Master
+          </TabsTrigger>
+          <TabsTrigger value="departments" data-testid="tab-departments" className="flex-1 sm:flex-none">
+            <Building2 className="w-4 h-4 mr-2" />
+            Department
           </TabsTrigger>
           <TabsTrigger value="modules" data-testid="tab-modules" className="flex-1 sm:flex-none">
             <Package className="w-4 h-4 mr-2" />
@@ -86,6 +90,10 @@ export default function Masters() {
 
         <TabsContent value="customers">
           <CustomersTab />
+        </TabsContent>
+
+        <TabsContent value="departments">
+          <DepartmentsTab />
         </TabsContent>
 
         <TabsContent value="modules">
@@ -667,6 +675,322 @@ function CustomerForm({
         </Button>
         <Button type="submit" disabled={isPending || !formData.name} data-testid="button-save-customer">
           {isPending ? "Saving..." : customer ? "Update" : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+function DepartmentsTab() {
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
+
+  const { data: departments = [], isLoading } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ["/api/users/all"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: Partial<Department>) => {
+      return await apiRequest("POST", "/api/departments", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      setIsAddOpen(false);
+      toast({ title: "Department created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create department", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Department> }) => {
+      return await apiRequest("PATCH", `/api/departments/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      setEditingDepartment(null);
+      toast({ title: "Department updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update department", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/departments/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      setDeletingDepartment(null);
+      toast({ title: "Department deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete department. It may be assigned to users.", variant: "destructive" });
+    },
+  });
+
+  const filteredDepartments = departments.filter(
+    (dept) =>
+      dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getManagerName = (managerId: string | null) => {
+    if (!managerId) return "-";
+    const manager = users.find(u => u.id === managerId);
+    return manager ? `${manager.firstName || ""} ${manager.lastName || ""}`.trim() || manager.email : "-";
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle className="text-base sm:text-lg">Department Master</CardTitle>
+            <CardDescription>Manage organizational departments</CardDescription>
+          </div>
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-department" className="min-h-[44px] sm:min-h-0">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Department
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DepartmentForm
+                users={users}
+                onSubmit={(data) => createMutation.mutate(data)}
+                isPending={createMutation.isPending}
+                onCancel={() => setIsAddOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0">
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search departments..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-departments"
+            />
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array(5).fill(0).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : filteredDepartments.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {searchTerm ? "No departments found matching your search" : "No departments yet. Add your first department."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden sm:table-cell">Description</TableHead>
+                  <TableHead className="hidden md:table-cell">Manager</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredDepartments.map((dept) => (
+                  <TableRow key={dept.id} data-testid={`row-department-${dept.id}`}>
+                    <TableCell className="font-medium">{dept.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell max-w-md truncate">
+                      {dept.description || "-"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {getManagerName(dept.managerId)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={dept.isActive ? "default" : "secondary"}>
+                        {dept.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingDepartment(dept)}
+                          data-testid={`button-edit-department-${dept.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingDepartment(dept)}
+                          data-testid={`button-delete-department-${dept.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={!!editingDepartment} onOpenChange={() => setEditingDepartment(null)}>
+        <DialogContent>
+          {editingDepartment && (
+            <DepartmentForm
+              department={editingDepartment}
+              users={users}
+              onSubmit={(data) => updateMutation.mutate({ id: editingDepartment.id, data })}
+              isPending={updateMutation.isPending}
+              onCancel={() => setEditingDepartment(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingDepartment} onOpenChange={() => setDeletingDepartment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Department</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingDepartment?.name}"? This may affect users assigned to this department.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingDepartment && deleteMutation.mutate(deletingDepartment.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function DepartmentForm({
+  department,
+  users,
+  onSubmit,
+  isPending,
+  onCancel,
+}: {
+  department?: Department;
+  users: User[];
+  onSubmit: (data: Partial<Department>) => void;
+  isPending: boolean;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    name: department?.name || "",
+    description: department?.description || "",
+    managerId: department?.managerId || "",
+    isActive: department?.isActive ?? true,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      ...formData,
+      managerId: formData.managerId || null,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <DialogHeader>
+        <DialogTitle>{department ? "Edit Department" : "Add Department"}</DialogTitle>
+        <DialogDescription>
+          {department ? "Update department information" : "Add a new department to the system"}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 py-4">
+        <div className="grid gap-2">
+          <Label htmlFor="name">Department Name *</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+            placeholder="Enter department name"
+            data-testid="input-department-name"
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            placeholder="Enter department description"
+            rows={2}
+            data-testid="input-department-description"
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="managerId">Department Manager</Label>
+          <Select
+            value={formData.managerId}
+            onValueChange={(value) => setFormData({ ...formData, managerId: value })}
+          >
+            <SelectTrigger data-testid="select-department-manager">
+              <SelectValue placeholder="Select a manager" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">No Manager</SelectItem>
+              {users.filter(u => u.isActive).map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.firstName} {user.lastName} ({user.email})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="isActive"
+            checked={formData.isActive}
+            onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked as boolean })}
+            data-testid="checkbox-department-active"
+          />
+          <Label htmlFor="isActive" className="font-normal">
+            Department is active
+          </Label>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending || !formData.name} data-testid="button-save-department">
+          {isPending ? "Saving..." : department ? "Update" : "Create"}
         </Button>
       </DialogFooter>
     </form>

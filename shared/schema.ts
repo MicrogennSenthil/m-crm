@@ -31,6 +31,7 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   role: varchar("role", { length: 50 }).notNull().default("sales_executive"), // sales_executive, engineer, support, admin
+  departmentId: varchar("department_id"), // Reference to departments table
   // Local authentication fields
   passwordHash: varchar("password_hash"), // Bcrypt hashed password
   isEmailVerified: boolean("is_email_verified").default(false),

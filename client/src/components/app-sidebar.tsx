@@ -8,7 +8,6 @@ import {
   BarChart3,
   Database,
   Settings,
-  LogOut,
   ListTodo,
   ChevronRight,
   ChevronUp,
@@ -47,7 +46,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarFooter,
   SidebarHeader,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -56,8 +54,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -284,21 +280,6 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     );
     const hasActiveItem = visibleItems.some((item) => location === item.url);
     return { visibleItems, hasActiveItem, hasItems: visibleItems.length > 0 };
-  };
-
-  const getUserInitials = () => {
-    if (!user) return "U";
-    const first = user.firstName?.[0] || "";
-    const last = user.lastName?.[0] || "";
-    return (first + last).toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
-  };
-
-  const getUserDisplayName = () => {
-    if (!user) return "User";
-    if (user.firstName && user.lastName) {
-      return `${user.firstName} ${user.lastName}`;
-    }
-    return user.email || "User";
   };
 
   const handlePin = () => {
@@ -662,33 +643,6 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
           </Button>
         </div>
       )}
-
-      <SidebarFooter className="p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user?.profileImageUrl || undefined} alt={getUserDisplayName()} />
-            <AvatarFallback>{getUserInitials()}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" data-testid="user-name-display">
-              {getUserDisplayName()}
-            </p>
-            <p className="text-xs text-muted-foreground capitalize" data-testid="user-role-display">
-              {user?.role?.replace("_", " ")}
-            </p>
-          </div>
-        </div>
-        <SidebarMenuButton
-          asChild
-          data-testid="button-logout"
-          className="w-full"
-        >
-          <a href="/api/logout">
-            <LogOut className="h-4 w-4" />
-            <span>Log Out</span>
-          </a>
-        </SidebarMenuButton>
-      </SidebarFooter>
     </Sidebar>
   );
 }
