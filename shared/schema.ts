@@ -1042,10 +1042,11 @@ export type SmtpConfig = z.infer<typeof smtpConfigSchema>;
 // Points Management System
 // ============================================
 
-// Point Categories - defines point values for different task/lead types
+// Point Categories - defines point values for different task/lead types per department
 export const pointCategories = pgTable("point_categories", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name", { length: 100 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(), // Derived from department name
+  departmentId: varchar("department_id").references(() => departments.id), // Link to department master
   description: text("description"),
   moduleType: varchar("module_type", { length: 20 }).notNull(), // lead, task, ticket, project
   basePoints: integer("base_points").notNull().default(1), // Default points for assignment

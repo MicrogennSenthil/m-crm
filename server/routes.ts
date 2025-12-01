@@ -5246,7 +5246,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/point-categories", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const validatedData = insertPointCategorySchema.parse(req.body);
+      const { departmentId, ...restData } = req.body;
+      
+      // Derive name from department if departmentId is provided
+      let name = restData.name || "Default Category";
+      if (departmentId) {
+        const department = await storage.getDepartment(departmentId);
+        if (department) {
+          name = department.name;
+        }
+      }
+      
+      const validatedData = insertPointCategorySchema.parse({
+        ...restData,
+        name,
+        departmentId: departmentId || null,
+      });
       const category = await storage.createPointCategory(validatedData);
       
       await storage.logActivity({
@@ -5269,7 +5284,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
-      const validatedData = insertPointCategorySchema.partial().parse(req.body);
+      const { departmentId, ...restData } = req.body;
+      
+      // Derive name from department if departmentId is provided
+      let updateData: any = { ...restData };
+      if (departmentId !== undefined) {
+        updateData.departmentId = departmentId || null;
+        if (departmentId) {
+          const department = await storage.getDepartment(departmentId);
+          if (department) {
+            updateData.name = department.name;
+          }
+        }
+      }
+      
+      const validatedData = insertPointCategorySchema.partial().parse(updateData);
       const category = await storage.updatePointCategory(id, validatedData);
       
       if (!category) {
