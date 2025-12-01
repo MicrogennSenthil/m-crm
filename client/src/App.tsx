@@ -10,7 +10,7 @@ import { UserProfileMenu } from "@/components/user-profile-menu";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
-import microgennLogo from "@assets/MG Logo_1764263883732.png";
+import microgennLogo from "@assets/Logo_1764615397514.png";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -46,7 +46,7 @@ function AuthenticatedLayout() {
   
   const style = {
     "--sidebar-width": "15rem",
-    "--sidebar-width-icon": "3rem",
+    "--sidebar-width-icon": "3.5rem",
   };
 
   return (
