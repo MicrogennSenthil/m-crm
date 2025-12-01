@@ -38,6 +38,7 @@ import {
   knowledgeBaseCategories,
   knowledgeBaseContentTypes,
   supportedLanguages,
+  smtpConfigSchema,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -4826,6 +4827,144 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching knowledge base analytics:", error);
       res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
+  // =============================================
+  // SMTP CONFIGURATION ROUTES (Admin only)
+  // =============================================
+
+  // Get SMTP configuration
+  app.get("/api/admin/smtp-config", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const config = await storage.getSmtpConfig();
+      
+      if (!config) {
+        return res.json({
+          configured: false,
+          config: null,
+        });
+      }
+
+      // Mask the password for security
+      const maskedConfig = {
+        ...config,
+        pass: config.pass ? "••••••••" : "",
+      };
+
+      res.json({
+        configured: true,
+        config: maskedConfig,
+      });
+    } catch (error) {
+      console.error("Error fetching SMTP config:", error);
+      res.status(500).json({ message: "Failed to fetch SMTP configuration" });
+    }
+  });
+
+  // Save SMTP configuration
+  app.post("/api/admin/smtp-config", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const validatedConfig = smtpConfigSchema.parse(req.body);
+
+      await storage.saveSmtpConfig(validatedConfig, userId);
+
+      // Log the activity
+      await storage.logActivity({
+        entityType: "system_settings",
+        entityId: "smtp_config",
+        action: "updated",
+        userId,
+        details: { description: "SMTP configuration updated" },
+      });
+
+      res.json({ success: true, message: "SMTP configuration saved successfully" });
+    } catch (error: any) {
+      console.error("Error saving SMTP config:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Invalid SMTP configuration", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to save SMTP configuration" });
+    }
+  });
+
+  // Test SMTP configuration by sending a test email
+  app.post("/api/admin/smtp-config/test", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { testEmail } = req.body;
+      
+      if (!testEmail) {
+        return res.status(400).json({ message: "Test email address is required" });
+      }
+
+      // Get the current SMTP config
+      const config = await storage.getSmtpConfig();
+      
+      if (!config || !config.enabled) {
+        return res.status(400).json({ message: "SMTP is not configured or disabled" });
+      }
+
+      // Try to send a test email using SMTP
+      const nodemailer = await import("nodemailer");
+      
+      const transporter = nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: {
+          user: config.user,
+          pass: config.pass,
+        },
+      });
+
+      await transporter.sendMail({
+        from: config.from,
+        to: testEmail,
+        subject: "M-CRM SMTP Test Email",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a2b6d;">SMTP Configuration Test</h2>
+            <p>This is a test email to verify your SMTP configuration is working correctly.</p>
+            <p style="color: #666;">Sent from M-CRM at ${new Date().toLocaleString()}</p>
+          </div>
+        `,
+      });
+
+      res.json({ success: true, message: `Test email sent successfully to ${testEmail}` });
+    } catch (error: any) {
+      console.error("Error testing SMTP config:", error);
+      res.status(500).json({ 
+        message: "Failed to send test email",
+        error: error.message || "Unknown error"
+      });
+    }
+  });
+
+  // Delete SMTP configuration
+  app.delete("/api/admin/smtp-config", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+
+      // Delete all SMTP settings
+      const smtpKeys = ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_secure", "smtp_enabled"];
+      for (const key of smtpKeys) {
+        await storage.deleteSystemSetting(key);
+      }
+
+      // Log the activity
+      await storage.logActivity({
+        entityType: "system_settings",
+        entityId: "smtp_config",
+        action: "deleted",
+        userId,
+        details: { description: "SMTP configuration deleted" },
+      });
+
+      res.json({ success: true, message: "SMTP configuration deleted" });
+    } catch (error) {
+      console.error("Error deleting SMTP config:", error);
+      res.status(500).json({ message: "Failed to delete SMTP configuration" });
     }
   });
 
