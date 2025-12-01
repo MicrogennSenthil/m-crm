@@ -28,6 +28,7 @@ import {
   insertUserRoleRightSchema,
   insertTaskSchema,
   insertTaskCommentSchema,
+  insertTaskFollowupSchema,
   insertDepartmentSchema,
   insertSystemModuleSchema,
   insertUserRoleAssignmentSchema,
@@ -4115,6 +4116,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting task comment:", error);
       res.status(500).json({ message: "Failed to delete task comment" });
+    }
+  });
+
+  // =============================================
+  // TASK FOLLOWUP ROUTES
+  // =============================================
+
+  // Get today's tasks (for Today's Task page)
+  app.get("/api/tasks/today", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      // Super admin (senthil@microgenn.com) sees all tasks
+      const isSuperAdmin = user?.email === 'senthil@microgenn.com';
+      
+      const todayTasks = await storage.getTodayTasks(userId, isSuperAdmin);
+      res.json(todayTasks);
+    } catch (error) {
+      console.error("Error fetching today's tasks:", error);
+      res.status(500).json({ message: "Failed to fetch today's tasks" });
+    }
+  });
+
+  // Get task followups
+  app.get("/api/tasks/:id/followups", isAuthenticated, async (req, res) => {
+    try {
+      const followups = await storage.getTaskFollowups(req.params.id);
+      res.json(followups);
+    } catch (error) {
+      console.error("Error fetching task followups:", error);
+      res.status(500).json({ message: "Failed to fetch task followups" });
+    }
+  });
+
+  // Create task followup
+  app.post("/api/tasks/:id/followups", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const taskId = req.params.id;
+      
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      const followupData = {
+        ...req.body,
+        taskId,
+        userId,
+      };
+      
+      const validatedData = insertTaskFollowupSchema.parse(followupData);
+      const newFollowup = await storage.createTaskFollowup(validatedData);
+      
+      // If next followup date is set, update task status to 'followup'
+      if (req.body.nextFollowupDate) {
+        await storage.updateTask(taskId, { status: 'followup' });
+      }
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "task",
+        entityId: taskId,
+        action: "followup_added",
+        description: `Follow-up added to task: ${task.title}`,
+        userId,
+      });
+      
+      res.json(newFollowup);
+    } catch (error) {
+      console.error("Error creating task followup:", error);
+      res.status(500).json({ message: "Failed to create task followup" });
+    }
+  });
+
+  // Update task followup
+  app.patch("/api/task-followups/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const followup = await storage.getTaskFollowup(req.params.id);
+      
+      if (!followup) {
+        return res.status(404).json({ message: "Followup not found" });
+      }
+      
+      // Only followup author or admin can update
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.role === 'admin';
+      
+      if (!isAdmin && followup.userId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to update this followup" });
+      }
+      
+      const updatedFollowup = await storage.updateTaskFollowup(req.params.id, req.body);
+      res.json(updatedFollowup);
+    } catch (error) {
+      console.error("Error updating task followup:", error);
+      res.status(500).json({ message: "Failed to update task followup" });
+    }
+  });
+
+  // Delete task followup
+  app.delete("/api/task-followups/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const followup = await storage.getTaskFollowup(req.params.id);
+      
+      if (!followup) {
+        return res.status(404).json({ message: "Followup not found" });
+      }
+      
+      // Only followup author or admin can delete
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.role === 'admin';
+      
+      if (!isAdmin && followup.userId !== userId) {
+        return res.status(403).json({ message: "You don't have permission to delete this followup" });
+      }
+      
+      await storage.deleteTaskFollowup(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting task followup:", error);
+      res.status(500).json({ message: "Failed to delete task followup" });
+    }
+  });
+
+  // Upload followup attachment (voice/video/image)
+  app.post("/api/task-followups/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { taskId, type, fileName: originalFileName, mimeType } = req.body;
+      
+      // Validate type
+      if (!["voice", "video", "image"].includes(type)) {
+        return res.status(400).json({ message: "Invalid attachment type. Must be 'voice', 'video', or 'image'" });
+      }
+      
+      // Generate a unique file name
+      const timestamp = Date.now();
+      const extension = originalFileName ? `.${originalFileName.split('.').pop()}` : 
+                        type === 'voice' ? '.webm' :
+                        type === 'video' ? '.webm' : 
+                        type === 'image' ? '.jpg' : '';
+      const fileName = `followup_${type}_${userId}_${taskId || 'new'}_${timestamp}${extension}`;
+      
+      // Get upload URL
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName);
+      
+      res.json({ 
+        uploadURL, 
+        objectPath,
+        attachmentUrl: `/objects/${objectPath}`,
+        type,
+        originalFileName,
+        mimeType,
+      });
+    } catch (error) {
+      console.error("Error getting followup upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
     }
   });
 

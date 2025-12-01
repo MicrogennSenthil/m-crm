@@ -23,6 +23,7 @@ import {
   attachments,
   tasks,
   taskComments,
+  taskFollowups,
   otpVerifications,
   departments,
   systemModules,
@@ -81,6 +82,8 @@ import {
   type InsertTask,
   type TaskComment,
   type InsertTaskComment,
+  type TaskFollowup,
+  type InsertTaskFollowup,
   type ProjectProgressEntry,
   type InsertProjectProgressEntry,
   projectProgressEntries,
@@ -282,6 +285,19 @@ export interface IStorage {
   createTaskComment(comment: InsertTaskComment): Promise<TaskComment>;
   updateTaskComment(id: string, data: Partial<InsertTaskComment>): Promise<TaskComment>;
   deleteTaskComment(id: string): Promise<void>;
+
+  // Task Followup operations
+  getTaskFollowups(taskId: string): Promise<(TaskFollowup & { user?: User })[]>;
+  getTaskFollowup(id: string): Promise<TaskFollowup | undefined>;
+  createTaskFollowup(followup: InsertTaskFollowup): Promise<TaskFollowup>;
+  updateTaskFollowup(id: string, data: Partial<InsertTaskFollowup>): Promise<TaskFollowup>;
+  deleteTaskFollowup(id: string): Promise<void>;
+  getTodayTasks(userId?: string, includeAll?: boolean): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User;
+    followupsCount?: number;
+    latestFollowup?: TaskFollowup;
+  })[]>;
 
   // Department operations (User Management)
   getDepartments(): Promise<Department[]>;
@@ -1819,6 +1835,187 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTaskComment(id: string): Promise<void> {
     await db.delete(taskComments).where(eq(taskComments.id, id));
+  }
+
+  // Task Followup operations
+  async getTaskFollowups(taskId: string): Promise<(TaskFollowup & { user?: User })[]> {
+    const followups = await db
+      .select()
+      .from(taskFollowups)
+      .where(eq(taskFollowups.taskId, taskId))
+      .orderBy(desc(taskFollowups.createdAt));
+
+    const enrichedFollowups = await Promise.all(
+      followups.map(async (followup) => {
+        const [user] = followup.userId 
+          ? await db.select().from(users).where(eq(users.id, followup.userId))
+          : [undefined];
+        return { ...followup, user };
+      })
+    );
+
+    return enrichedFollowups;
+  }
+
+  async getTaskFollowup(id: string): Promise<TaskFollowup | undefined> {
+    const [followup] = await db.select().from(taskFollowups).where(eq(taskFollowups.id, id));
+    return followup;
+  }
+
+  async createTaskFollowup(followup: InsertTaskFollowup): Promise<TaskFollowup> {
+    const [newFollowup] = await db.insert(taskFollowups).values(followup).returning();
+    return newFollowup;
+  }
+
+  async updateTaskFollowup(id: string, data: Partial<InsertTaskFollowup>): Promise<TaskFollowup> {
+    const [updated] = await db
+      .update(taskFollowups)
+      .set(data)
+      .where(eq(taskFollowups.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskFollowup(id: string): Promise<void> {
+    await db.delete(taskFollowups).where(eq(taskFollowups.id, id));
+  }
+
+  async getTodayTasks(userId?: string, includeAll?: boolean): Promise<(Task & { 
+    creator?: User; 
+    assignee?: User;
+    followupsCount?: number;
+    latestFollowup?: TaskFollowup;
+  })[]> {
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Build conditions for today's tasks:
+    // 1. Tasks with reminder date today
+    // 2. Tasks with due date today
+    // 3. Tasks where a followup has next_followup_date = today
+    // 4. All pending/followup tasks assigned to user (or all if admin)
+    
+    let allTasks: Task[] = [];
+    
+    if (includeAll) {
+      // Super admin sees all non-completed tasks
+      allTasks = await db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            or(
+              // Tasks with reminder date today
+              and(gte(tasks.reminderDate, today), lte(tasks.reminderDate, tomorrow)),
+              // Tasks with due date today
+              and(gte(tasks.dueDate, today), lte(tasks.dueDate, tomorrow)),
+              // Pending tasks
+              eq(tasks.status, 'pending'),
+              // Followup tasks
+              eq(tasks.status, 'followup')
+            )
+          )
+        )
+        .orderBy(desc(tasks.createdAt));
+    } else if (userId) {
+      // Regular user sees their own tasks
+      allTasks = await db
+        .select()
+        .from(tasks)
+        .where(
+          and(
+            or(
+              eq(tasks.assignedTo, userId),
+              eq(tasks.createdBy, userId)
+            ),
+            or(
+              // Tasks with reminder date today
+              and(gte(tasks.reminderDate, today), lte(tasks.reminderDate, tomorrow)),
+              // Tasks with due date today
+              and(gte(tasks.dueDate, today), lte(tasks.dueDate, tomorrow)),
+              // Pending tasks
+              eq(tasks.status, 'pending'),
+              // Followup tasks
+              eq(tasks.status, 'followup')
+            )
+          )
+        )
+        .orderBy(desc(tasks.createdAt));
+    }
+
+    // Also get tasks where followup has next_followup_date = today
+    const followupsForToday = await db
+      .select()
+      .from(taskFollowups)
+      .where(
+        and(
+          gte(taskFollowups.nextFollowupDate, today),
+          lte(taskFollowups.nextFollowupDate, tomorrow)
+        )
+      );
+
+    // Get task IDs from followups
+    const followupTaskIds = [...new Set(followupsForToday.map(f => f.taskId))];
+    
+    // Fetch those tasks if not already included
+    if (followupTaskIds.length > 0) {
+      const existingTaskIds = new Set(allTasks.map(t => t.id));
+      const missingTaskIds = followupTaskIds.filter(id => !existingTaskIds.has(id));
+      
+      if (missingTaskIds.length > 0) {
+        for (const taskId of missingTaskIds) {
+          const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId));
+          if (task) {
+            // Check if user has access (for non-admin)
+            if (includeAll || !userId || task.assignedTo === userId || task.createdBy === userId) {
+              allTasks.push(task);
+            }
+          }
+        }
+      }
+    }
+
+    // Enrich with user details and followup counts
+    const enrichedTasks = await Promise.all(
+      allTasks.map(async (task) => {
+        const [creator] = task.createdBy 
+          ? await db.select().from(users).where(eq(users.id, task.createdBy))
+          : [undefined];
+        
+        const [assignee] = task.assignedTo 
+          ? await db.select().from(users).where(eq(users.id, task.assignedTo))
+          : [undefined];
+
+        // Get followup count
+        const [countResult] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(taskFollowups)
+          .where(eq(taskFollowups.taskId, task.id));
+        
+        const followupsCount = Number(countResult?.count || 0);
+
+        // Get latest followup
+        const [latestFollowup] = await db
+          .select()
+          .from(taskFollowups)
+          .where(eq(taskFollowups.taskId, task.id))
+          .orderBy(desc(taskFollowups.createdAt))
+          .limit(1);
+
+        return {
+          ...task,
+          creator,
+          assignee,
+          followupsCount,
+          latestFollowup,
+        };
+      })
+    );
+
+    return enrichedTasks;
   }
 
   // Department operations

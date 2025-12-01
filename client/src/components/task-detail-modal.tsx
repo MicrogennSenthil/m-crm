@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import type { Task, TaskComment, User } from "@shared/schema";
+import type { Task, TaskComment, TaskFollowup, User } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -24,6 +28,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Calendar,
   Clock,
@@ -44,6 +53,15 @@ import {
   Paperclip,
   ExternalLink,
   Maximize2,
+  Plus,
+  ChevronDown,
+  CalendarClock,
+  History,
+  MicOff,
+  Square,
+  X,
+  Camera,
+  Type,
 } from "lucide-react";
 
 type TaskWithDetails = Task & {
@@ -56,11 +74,15 @@ type CommentWithUser = TaskComment & {
   user?: User;
 };
 
+type FollowupWithUser = TaskFollowup & {
+  createdByUser?: User;
+};
+
 interface TaskDetailModalProps {
   task: TaskWithDetails;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onTaskUpdate: () => void;
+  onTaskUpdate?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Circle }> = {
@@ -82,6 +104,24 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
   const [, navigate] = useLocation();
   const [newComment, setNewComment] = useState("");
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  
+  // Follow-up state
+  const [showAddFollowup, setShowAddFollowup] = useState(false);
+  const [followupType, setFollowupType] = useState<"voice" | "video" | "text" | "image">("text");
+  const [followupDescription, setFollowupDescription] = useState("");
+  const [nextFollowupDate, setNextFollowupDate] = useState<Date | undefined>(undefined);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [voiceRecordingUrl, setVoiceRecordingUrl] = useState<string | null>(null);
+  const [videoRecordingUrl, setVideoRecordingUrl] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [followupsOpen, setFollowupsOpen] = useState(true);
+  
+  // Refs for recording
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -101,6 +141,16 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     },
   });
 
+  // Fetch followups for this task
+  const { data: followups = [], isLoading: loadingFollowups } = useQuery<FollowupWithUser[]>({
+    queryKey: ["/api/tasks", task.id, "followups"],
+    queryFn: async () => {
+      const res = await fetch(`/api/tasks/${task.id}/followups`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch followups");
+      return res.json();
+    },
+  });
+
   // Update task status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -108,7 +158,8 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      onTaskUpdate();
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/today"] });
+      onTaskUpdate?.();
       toast({ title: "Status updated" });
     },
     onError: () => {
@@ -135,6 +186,169 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
   const handleAddComment = () => {
     if (newComment.trim()) {
       addCommentMutation.mutate(newComment.trim());
+    }
+  };
+
+  // Add followup mutation
+  const addFollowupMutation = useMutation({
+    mutationFn: async (data: {
+      type: string;
+      description?: string;
+      contentUrl?: string;
+      nextFollowupDate?: string;
+    }) => {
+      await apiRequest("POST", `/api/tasks/${task.id}/followups`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "followups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/today"] });
+      resetFollowupForm();
+      toast({ title: "Follow-up added" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add follow-up", variant: "destructive" });
+    },
+  });
+
+  const resetFollowupForm = () => {
+    setShowAddFollowup(false);
+    setFollowupType("text");
+    setFollowupDescription("");
+    setNextFollowupDate(undefined);
+    setVoiceRecordingUrl(null);
+    setVideoRecordingUrl(null);
+    setImageUrl(null);
+  };
+
+  const handleAddFollowup = () => {
+    const data: {
+      type: string;
+      description?: string;
+      contentUrl?: string;
+      nextFollowupDate?: string;
+    } = {
+      type: followupType,
+    };
+
+    if (followupDescription.trim()) {
+      data.description = followupDescription.trim();
+    }
+
+    if (followupType === "voice" && voiceRecordingUrl) {
+      data.contentUrl = voiceRecordingUrl;
+    } else if (followupType === "video" && videoRecordingUrl) {
+      data.contentUrl = videoRecordingUrl;
+    } else if (followupType === "image" && imageUrl) {
+      data.contentUrl = imageUrl;
+    }
+
+    if (nextFollowupDate) {
+      data.nextFollowupDate = nextFollowupDate.toISOString();
+    }
+
+    addFollowupMutation.mutate(data);
+  };
+
+  // Voice recording functions
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      recordedChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setVoiceRecordingUrl(url);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingVoice(true);
+    } catch (err) {
+      toast({ title: "Could not access microphone", variant: "destructive" });
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current && isRecordingVoice) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingVoice(false);
+    }
+  };
+
+  // Video recording functions
+  const startVideoRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      recordedChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setVideoRecordingUrl(url);
+        stream.getTracks().forEach((track) => track.stop());
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecordingVideo(true);
+    } catch (err) {
+      toast({ title: "Could not access camera", variant: "destructive" });
+    }
+  };
+
+  const stopVideoRecording = () => {
+    if (mediaRecorderRef.current && isRecordingVideo) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingVideo(false);
+    }
+  };
+
+  // Image capture
+  const handleImageCapture = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.capture = "environment";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        setImageUrl(url);
+      }
+    };
+    input.click();
+  };
+
+  const getFollowupTypeIcon = (type: string) => {
+    switch (type) {
+      case "voice": return <Mic className="h-4 w-4 text-blue-500" />;
+      case "video": return <Video className="h-4 w-4 text-purple-500" />;
+      case "image": return <Image className="h-4 w-4 text-green-500" />;
+      default: return <Type className="h-4 w-4 text-gray-500" />;
     }
   };
 
@@ -410,6 +624,263 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               ) : (
                 <p className="text-sm text-muted-foreground py-2">No attachments added</p>
               )}
+            </div>
+            
+            <Separator />
+            
+            {/* Follow-ups Section */}
+            <div data-testid="section-followups">
+              <Collapsible open={followupsOpen} onOpenChange={setFollowupsOpen}>
+                <div className="flex items-center justify-between mb-4">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent">
+                      <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                        <History className="h-4 w-4" />
+                        Follow-ups ({followups.length})
+                        <ChevronDown className={`h-4 w-4 transition-transform ${followupsOpen ? "rotate-180" : ""}`} />
+                      </h4>
+                    </Button>
+                  </CollapsibleTrigger>
+                  {canEdit && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAddFollowup(!showAddFollowup)}
+                      data-testid="button-add-followup"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Follow-up
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Add Follow-up Form */}
+                {showAddFollowup && (
+                  <div className="mb-4 p-4 border rounded-lg bg-muted/50 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-sm font-medium">New Follow-up</h5>
+                      <Button variant="ghost" size="icon" onClick={() => setShowAddFollowup(false)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Type Selection */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant={followupType === "text" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFollowupType("text")}
+                        data-testid="button-followup-type-text"
+                      >
+                        <Type className="h-4 w-4 mr-1" />
+                        Text
+                      </Button>
+                      <Button
+                        variant={followupType === "voice" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFollowupType("voice")}
+                        data-testid="button-followup-type-voice"
+                      >
+                        <Mic className="h-4 w-4 mr-1" />
+                        Voice
+                      </Button>
+                      <Button
+                        variant={followupType === "video" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFollowupType("video")}
+                        data-testid="button-followup-type-video"
+                      >
+                        <Video className="h-4 w-4 mr-1" />
+                        Video
+                      </Button>
+                      <Button
+                        variant={followupType === "image" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFollowupType("image")}
+                        data-testid="button-followup-type-image"
+                      >
+                        <Camera className="h-4 w-4 mr-1" />
+                        Image
+                      </Button>
+                    </div>
+                    
+                    {/* Voice Recording */}
+                    {followupType === "voice" && (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          {!isRecordingVoice ? (
+                            <Button onClick={startVoiceRecording} variant="outline" data-testid="button-start-voice-recording">
+                              <Mic className="h-4 w-4 mr-1" />
+                              Start Recording
+                            </Button>
+                          ) : (
+                            <Button onClick={stopVoiceRecording} variant="destructive" data-testid="button-stop-voice-recording">
+                              <Square className="h-4 w-4 mr-1" />
+                              Stop Recording
+                            </Button>
+                          )}
+                        </div>
+                        {voiceRecordingUrl && (
+                          <audio src={voiceRecordingUrl} controls className="w-full" data-testid="audio-voice-preview" />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Video Recording */}
+                    {followupType === "video" && (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          {!isRecordingVideo ? (
+                            <Button onClick={startVideoRecording} variant="outline" data-testid="button-start-video-recording">
+                              <Video className="h-4 w-4 mr-1" />
+                              Start Recording
+                            </Button>
+                          ) : (
+                            <Button onClick={stopVideoRecording} variant="destructive" data-testid="button-stop-video-recording">
+                              <Square className="h-4 w-4 mr-1" />
+                              Stop Recording
+                            </Button>
+                          )}
+                        </div>
+                        {isRecordingVideo && (
+                          <video ref={videoRef} className="w-full rounded-lg aspect-video bg-black" muted />
+                        )}
+                        {videoRecordingUrl && !isRecordingVideo && (
+                          <video src={videoRecordingUrl} controls className="w-full rounded-lg aspect-video" data-testid="video-preview" />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Image Capture */}
+                    {followupType === "image" && (
+                      <div className="space-y-2">
+                        <Button onClick={handleImageCapture} variant="outline" data-testid="button-capture-image">
+                          <Camera className="h-4 w-4 mr-1" />
+                          {imageUrl ? "Change Image" : "Capture / Upload Image"}
+                        </Button>
+                        {imageUrl && (
+                          <img src={imageUrl} alt="Captured" className="w-full rounded-lg max-h-48 object-contain" data-testid="image-preview" />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Description */}
+                    <div>
+                      <Label className="text-sm">Description</Label>
+                      <Textarea
+                        value={followupDescription}
+                        onChange={(e) => setFollowupDescription(e.target.value)}
+                        placeholder="Add notes about this follow-up..."
+                        className="mt-1"
+                        data-testid="input-followup-description"
+                      />
+                    </div>
+                    
+                    {/* Next Follow-up Date */}
+                    <div>
+                      <Label className="text-sm">Next Follow-up Date (Optional)</Label>
+                      <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal mt-1" data-testid="button-next-followup-date">
+                            <CalendarClock className="mr-2 h-4 w-4" />
+                            {nextFollowupDate ? format(nextFollowupDate, "PPP") : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={nextFollowupDate}
+                            onSelect={(date) => {
+                              setNextFollowupDate(date);
+                              setDatePickerOpen(false);
+                            }}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Task will appear in "Today's Tasks" on this date
+                      </p>
+                    </div>
+                    
+                    {/* Submit Button */}
+                    <div className="flex justify-end">
+                      <Button 
+                        onClick={handleAddFollowup}
+                        disabled={addFollowupMutation.isPending || (!followupDescription.trim() && followupType === "text" && !nextFollowupDate)}
+                        data-testid="button-submit-followup"
+                      >
+                        {addFollowupMutation.isPending ? "Adding..." : "Add Follow-up"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                <CollapsibleContent>
+                  <div className="space-y-4">
+                    {loadingFollowups ? (
+                      <div className="animate-pulse space-y-3">
+                        {[1, 2].map((i) => (
+                          <div key={i} className="flex gap-3">
+                            <div className="h-8 w-8 bg-muted rounded-full"></div>
+                            <div className="flex-1">
+                              <div className="h-4 bg-muted rounded w-1/4 mb-2"></div>
+                              <div className="h-3 bg-muted rounded w-3/4"></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : followups.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No follow-ups recorded yet.
+                      </p>
+                    ) : (
+                      followups.map((followup) => (
+                        <div key={followup.id} className="flex gap-3 p-3 bg-muted/50 rounded-lg" data-testid={`followup-${followup.id}`}>
+                          <div className="flex-shrink-0 mt-1">
+                            {getFollowupTypeIcon(followup.type)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium">
+                                {followup.createdByUser?.firstName} {followup.createdByUser?.lastName}
+                              </span>
+                              <Badge variant="outline" className="text-xs py-0 capitalize">{followup.type}</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {followup.createdAt && format(new Date(followup.createdAt), "MMM d, h:mm a")}
+                              </span>
+                            </div>
+                            
+                            {followup.description && (
+                              <p className="text-sm whitespace-pre-wrap mb-2">{followup.description}</p>
+                            )}
+                            
+                            {followup.contentUrl && followup.type === "voice" && (
+                              <audio src={followup.contentUrl} controls className="w-full" data-testid={`audio-followup-${followup.id}`} />
+                            )}
+                            
+                            {followup.contentUrl && followup.type === "video" && (
+                              <video src={followup.contentUrl} controls className="w-full rounded-lg max-h-48" data-testid={`video-followup-${followup.id}`} />
+                            )}
+                            
+                            {followup.contentUrl && followup.type === "image" && (
+                              <img src={followup.contentUrl} alt="Follow-up" className="w-full rounded-lg max-h-48 object-contain" data-testid={`image-followup-${followup.id}`} />
+                            )}
+                            
+                            {followup.nextFollowupDate && (
+                              <div className="flex items-center gap-1 text-xs text-blue-600 mt-2">
+                                <CalendarClock className="h-3 w-3" />
+                                Next follow-up: {format(new Date(followup.nextFollowupDate), "PPP")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
             
             <Separator />

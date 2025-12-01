@@ -694,6 +694,40 @@ export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
 export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
 export type TaskComment = typeof taskComments.$inferSelect;
 
+// Task Followups table - Track follow-up entries with voice/video/text/image
+export const taskFollowups = pgTable("task_followups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  followupType: text("followup_type").notNull().default("text"), // text, voice, video, image
+  description: text("description"), // Text description of the follow-up
+  voiceNoteUrl: text("voice_note_url"), // Object storage path for voice recording
+  voiceNoteDuration: integer("voice_note_duration"), // Duration in seconds
+  videoUrl: text("video_url"), // Object storage path for video recording
+  videoDuration: integer("video_duration"), // Duration in seconds
+  videoThumbnailUrl: text("video_thumbnail_url"), // Thumbnail for video
+  imageUrl: text("image_url"), // Object storage path for image
+  nextFollowupDate: timestamp("next_followup_date"), // When next follow-up is due
+  status: text("status").notNull().default("completed"), // completed, pending_next
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Task followup attachment type
+export type TaskFollowupAttachment = {
+  type: "voice" | "video" | "image";
+  url: string;
+  duration?: number;
+  thumbnailUrl?: string;
+};
+
+export const insertTaskFollowupSchema = createInsertSchema(taskFollowups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTaskFollowup = z.infer<typeof insertTaskFollowupSchema>;
+export type TaskFollowup = typeof taskFollowups.$inferSelect;
+
 // Customer with lifecycle info for support ticket creation
 export type CustomerWithLifecycle = Customer & {
   lifecycleStatus: "handed_off" | "in_implementation" | "prospect" | "existing";

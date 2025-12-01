@@ -76,12 +76,6 @@ const menuGroups = [
         icon: LayoutDashboard,
         roles: ["sales_executive", "engineer", "support", "admin"],
       },
-      {
-        title: "Tasks",
-        url: "/tasks",
-        icon: ListTodo,
-        roles: ["sales_executive", "engineer", "support", "admin"],
-      },
     ],
   },
   {
@@ -147,6 +141,20 @@ const menuGroups = [
         roles: ["admin"],
       },
     ],
+  },
+];
+
+// Tasks sub-menu items (visible to all authenticated users)
+const tasksSubItems = [
+  {
+    title: "All Tasks",
+    url: "/tasks",
+    icon: ListTodo,
+  },
+  {
+    title: "Today's Task",
+    url: "/tasks/today",
+    icon: ClipboardCheck,
   },
 ];
 
@@ -410,6 +418,40 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                 );
               })}
               
+              {/* Tasks with collapsible sub-menu (visible to all) */}
+              <Collapsible defaultOpen={location.startsWith("/tasks")} className="group/collapsible">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={location.startsWith("/tasks")}
+                      data-testid="nav-tasks"
+                    >
+                      <ListTodo className="h-4 w-4" />
+                      <span>Tasks</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {tasksSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-3.5 w-3.5" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
               {/* Reports with collapsible sub-menu */}
               {canViewReports && (
                 <Collapsible defaultOpen={isReportsActive} className="group/collapsible">

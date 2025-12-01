@@ -25,6 +25,7 @@ import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
 import TaskDetail from "@/pages/task-detail";
+import TodaysTasks from "@/pages/todays-tasks";
 import AuthLogin from "@/pages/auth-login";
 import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
@@ -72,6 +73,7 @@ function AuthenticatedLayout() {
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/tasks" component={Tasks} />
+              <Route path="/tasks/today" component={TodaysTasks} />
               <Route path="/tasks/:id" component={TaskDetail} />
               <Route path="/sales" component={Sales} />
               <Route path="/implementations" component={Implementations} />
