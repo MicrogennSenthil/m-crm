@@ -297,7 +297,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
       <SidebarHeader className="h-[52px] px-3 flex items-center border-b-2 border-b-white">
         <div className="flex items-center justify-between gap-2 w-full">
           {!isCollapsed && (
-            <h1 className="text-lg font-bold text-sidebar-primary-foreground" data-testid="text-sidebar-title">
+            <h1 className="text-lg font-bold text-[#FF9933]" data-testid="text-sidebar-title">
               M-CRM
             </h1>
           )}
