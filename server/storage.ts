@@ -33,6 +33,7 @@ import {
   knowledgeBaseSources,
   knowledgeBaseChunks,
   knowledgeBaseQueries,
+  systemSettings,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -109,6 +110,9 @@ import {
   type InsertKnowledgeBaseChunk,
   type KnowledgeBaseQuery,
   type InsertKnowledgeBaseQuery,
+  type SystemSetting,
+  type InsertSystemSetting,
+  type SmtpConfig,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
@@ -366,6 +370,16 @@ export interface IStorage {
   // Knowledge Base Query operations (for analytics)
   createKnowledgeBaseQuery(query: InsertKnowledgeBaseQuery): Promise<KnowledgeBaseQuery>;
   getKnowledgeBaseQueries(limit?: number): Promise<(KnowledgeBaseQuery & { user?: User })[]>;
+
+  // System Settings operations
+  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
+  getSystemSettingsByCategory(category: string): Promise<SystemSetting[]>;
+  upsertSystemSetting(setting: InsertSystemSetting): Promise<SystemSetting>;
+  deleteSystemSetting(key: string): Promise<void>;
+  
+  // SMTP Configuration helpers
+  getSmtpConfig(): Promise<SmtpConfig | null>;
+  saveSmtpConfig(config: SmtpConfig, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2422,6 +2436,137 @@ export class DatabaseStorage implements IStorage {
     );
     
     return queriesWithUsers;
+  }
+
+  // System Settings operations
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.settingKey, key));
+    return setting;
+  }
+
+  async getSystemSettingsByCategory(category: string): Promise<SystemSetting[]> {
+    return await db.select().from(systemSettings).where(eq(systemSettings.category, category));
+  }
+
+  async upsertSystemSetting(setting: InsertSystemSetting): Promise<SystemSetting> {
+    const [upserted] = await db
+      .insert(systemSettings)
+      .values(setting)
+      .onConflictDoUpdate({
+        target: systemSettings.settingKey,
+        set: {
+          settingValue: setting.settingValue,
+          settingType: setting.settingType,
+          category: setting.category,
+          description: setting.description,
+          isSecret: setting.isSecret,
+          updatedBy: setting.updatedBy,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upserted;
+  }
+
+  async deleteSystemSetting(key: string): Promise<void> {
+    await db.delete(systemSettings).where(eq(systemSettings.settingKey, key));
+  }
+
+  // SMTP Configuration helpers
+  async getSmtpConfig(): Promise<SmtpConfig | null> {
+    const settings = await this.getSystemSettingsByCategory("smtp");
+    if (settings.length === 0) return null;
+
+    const config: Record<string, any> = {};
+    for (const setting of settings) {
+      const key = setting.settingKey.replace("smtp_", "");
+      if (setting.settingType === "boolean") {
+        config[key] = setting.settingValue === "true";
+      } else if (setting.settingType === "number") {
+        config[key] = parseInt(setting.settingValue || "0", 10);
+      } else {
+        config[key] = setting.settingValue || "";
+      }
+    }
+
+    // Check if all required fields are present
+    if (!config.host || !config.port || !config.user || !config.pass || !config.from) {
+      return null;
+    }
+
+    return config as SmtpConfig;
+  }
+
+  async saveSmtpConfig(config: SmtpConfig, userId: string): Promise<void> {
+    const smtpSettings: InsertSystemSetting[] = [
+      {
+        settingKey: "smtp_host",
+        settingValue: config.host,
+        settingType: "string",
+        category: "smtp",
+        description: "SMTP server hostname",
+        isSecret: false,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_port",
+        settingValue: config.port.toString(),
+        settingType: "number",
+        category: "smtp",
+        description: "SMTP server port",
+        isSecret: false,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_user",
+        settingValue: config.user,
+        settingType: "string",
+        category: "smtp",
+        description: "SMTP username/email",
+        isSecret: false,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_pass",
+        settingValue: config.pass,
+        settingType: "string",
+        category: "smtp",
+        description: "SMTP password or app password",
+        isSecret: true,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_from",
+        settingValue: config.from,
+        settingType: "string",
+        category: "smtp",
+        description: "From email address",
+        isSecret: false,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_secure",
+        settingValue: config.secure.toString(),
+        settingType: "boolean",
+        category: "smtp",
+        description: "Use SSL/TLS",
+        isSecret: false,
+        updatedBy: userId,
+      },
+      {
+        settingKey: "smtp_enabled",
+        settingValue: config.enabled.toString(),
+        settingType: "boolean",
+        category: "smtp",
+        description: "Enable SMTP email sending",
+        isSecret: false,
+        updatedBy: userId,
+      },
+    ];
+
+    for (const setting of smtpSettings) {
+      await this.upsertSystemSetting(setting);
+    }
   }
 }
 
