@@ -79,6 +79,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [confirmedOrderValue, setConfirmedOrderValue] = useState("");
   const [closedReason, setClosedReason] = useState("");
   
+  // Calendar popover open states for auto-close
+  const [demoCalendarOpen, setDemoCalendarOpen] = useState(false);
+  const [followUpCalendarOpen, setFollowUpCalendarOpen] = useState(false);
+  const [quoteCalendarOpen, setQuoteCalendarOpen] = useState(false);
+  const [negotiationCalendarOpen, setNegotiationCalendarOpen] = useState(false);
+  const [closedCalendarOpen, setClosedCalendarOpen] = useState(false);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<InsertLead>>({});
   const { toast } = useToast();
@@ -742,7 +749,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       : "Schedule a demo to automatically move this lead to Demo Scheduled stage:"}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Popover>
+                    <Popover open={demoCalendarOpen} onOpenChange={setDemoCalendarOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
@@ -760,7 +767,10 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         <Calendar
                           mode="single"
                           selected={demoDate}
-                          onSelect={setDemoDate}
+                          onSelect={(date) => {
+                            setDemoDate(date);
+                            setDemoCalendarOpen(false);
+                          }}
                           initialFocus
                           disabled={(date) => date < new Date()}
                         />
@@ -829,7 +839,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs">Quote Date</Label>
-                        <Popover>
+                        <Popover open={quoteCalendarOpen} onOpenChange={setQuoteCalendarOpen}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -847,7 +857,10 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                             <Calendar
                               mode="single"
                               selected={quoteDate}
-                              onSelect={setQuoteDate}
+                              onSelect={(date) => {
+                                setQuoteDate(date);
+                                setQuoteCalendarOpen(false);
+                              }}
                               initialFocus
                             />
                           </PopoverContent>
@@ -950,7 +963,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         : "Start negotiation to move lead to Negotiation stage:"}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Popover>
+                      <Popover open={negotiationCalendarOpen} onOpenChange={setNegotiationCalendarOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -968,7 +981,10 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           <Calendar
                             mode="single"
                             selected={negotiationDate}
-                            onSelect={setNegotiationDate}
+                            onSelect={(date) => {
+                              setNegotiationDate(date);
+                              setNegotiationCalendarOpen(false);
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -1044,7 +1060,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-xs">Close Date</Label>
-                        <Popover>
+                        <Popover open={closedCalendarOpen} onOpenChange={setClosedCalendarOpen}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -1062,7 +1078,10 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                             <Calendar
                               mode="single"
                               selected={closedDate}
-                              onSelect={setClosedDate}
+                              onSelect={(date) => {
+                                setClosedDate(date);
+                                setClosedCalendarOpen(false);
+                              }}
                               initialFocus
                             />
                           </PopoverContent>
@@ -1130,7 +1149,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     data-testid="textarea-follow-up-note"
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <Popover>
+                    <Popover open={followUpCalendarOpen} onOpenChange={setFollowUpCalendarOpen}>
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
@@ -1148,7 +1167,10 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         <Calendar
                           mode="single"
                           selected={followUpDate}
-                          onSelect={setFollowUpDate}
+                          onSelect={(date) => {
+                            setFollowUpDate(date);
+                            setFollowUpCalendarOpen(false);
+                          }}
                           initialFocus
                         />
                       </PopoverContent>

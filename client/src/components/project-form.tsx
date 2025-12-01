@@ -45,6 +45,7 @@ interface ProjectFormProps {
 export function ProjectForm({ onSuccess }: ProjectFormProps) {
   const { toast } = useToast();
   const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [dateCalendarOpen, setDateCalendarOpen] = useState(false);
 
   const { data: leads } = useQuery<Lead[]>({
     queryKey: ["/api/leads?stage=closed_won"],
@@ -302,7 +303,7 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
               <FormItem>
                 <FormLabel>Implementation Date & Time</FormLabel>
                 <div className="flex flex-wrap gap-3">
-                  <Popover>
+                  <Popover open={dateCalendarOpen} onOpenChange={setDateCalendarOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -330,6 +331,7 @@ export function ProjectForm({ onSuccess }: ProjectFormProps) {
                           } else {
                             field.onChange(undefined);
                           }
+                          setDateCalendarOpen(false);
                         }}
                         initialFocus
                       />

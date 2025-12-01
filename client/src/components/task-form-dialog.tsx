@@ -132,6 +132,10 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
     email: "",
     phone: "",
   });
+  
+  // Calendar popover open states for auto-close
+  const [reminderCalendarOpen, setReminderCalendarOpen] = useState(false);
+  const [dueCalendarOpen, setDueCalendarOpen] = useState(false);
 
   // Fetch all users for assignment and mentions
   const { data: users = [] } = useQuery<User[]>({
@@ -1134,7 +1138,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                   <FormItem className="flex flex-col">
                     <FormLabel>Reminder Date & Time</FormLabel>
                     <div className="flex gap-2">
-                      <Popover>
+                      <Popover open={reminderCalendarOpen} onOpenChange={setReminderCalendarOpen}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -1159,6 +1163,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                               } else {
                                 field.onChange(null);
                               }
+                              setReminderCalendarOpen(false);
                             }}
                             initialFocus
                           />
@@ -1192,7 +1197,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                   <FormItem className="flex flex-col">
                     <FormLabel>Due Date & Time</FormLabel>
                     <div className="flex gap-2">
-                      <Popover>
+                      <Popover open={dueCalendarOpen} onOpenChange={setDueCalendarOpen}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -1217,6 +1222,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                               } else {
                                 field.onChange(null);
                               }
+                              setDueCalendarOpen(false);
                             }}
                             initialFocus
                           />
