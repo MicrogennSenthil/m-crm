@@ -540,28 +540,34 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                               <SidebarMenuSubButton
                                 isActive={isUserManagementActive}
                                 data-testid="nav-user-management"
-                                className="cursor-pointer"
+                                className="cursor-pointer whitespace-nowrap"
                               >
-                                <UserCog className="h-3.5 w-3.5" />
-                                <span>User Management</span>
-                                <ChevronRight className="ml-auto h-3 w-3 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
+                                <UserCog className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">User Management</span>
+                                <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
                               </SidebarMenuSubButton>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
-                              <div className="pl-4 space-y-1 mt-1">
+                              <div className="pl-4 space-y-0.5 mt-1">
                                 {userManagementSubItems.map((subItem) => (
-                                  <SidebarMenuSubButton
-                                    key={subItem.title}
-                                    asChild
-                                    isActive={location === subItem.url}
-                                    data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
-                                    className="text-xs"
-                                  >
-                                    <Link href={subItem.url}>
-                                      <subItem.icon className="h-3 w-3" />
-                                      <span>{subItem.title}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
+                                  <Tooltip key={subItem.title}>
+                                    <TooltipTrigger asChild>
+                                      <SidebarMenuSubButton
+                                        asChild
+                                        isActive={location === subItem.url}
+                                        data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                                        className="text-xs whitespace-nowrap"
+                                      >
+                                        <Link href={subItem.url}>
+                                          <subItem.icon className="h-3 w-3 shrink-0" />
+                                          <span className="truncate">{subItem.title}</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="text-xs">
+                                      {subItem.title}
+                                    </TooltipContent>
+                                  </Tooltip>
                                 ))}
                               </div>
                             </CollapsibleContent>
@@ -575,28 +581,34 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                               <SidebarMenuSubButton
                                 isActive={isSystemSettingsActive}
                                 data-testid="nav-system-settings"
-                                className="cursor-pointer"
+                                className="cursor-pointer whitespace-nowrap"
                               >
-                                <ServerCog className="h-3.5 w-3.5" />
-                                <span>System Settings</span>
-                                <ChevronRight className="ml-auto h-3 w-3 transition-transform group-data-[state=open]/syssettings:rotate-90" />
+                                <ServerCog className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">System Settings</span>
+                                <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/syssettings:rotate-90" />
                               </SidebarMenuSubButton>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
-                              <div className="pl-4 space-y-1 mt-1">
+                              <div className="pl-4 space-y-0.5 mt-1">
                                 {systemSettingsSubItems.map((subItem) => (
-                                  <SidebarMenuSubButton
-                                    key={subItem.title}
-                                    asChild
-                                    isActive={location === subItem.url}
-                                    data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
-                                    className="text-xs"
-                                  >
-                                    <Link href={subItem.url}>
-                                      <subItem.icon className="h-3 w-3" />
-                                      <span>{subItem.title}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
+                                  <Tooltip key={subItem.title}>
+                                    <TooltipTrigger asChild>
+                                      <SidebarMenuSubButton
+                                        asChild
+                                        isActive={location === subItem.url}
+                                        data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                                        className="text-xs whitespace-nowrap"
+                                      >
+                                        <Link href={subItem.url}>
+                                          <subItem.icon className="h-3 w-3 shrink-0" />
+                                          <span className="truncate">{subItem.title}</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="text-xs">
+                                      {subItem.title}
+                                    </TooltipContent>
+                                  </Tooltip>
                                 ))}
                               </div>
                             </CollapsibleContent>

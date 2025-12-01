@@ -45,7 +45,7 @@ function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
   
   const style = {
-    "--sidebar-width": "16rem",
+    "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 
