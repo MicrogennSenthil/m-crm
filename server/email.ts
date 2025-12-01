@@ -1,9 +1,90 @@
-// Email service using Resend integration
+// Email service with SMTP and Resend support
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+
+// =============================================
+// EMAIL PROVIDER CONFIGURATION
+// =============================================
+// 
+// The system supports two email providers:
+// 1. SMTP (Gmail, custom SMTP) - Set these environment variables:
+//    - SMTP_HOST: SMTP server hostname (e.g., smtp.gmail.com)
+//    - SMTP_PORT: SMTP port (587 for TLS, 465 for SSL)
+//    - SMTP_USER: Email username (e.g., snayagamk@gmail.com)
+//    - SMTP_PASS: Email password or App Password
+//    - SMTP_FROM: Sender email (e.g., "Microgenn CRM <snayagamk@gmail.com>")
+//    - SMTP_SECURE: "true" for SSL (port 465), "false" for TLS (port 587)
+//
+// 2. Resend API (fallback) - Set:
+//    - RESEND_API_KEY: Your Resend API key
+//
+// SMTP takes priority if configured. Falls back to Resend if SMTP is not set.
+// =============================================
 
 let connectionSettings: any;
+let smtpTransporter: Transporter | null = null;
 
-async function getCredentials() {
+// Check if SMTP is configured
+function isSmtpConfigured(): boolean {
+  return !!(
+    process.env.SMTP_HOST &&
+    process.env.SMTP_PORT &&
+    process.env.SMTP_USER &&
+    process.env.SMTP_PASS
+  );
+}
+
+// Get SMTP transporter (cached)
+function getSmtpTransporter(): Transporter {
+  if (!smtpTransporter) {
+    const isSecure = process.env.SMTP_SECURE === 'true';
+    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    
+    smtpTransporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: port,
+      secure: isSecure, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+    
+    console.log(`📧 SMTP configured: ${process.env.SMTP_HOST}:${port} (secure: ${isSecure})`);
+  }
+  return smtpTransporter;
+}
+
+// Get SMTP sender email
+function getSmtpFromEmail(): string {
+  return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@example.com';
+}
+
+// Send email via SMTP
+async function sendEmailViaSMTP(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean; messageId?: string }> {
+  const transporter = getSmtpTransporter();
+  const fromEmail = getSmtpFromEmail();
+  
+  console.log(`📧 Sending email via SMTP from: ${fromEmail} to: ${params.to}`);
+  
+  const result = await transporter.sendMail({
+    from: fromEmail,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  });
+  
+  console.log(`✅ SMTP email sent successfully. MessageId: ${result.messageId}`);
+  return { success: true, messageId: result.messageId };
+}
+
+// Resend credentials
+async function getResendCredentials() {
   // First try environment variable (preferred)
   if (process.env.RESEND_API_KEY) {
     console.log('📧 Using RESEND_API_KEY from environment');
@@ -44,14 +125,80 @@ async function getCredentials() {
 // WARNING: Never cache this client.
 // Access tokens expire, so a new client must be created each time.
 async function getUncachableResendClient() {
-  const credentials = await getCredentials();
+  const credentials = await getResendCredentials();
   return {
     client: new Resend(credentials.apiKey),
     fromEmail: credentials.fromEmail
   };
 }
 
-// Email templates and sender functions
+// Send email via Resend
+async function sendEmailViaResend(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean }> {
+  const { client, fromEmail } = await getUncachableResendClient();
+  
+  console.log(`📧 Sending email via Resend from: ${fromEmail} to: ${params.to}`);
+  
+  const result = await client.emails.send({
+    from: fromEmail,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  });
+  
+  console.log(`📬 Resend response for ${params.to}:`, JSON.stringify(result));
+  
+  if (result.error) {
+    console.error(`❌ Resend error for ${params.to}:`, result.error);
+    throw new Error(result.error.message || 'Failed to send email');
+  }
+  
+  console.log(`✅ Email sent successfully via Resend to ${params.to}`);
+  return { success: true };
+}
+
+// Unified email sending function - uses SMTP if configured, otherwise Resend
+async function sendEmailUnified(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean }> {
+  if (isSmtpConfigured()) {
+    return sendEmailViaSMTP(params);
+  } else {
+    return sendEmailViaResend(params);
+  }
+}
+
+// Get current email provider info
+export function getEmailProviderInfo(): { provider: 'smtp' | 'resend'; configured: boolean; details: string } {
+  if (isSmtpConfigured()) {
+    return {
+      provider: 'smtp',
+      configured: true,
+      details: `SMTP: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`
+    };
+  } else if (process.env.RESEND_API_KEY) {
+    return {
+      provider: 'resend',
+      configured: true,
+      details: 'Resend API'
+    };
+  } else {
+    return {
+      provider: 'resend',
+      configured: false,
+      details: 'No email provider configured'
+    };
+  }
+}
+
+// =============================================
+// EMAIL TEMPLATES AND SENDER FUNCTIONS
+// =============================================
 
 export async function sendQuoteEmail(
   toEmail: string,
@@ -61,8 +208,6 @@ export async function sendQuoteEmail(
   validUntil: Date
 ) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
-    
     const formattedAmount = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
@@ -74,8 +219,7 @@ export async function sendQuoteEmail(
       day: 'numeric'
     });
 
-    await client.emails.send({
-      from: fromEmail,
+    await sendEmailUnified({
       to: toEmail,
       subject: `Quote from Microgenn - ${companyName}`,
       html: `
@@ -106,163 +250,46 @@ export async function sendQuoteEmail(
   }
 }
 
-export async function sendTicketClosureFeedbackEmail(
-  toEmail: string,
-  recipientName: string,
-  ticketNumber: string,
-  ticketSubject: string
-) {
+export async function sendWelcomeEmail(toEmail: string, userName: string, role: string) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
+    const roleDisplay = {
+      admin: 'Administrator',
+      sales_executive: 'Sales Executive',
+      engineer: 'Implementation Engineer',
+      support: 'Support Staff'
+    }[role] || role;
 
-    await client.emails.send({
-      from: fromEmail,
+    await sendEmailUnified({
       to: toEmail,
-      subject: `Ticket Closed: ${ticketNumber} - We'd love your feedback`,
+      subject: 'Welcome to Microgenn CRM',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #3b82f6;">Your Support Ticket Has Been Resolved</h2>
-          <p>Dear ${recipientName},</p>
-          <p>We're writing to let you know that your support ticket has been closed:</p>
-          
-          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Ticket Number:</strong> ${ticketNumber}</p>
-            <p><strong>Subject:</strong> ${ticketSubject}</p>
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Welcome to Microgenn CRM</h1>
           </div>
           
-          <p>We hope we were able to resolve your issue to your satisfaction. Your feedback is important to us!</p>
-          
-          <div style="margin: 30px 0;">
-            <p><strong>How would you rate your support experience?</strong></p>
-            <p style="font-size: 12px; color: #6b7280;">Please click on a rating:</p>
-            <div style="text-align: center; margin: 20px 0;">
-              <span style="font-size: 32px;">⭐ ⭐ ⭐ ⭐ ⭐</span>
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Hello, ${userName}!</h2>
+            
+            <p>Your account has been successfully created. You have been assigned the role of <strong>${roleDisplay}</strong>.</p>
+            
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #1a2b6d;">Getting Started</h3>
+              <ul style="padding-left: 20px; color: #374151;">
+                <li>Access the dashboard to view your tasks and activities</li>
+                <li>Explore the Sales, Implementation, and Support modules</li>
+                <li>Update your profile in the Settings section</li>
+              </ul>
             </div>
+            
+            <p>If you have any questions, please don't hesitate to contact your administrator.</p>
+            
+            <p>Best regards,<br>The Microgenn Team</p>
           </div>
           
-          <p>If you're not satisfied with the resolution or need further assistance, you can reopen this ticket by logging into your account.</p>
-          
-          <p>Thank you for choosing Microgenn!</p>
-          
-          <p>Best regards,<br>The Microgenn Support Team</p>
-        </div>
-      `
-    });
-    
-    console.log(`✅ Ticket closure feedback email sent to ${toEmail}`);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to send ticket closure email:', error);
-    return { success: false, error };
-  }
-}
-
-export async function sendTrainingConfirmationEmail(
-  toEmail: string,
-  recipientName: string,
-  projectName: string,
-  moduleName: string,
-  trainingDate: Date,
-  hours: number
-) {
-  try {
-    const { client, fromEmail } = await getUncachableResendClient();
-    
-    const formattedDate = trainingDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    await client.emails.send({
-      from: fromEmail,
-      to: toEmail,
-      subject: `Training Scheduled: ${moduleName}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #3b82f6;">Training Session Scheduled</h2>
-          <p>Dear ${recipientName},</p>
-          <p>This email confirms your upcoming training session:</p>
-          
-          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Training Details</h3>
-            <p><strong>Project:</strong> ${projectName}</p>
-            <p><strong>Module:</strong> ${moduleName}</p>
-            <p><strong>Date & Time:</strong> ${formattedDate}</p>
-            <p><strong>Duration:</strong> ${hours} hour${hours !== 1 ? 's' : ''}</p>
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
           </div>
-          
-          <p>Please ensure you're available at the scheduled time. If you need to reschedule, please contact your implementation engineer as soon as possible.</p>
-          
-          <p>We look forward to training you on ${moduleName}!</p>
-          
-          <p>Best regards,<br>The Microgenn Implementation Team</p>
-        </div>
-      `
-    });
-    
-    console.log(`✅ Training confirmation email sent to ${toEmail}`);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to send training confirmation email:', error);
-    return { success: false, error };
-  }
-}
-
-export async function sendWelcomeEmail(
-  toEmail: string,
-  recipientName: string,
-  role: string
-) {
-  try {
-    const { client, fromEmail } = await getUncachableResendClient();
-
-    await client.emails.send({
-      from: fromEmail,
-      to: toEmail,
-      subject: 'Welcome to Microgenn CRM!',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #3b82f6;">Welcome to Microgenn CRM!</h2>
-          <p>Dear ${recipientName},</p>
-          <p>Welcome to the Microgenn Customer Relationship Management platform! Your account has been successfully created.</p>
-          
-          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Your Account Details</h3>
-            <p><strong>Email:</strong> ${toEmail}</p>
-            <p><strong>Role:</strong> ${role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
-          </div>
-          
-          <p>You can now access all features available to your role. Here's what you can do:</p>
-          
-          <ul>
-            ${role === 'sales_executive' ? `
-              <li>Manage leads and sales pipeline</li>
-              <li>Schedule demos and follow-ups</li>
-              <li>Send quotes to prospects</li>
-            ` : ''}
-            ${role === 'engineer' ? `
-              <li>Track implementation projects</li>
-              <li>Manage module completion</li>
-              <li>Log training sessions</li>
-            ` : ''}
-            ${role === 'support' ? `
-              <li>Handle support tickets</li>
-              <li>Manage escalations</li>
-              <li>Track customer satisfaction</li>
-            ` : ''}
-            ${role === 'admin' ? `
-              <li>Full access to all modules</li>
-              <li>View reports and analytics</li>
-              <li>Manage system settings</li>
-            ` : ''}
-          </ul>
-          
-          <p>If you have any questions or need assistance, please don't hesitate to reach out to your administrator.</p>
-          
-          <p>Best regards,<br>The Microgenn Team</p>
         </div>
       `
     });
@@ -275,6 +302,161 @@ export async function sendWelcomeEmail(
   }
 }
 
+export async function sendTicketClosedEmail(
+  toEmail: string,
+  customerName: string,
+  ticketNumber: string,
+  resolution: string
+) {
+  try {
+    await sendEmailUnified({
+      to: toEmail,
+      subject: `Ticket ${ticketNumber} Resolved - Microgenn CRM`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Ticket Resolved</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Hello, ${customerName}!</h2>
+            
+            <p>Good news! Your support ticket <strong>${ticketNumber}</strong> has been resolved.</p>
+            
+            <div style="background-color: #d1fae5; padding: 20px; border-radius: 8px; border: 1px solid #6ee7b7; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #065f46;">Resolution</h3>
+              <p style="color: #065f46;">${resolution}</p>
+            </div>
+            
+            <p>If you have any further questions or if this issue persists, please don't hesitate to contact us again.</p>
+            
+            <p>Thank you for your patience and understanding.</p>
+            
+            <p>Best regards,<br>The Microgenn Support Team</p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ Ticket closed email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send ticket closed email:', error);
+    return { success: false, error };
+  }
+}
+
+// Ticket closure feedback email (sent when ticket is closed to request feedback)
+export async function sendTicketClosureFeedbackEmail(
+  toEmail: string,
+  customerName: string,
+  ticketNumber: string,
+  issueSummary: string
+) {
+  try {
+    await sendEmailUnified({
+      to: toEmail,
+      subject: `Your Ticket ${ticketNumber} Has Been Closed - We'd Love Your Feedback`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Ticket Closed</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Hello, ${customerName}!</h2>
+            
+            <p>Your support ticket <strong>${ticketNumber}</strong> has been closed.</p>
+            
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #1a2b6d;">Issue Summary</h3>
+              <p style="color: #374151;">${issueSummary}</p>
+            </div>
+            
+            <p>We hope your issue has been resolved to your satisfaction. Your feedback is valuable to us and helps us improve our support services.</p>
+            
+            <p>If you have any remaining concerns or if the issue persists, please don't hesitate to open a new ticket.</p>
+            
+            <p>Thank you for choosing Microgenn!</p>
+            
+            <p>Best regards,<br>The Microgenn Support Team</p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ Ticket closure feedback email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send ticket closure feedback email:', error);
+    return { success: false, error };
+  }
+}
+
+export async function sendTrainingConfirmationEmail(
+  toEmail: string,
+  recipientName: string,
+  projectName: string,
+  moduleName: string,
+  scheduledDate: Date
+) {
+  try {
+    const formattedDate = scheduledDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    await sendEmailUnified({
+      to: toEmail,
+      subject: `Training Scheduled: ${moduleName} - ${projectName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Training Confirmation</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Hello, ${recipientName}!</h2>
+            
+            <p>Your training session has been scheduled:</p>
+            
+            <div style="background-color: #dbeafe; padding: 20px; border-radius: 8px; border: 1px solid #93c5fd; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #1e40af;">Training Details</h3>
+              <p><strong>Project:</strong> ${projectName}</p>
+              <p><strong>Module:</strong> ${moduleName}</p>
+              <p><strong>Date:</strong> ${formattedDate}</p>
+            </div>
+            
+            <p>Please ensure you're available at the scheduled time. If you need to reschedule, please contact your implementation engineer.</p>
+            
+            <p>Best regards,<br>The Microgenn Implementation Team</p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ Training confirmation email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send training confirmation email:', error);
+    return { success: false, error };
+  }
+}
+
 // Generic email sender for custom emails
 export async function sendEmail(params: {
   to: string;
@@ -282,15 +464,7 @@ export async function sendEmail(params: {
   html: string;
 }) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
-    
-    await client.emails.send({
-      from: fromEmail,
-      to: params.to,
-      subject: params.subject,
-      html: params.html
-    });
-    
+    await sendEmailUnified(params);
     console.log(`✅ Email sent to ${params.to}`);
     return { success: true };
   } catch (error) {
@@ -306,8 +480,6 @@ export async function sendOtpEmail(
   purpose: 'signup' | 'login' | 'password_reset'
 ) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
-    
     const purposeText = {
       signup: 'complete your registration',
       login: 'verify your login',
@@ -320,10 +492,7 @@ export async function sendOtpEmail(
       password_reset: 'Password Reset Code - Microgenn CRM'
     }[purpose];
 
-    console.log(`📧 Sending OTP email from: ${fromEmail} to: ${toEmail}`);
-    
-    const result = await client.emails.send({
-      from: fromEmail,
+    await sendEmailUnified({
       to: toEmail,
       subject: subjectText,
       html: `
@@ -357,13 +526,6 @@ export async function sendOtpEmail(
       `
     });
     
-    console.log(`📬 Resend response for ${toEmail}:`, JSON.stringify(result));
-    
-    if (result.error) {
-      console.error(`❌ Resend error for ${toEmail}:`, result.error);
-      throw new Error(result.error.message || 'Failed to send email');
-    }
-    
     console.log(`✅ OTP email sent successfully to ${toEmail}`);
     return { success: true };
   } catch (error: any) {
@@ -375,10 +537,7 @@ export async function sendOtpEmail(
 // Password reset success email
 export async function sendPasswordResetSuccessEmail(toEmail: string, userName: string) {
   try {
-    const { client, fromEmail } = await getUncachableResendClient();
-
-    await client.emails.send({
-      from: fromEmail,
+    await sendEmailUnified({
       to: toEmail,
       subject: 'Password Changed Successfully - Microgenn CRM',
       html: `

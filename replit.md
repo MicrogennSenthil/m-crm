@@ -53,7 +53,38 @@ The database schema consists of 14 tables, including `users` (with role-based ac
 - **Authentication**: Replit Auth (OpenID Connect)
 - **Database**: PostgreSQL with pgvector extension (via Drizzle ORM)
 - **AI/Embeddings**: OpenAI text-embedding-3-small for semantic search
-- **Email Service**: Resend
+- **Email Service**: SMTP (Gmail/Custom) or Resend (configurable)
 - **UI Components**: Shadcn UI (built on Radix UI)
 - **Icons**: Lucide React
-- **Hosting**: Replit (implicitly for environment variables and project setup)
+- **Hosting**: Replit (development) / Hostinger VPS (production)
+
+## Email Configuration
+
+The application supports two email providers with automatic fallback:
+
+### Option 1: SMTP (Gmail or Custom) - Recommended for Production
+Set these environment variables:
+```
+SMTP_HOST=smtp.gmail.com          # SMTP server hostname
+SMTP_PORT=587                      # 587 for TLS, 465 for SSL
+SMTP_USER=your-email@gmail.com     # Email username
+SMTP_PASS=your-app-password        # App Password (not regular password)
+SMTP_FROM="Microgenn CRM <your-email@gmail.com>"  # Sender display name
+SMTP_SECURE=false                  # "true" for SSL (port 465), "false" for TLS (port 587)
+```
+
+**Gmail App Password Setup:**
+1. Go to https://myaccount.google.com/apppasswords
+2. Sign in with 2-Factor Authentication enabled
+3. Select "Mail" as the app
+4. Copy the 16-character password
+
+### Option 2: Resend API (Fallback)
+Set this environment variable:
+```
+RESEND_API_KEY=re_xxxxxxxxxxxx
+```
+Note: Resend test domain only sends to verified email (snayagamk@gmail.com). Verify a custom domain at resend.com/domains for production use.
+
+### Priority
+SMTP takes priority if configured. Falls back to Resend if SMTP environment variables are not set.
