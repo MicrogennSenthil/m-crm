@@ -1000,3 +1000,39 @@ export const knowledgeBaseContentTypes = [
 ] as const;
 
 export type KnowledgeBaseContentType = typeof knowledgeBaseContentTypes[number];
+
+// System Settings table for SMTP and other configurations
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settingKey: varchar("setting_key", { length: 100 }).notNull().unique(),
+  settingValue: text("setting_value"),
+  settingType: varchar("setting_type", { length: 20 }).notNull().default("string"), // string, number, boolean, json
+  category: varchar("category", { length: 50 }).notNull().default("general"), // general, email, security, etc.
+  description: text("description"),
+  isSecret: boolean("is_secret").default(false), // If true, value should be masked in UI
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+
+// SMTP Configuration type for the UI
+export const smtpConfigSchema = z.object({
+  host: z.string().min(1, "SMTP host is required"),
+  port: z.coerce.number().min(1).max(65535),
+  user: z.string().email("Valid email is required"),
+  pass: z.string().min(1, "Password is required"),
+  from: z.string().min(1, "From address is required"),
+  secure: z.boolean().default(false),
+  enabled: z.boolean().default(true),
+});
+
+export type SmtpConfig = z.infer<typeof smtpConfigSchema>;
