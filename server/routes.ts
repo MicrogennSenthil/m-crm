@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
-import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail } from "./email";
+import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
@@ -50,6 +50,9 @@ function generateOtp(): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Set up email service storage getter for database SMTP configuration
+  setStorageGetter(async () => storage);
+  
   // Auth middleware
   await setupAuth(app);
 
@@ -4869,6 +4872,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedConfig = smtpConfigSchema.parse(req.body);
 
       await storage.saveSmtpConfig(validatedConfig, userId);
+      
+      // Clear the email service SMTP cache so it uses the new settings
+      clearSmtpSettingsCache();
 
       // Log the activity
       await storage.logActivity({
@@ -4951,6 +4957,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const key of smtpKeys) {
         await storage.deleteSystemSetting(key);
       }
+      
+      // Clear the email service SMTP cache
+      clearSmtpSettingsCache();
 
       // Log the activity
       await storage.logActivity({

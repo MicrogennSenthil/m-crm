@@ -2,13 +2,15 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import type { SmtpConfig } from '@shared/schema';
 
 // =============================================
 // EMAIL PROVIDER CONFIGURATION
 // =============================================
 // 
-// The system supports two email providers:
-// 1. SMTP (Gmail, custom SMTP) - Set these environment variables:
+// The system supports two email providers with priority:
+// 1. Database SMTP Settings (highest priority) - Configured via Admin UI
+// 2. Environment Variables SMTP - Set these environment variables:
 //    - SMTP_HOST: SMTP server hostname (e.g., smtp.gmail.com)
 //    - SMTP_PORT: SMTP port (587 for TLS, 465 for SSL)
 //    - SMTP_USER: Email username (e.g., snayagamk@gmail.com)
@@ -16,17 +18,68 @@ import type { Transporter } from 'nodemailer';
 //    - SMTP_FROM: Sender email (e.g., "Microgenn CRM <snayagamk@gmail.com>")
 //    - SMTP_SECURE: "true" for SSL (port 465), "false" for TLS (port 587)
 //
-// 2. Resend API (fallback) - Set:
+// 3. Resend API (fallback) - Set:
 //    - RESEND_API_KEY: Your Resend API key
 //
-// SMTP takes priority if configured. Falls back to Resend if SMTP is not set.
+// Database settings take highest priority, then env vars, then Resend.
 // =============================================
 
 let connectionSettings: any;
 let smtpTransporter: Transporter | null = null;
+let cachedDbSmtpConfig: SmtpConfig | null = null;
+let dbSettingsLastFetch: number = 0;
+const DB_SETTINGS_CACHE_TTL = 60000; // 1 minute cache
 
-// Check if SMTP is configured
-function isSmtpConfigured(): boolean {
+// Storage getter - will be set from routes
+let storageGetter: (() => Promise<any>) | null = null;
+
+export function setStorageGetter(getter: () => Promise<any>) {
+  storageGetter = getter;
+}
+
+// Get database SMTP settings (cached for 1 minute)
+async function getDbSmtpConfig(): Promise<SmtpConfig | null> {
+  const now = Date.now();
+  if (cachedDbSmtpConfig && (now - dbSettingsLastFetch) < DB_SETTINGS_CACHE_TTL) {
+    return cachedDbSmtpConfig;
+  }
+  
+  if (!storageGetter) {
+    return null;
+  }
+  
+  try {
+    const storage = await storageGetter();
+    const config = await storage.getSmtpConfig();
+    if (config && config.enabled !== false) {
+      cachedDbSmtpConfig = config;
+      dbSettingsLastFetch = now;
+      return config;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch database SMTP settings:', error);
+    return null;
+  }
+}
+
+// Clear SMTP settings cache (call when settings are updated)
+export function clearSmtpSettingsCache() {
+  cachedDbSmtpConfig = null;
+  dbSettingsLastFetch = 0;
+  smtpTransporter = null;
+  console.log('📧 SMTP settings cache cleared');
+}
+
+// Check if SMTP is configured (database or environment)
+async function isSmtpConfigured(): Promise<boolean> {
+  // Check database settings first
+  const dbConfig = await getDbSmtpConfig();
+  if (dbConfig && dbConfig.host && dbConfig.port && dbConfig.user && dbConfig.pass) {
+    return true;
+  }
+  
+  // Fallback to environment variables
   return !!(
     process.env.SMTP_HOST &&
     process.env.SMTP_PORT &&
@@ -36,7 +89,30 @@ function isSmtpConfigured(): boolean {
 }
 
 // Get SMTP transporter (cached)
-function getSmtpTransporter(): Transporter {
+async function getSmtpTransporter(): Promise<Transporter> {
+  // Check database settings first
+  const dbConfig = await getDbSmtpConfig();
+  
+  if (dbConfig && dbConfig.host && dbConfig.port && dbConfig.user && dbConfig.pass) {
+    // Use database settings
+    const isSecure = dbConfig.secure || false;
+    const port = dbConfig.port;
+    
+    smtpTransporter = nodemailer.createTransport({
+      host: dbConfig.host,
+      port: port,
+      secure: isSecure,
+      auth: {
+        user: dbConfig.user,
+        pass: dbConfig.pass,
+      },
+    });
+    
+    console.log(`📧 SMTP configured from database: ${dbConfig.host}:${port} (secure: ${isSecure})`);
+    return smtpTransporter;
+  }
+  
+  // Fallback to environment variables
   if (!smtpTransporter) {
     const isSecure = process.env.SMTP_SECURE === 'true';
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -44,20 +120,24 @@ function getSmtpTransporter(): Transporter {
     smtpTransporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: port,
-      secure: isSecure, // true for 465, false for other ports
+      secure: isSecure,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
     });
     
-    console.log(`📧 SMTP configured: ${process.env.SMTP_HOST}:${port} (secure: ${isSecure})`);
+    console.log(`📧 SMTP configured from env: ${process.env.SMTP_HOST}:${port} (secure: ${isSecure})`);
   }
   return smtpTransporter;
 }
 
 // Get SMTP sender email
-function getSmtpFromEmail(): string {
+async function getSmtpFromEmail(): Promise<string> {
+  const dbConfig = await getDbSmtpConfig();
+  if (dbConfig && dbConfig.from) {
+    return dbConfig.from;
+  }
   return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@example.com';
 }
 
@@ -67,8 +147,8 @@ async function sendEmailViaSMTP(params: {
   subject: string;
   html: string;
 }): Promise<{ success: boolean; messageId?: string }> {
-  const transporter = getSmtpTransporter();
-  const fromEmail = getSmtpFromEmail();
+  const transporter = await getSmtpTransporter();
+  const fromEmail = await getSmtpFromEmail();
   
   console.log(`📧 Sending email via SMTP from: ${fromEmail} to: ${params.to}`);
   
@@ -166,7 +246,7 @@ async function sendEmailUnified(params: {
   subject: string;
   html: string;
 }): Promise<{ success: boolean }> {
-  if (isSmtpConfigured()) {
+  if (await isSmtpConfigured()) {
     return sendEmailViaSMTP(params);
   } else {
     return sendEmailViaResend(params);
@@ -174,12 +254,23 @@ async function sendEmailUnified(params: {
 }
 
 // Get current email provider info
-export function getEmailProviderInfo(): { provider: 'smtp' | 'resend'; configured: boolean; details: string } {
-  if (isSmtpConfigured()) {
+export async function getEmailProviderInfo(): Promise<{ provider: 'smtp' | 'resend' | 'database'; configured: boolean; details: string }> {
+  // Check database settings first
+  const dbConfig = await getDbSmtpConfig();
+  if (dbConfig && dbConfig.host && dbConfig.port && dbConfig.user && dbConfig.pass) {
+    return {
+      provider: 'database',
+      configured: true,
+      details: `SMTP (Database): ${dbConfig.host}:${dbConfig.port}`
+    };
+  }
+  
+  // Check environment variables
+  if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS) {
     return {
       provider: 'smtp',
       configured: true,
-      details: `SMTP: ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`
+      details: `SMTP (Env): ${process.env.SMTP_HOST}:${process.env.SMTP_PORT}`
     };
   } else if (process.env.RESEND_API_KEY) {
     return {
