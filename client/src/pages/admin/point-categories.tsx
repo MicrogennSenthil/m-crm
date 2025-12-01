@@ -618,7 +618,7 @@ export default function PointCategoriesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Category Name</TableHead>
+                        <TableHead>Department</TableHead>
                         <TableHead className="text-center">Base Points</TableHead>
                         <TableHead className="text-center">Reassign Penalty</TableHead>
                         <TableHead className="text-center">Completion Bonus</TableHead>
@@ -631,7 +631,7 @@ export default function PointCategoriesPage() {
                         <TableRow key={category.id} data-testid={`row-category-${category.id}`}>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{category.name}</p>
+                              <p className="font-medium">{getDepartmentName(category.departmentId)}</p>
                               {category.description && (
                                 <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                                   {category.description}
@@ -983,9 +983,9 @@ export default function PointCategoriesPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {departments.map((dept) => (
-                          <SelectItem key={dept.value} value={dept.value}>
-                            {dept.label}
+                        {departmentsList.filter(d => d.isActive).map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id}>
+                            {dept.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
