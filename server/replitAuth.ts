@@ -9,8 +9,15 @@ import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { sendWelcomeEmail } from "./email";
 
+// Check if running on Replit or if OIDC should be enabled
+const isReplit = process.env.REPL_ID !== undefined;
+const useReplitAuth = process.env.USE_REPLIT_AUTH === "true" || (isReplit && process.env.USE_REPLIT_AUTH !== "false");
+
 const getOidcConfig = memoize(
   async () => {
+    if (!useReplitAuth) {
+      throw new Error("Replit Auth is not enabled");
+    }
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
       process.env.REPL_ID!
@@ -28,6 +35,17 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "sessions",
   });
+  
+  // Determine if we should use secure cookies
+  // On VPS behind Nginx with SSL, trust proxy handles this
+  // For local development or non-HTTPS setups, disable secure cookies
+  const isProduction = process.env.NODE_ENV === "production";
+  const forceSecureCookies = process.env.SECURE_COOKIES === "true";
+  const disableSecureCookies = process.env.SECURE_COOKIES === "false";
+  
+  // Default: secure in production, unless explicitly disabled
+  const secureCookies = disableSecureCookies ? false : (forceSecureCookies || isProduction);
+  
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -35,8 +53,9 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: secureCookies,
       maxAge: sessionTtl,
+      sameSite: secureCookies ? "strict" : "lax",
     },
   });
 }
@@ -81,6 +100,31 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Only setup OIDC routes if Replit Auth is enabled
+  if (!useReplitAuth) {
+    console.log("[Auth] Replit Auth disabled - using local authentication only");
+    
+    // Simple logout for local auth
+    app.get("/api/logout", (req, res) => {
+      req.logout(() => {
+        // Clear local auth session
+        if (req.session) {
+          (req.session as any).isLocalAuth = false;
+          (req.session as any).userId = null;
+        }
+        res.redirect("/");
+      });
+    });
+    
+    // Redirect to local login page instead of OIDC
+    app.get("/api/login", (_req, res) => {
+      res.redirect("/auth/login");
+    });
+    
+    return;
+  }
+
+  console.log("[Auth] Setting up Replit OIDC authentication");
   const config = await getOidcConfig();
 
   const verify: VerifyFunction = async (

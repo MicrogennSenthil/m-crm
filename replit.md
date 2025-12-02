@@ -88,3 +88,59 @@ Note: Resend test domain only sends to verified email (snayagamk@gmail.com). Ver
 
 ### Priority
 SMTP takes priority if configured. Falls back to Resend if SMTP environment variables are not set.
+
+## VPS Deployment
+
+The application is now **VPS-ready** with dual-mode configuration for seamless deployment.
+
+### Deployment Guide
+See **DEPLOYMENT.md** for complete step-by-step VPS deployment instructions.
+
+### Key Configuration Modes
+
+**Authentication Mode:**
+- **Replit**: Uses Replit OIDC (auto-detected via REPL_ID)
+- **VPS**: Uses local email/password authentication only
+- Control: `USE_REPLIT_AUTH=true/false` (auto-detected)
+
+**Object Storage Mode:**
+- **Replit**: Uses Replit sidecar for GCS credentials
+- **VPS**: Uses GCS service account key (`GCS_SERVICE_ACCOUNT_KEY`)
+- Control: `USE_REPLIT_STORAGE=true/false` (auto-detected)
+
+**Session Cookies:**
+- **Production**: Secure cookies enabled by default
+- **Development**: Can disable with `SECURE_COOKIES=false`
+
+**Server Port:**
+- **Replit**: Port 5000 (default)
+- **VPS**: Port 3000 (default, configurable via PORT)
+
+### VPS Environment Variables
+```
+# Required
+DATABASE_URL=postgresql://user:pass@localhost:5432/mcrm_db
+SESSION_SECRET=your-64-char-secret
+NODE_ENV=production
+OPENAI_API_KEY=sk-xxx
+
+# Email (SMTP recommended)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=email@gmail.com
+SMTP_PASS=app-password
+SMTP_FROM="M-CRM <email@gmail.com>"
+
+# Optional - Object Storage
+GCS_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+GCS_PROJECT_ID=your-project
+PUBLIC_OBJECT_SEARCH_PATHS=/bucket/public
+PRIVATE_OBJECT_DIR=/bucket/.private
+```
+
+### PM2 Production Commands
+```bash
+pm2 start ecosystem.config.js --env production
+pm2 logs mcrm
+pm2 restart mcrm
+```
