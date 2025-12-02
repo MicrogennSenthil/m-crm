@@ -4,6 +4,36 @@ This guide covers deploying M-CRM to an Ubuntu VPS server with your existing dat
 
 ---
 
+## Quick Start (Automated)
+
+We provide automated scripts for deployment:
+
+### Step 1: Export Database (Run on Replit)
+```bash
+./export-database.sh
+```
+
+### Step 2: Deploy to VPS (Run on your VPS as root)
+```bash
+# Upload the script to your VPS
+scp deploy-vps.sh root@your-server-ip:/root/
+
+# SSH to your server and run
+ssh root@your-server-ip
+chmod +x /root/deploy-vps.sh
+/root/deploy-vps.sh
+```
+
+The script will guide you through the entire setup process interactively.
+
+---
+
+## Manual Deployment
+
+If you prefer manual setup, follow the steps below.
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
