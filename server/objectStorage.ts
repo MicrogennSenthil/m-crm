@@ -11,23 +11,64 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
+// Dual-mode object storage: Replit sidecar vs GCS service account
+function createStorageClient(): Storage {
+  const isReplit = process.env.REPL_ID !== undefined;
+  const useReplitStorage = process.env.USE_REPLIT_STORAGE === "true" || (isReplit && process.env.USE_REPLIT_STORAGE !== "false");
+
+  if (useReplitStorage) {
+    // Replit sidecar mode
+    console.log("[ObjectStorage] Using Replit sidecar authentication");
+    return new Storage({
+      credentials: {
+        audience: "replit",
+        subject_token_type: "access_token",
+        token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+        type: "external_account",
+        credential_source: {
+          url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+          format: {
+            type: "json",
+            subject_token_field_name: "access_token",
+          },
+        },
+        universe_domain: "googleapis.com",
       },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+      projectId: "",
+    });
+  } else {
+    // VPS mode with GCS service account
+    console.log("[ObjectStorage] Using GCS service account authentication");
+    
+    // Option 1: Use GOOGLE_APPLICATION_CREDENTIALS env var (path to JSON key file)
+    // Option 2: Use GCS_SERVICE_ACCOUNT_KEY env var (JSON key content)
+    const serviceAccountKey = process.env.GCS_SERVICE_ACCOUNT_KEY;
+    const projectId = process.env.GCS_PROJECT_ID;
+    
+    if (serviceAccountKey) {
+      try {
+        const credentials = JSON.parse(serviceAccountKey);
+        return new Storage({
+          credentials,
+          projectId: projectId || credentials.project_id,
+        });
+      } catch (error) {
+        console.error("[ObjectStorage] Failed to parse GCS_SERVICE_ACCOUNT_KEY:", error);
+        throw new Error("Invalid GCS_SERVICE_ACCOUNT_KEY format. Must be valid JSON.");
+      }
+    }
+    
+    // Fall back to GOOGLE_APPLICATION_CREDENTIALS (default GCS SDK behavior)
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      return new Storage({ projectId });
+    }
+    
+    console.warn("[ObjectStorage] No GCS credentials configured. Object storage features will be disabled.");
+    return new Storage({ projectId: projectId || "disabled" });
+  }
+}
+
+export const objectStorageClient = createStorageClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -251,29 +292,54 @@ async function signObjectURL({
   method: "GET" | "PUT" | "DELETE" | "HEAD";
   ttlSec: number;
 }): Promise<string> {
-  const request = {
-    bucket_name: bucketName,
-    object_name: objectName,
-    method,
-    expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-  };
-  const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    }
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Failed to sign object URL, errorcode: ${response.status}, ` +
-        `make sure you're running on Replit`
-    );
-  }
+  const isReplit = process.env.REPL_ID !== undefined;
+  const useReplitStorage = process.env.USE_REPLIT_STORAGE === "true" || (isReplit && process.env.USE_REPLIT_STORAGE !== "false");
 
-  const { signed_url: signedURL } = await response.json();
-  return signedURL;
+  if (useReplitStorage) {
+    // Use Replit sidecar for signing
+    const request = {
+      bucket_name: bucketName,
+      object_name: objectName,
+      method,
+      expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
+    };
+    const response = await fetch(
+      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to sign object URL, errorcode: ${response.status}, ` +
+          `make sure you're running on Replit`
+      );
+    }
+
+    const { signed_url: signedURL } = await response.json();
+    return signedURL;
+  } else {
+    // Use GCS SDK for signing (VPS mode)
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    
+    const actionMap: Record<string, 'read' | 'write' | 'delete'> = {
+      GET: 'read',
+      PUT: 'write',
+      DELETE: 'delete',
+      HEAD: 'read',
+    };
+    
+    const [signedUrl] = await file.getSignedUrl({
+      version: 'v4',
+      action: actionMap[method],
+      expires: Date.now() + ttlSec * 1000,
+    });
+    
+    return signedUrl;
+  }
 }
