@@ -492,12 +492,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Super Admin email - protected from modifications
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
-  // Admin: Update user status and role (admin only)
+  // Admin: Update user (admin only)
   app.patch("/api/users/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const adminUserId = req.user.claims.sub || (req.session as any).userId;
       const { userId } = req.params;
-      const { isActive, role } = req.body;
+      const { isActive, role, firstName, lastName, email, departmentId } = req.body;
       
       // Prevent admin from deactivating themselves
       if (userId === adminUserId && isActive === false) {
@@ -520,16 +520,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Build update object
+      // Build update object with all allowed fields
       const updates: any = {};
+      
       if (typeof isActive === "boolean") {
         updates.isActive = isActive;
       }
       if (role && ["admin", "sales_executive", "engineer", "support"].includes(role)) {
         updates.role = role;
       }
+      if (firstName !== undefined) {
+        updates.firstName = firstName;
+      }
+      if (lastName !== undefined) {
+        updates.lastName = lastName;
+      }
+      if (email !== undefined) {
+        updates.email = email;
+      }
+      if (departmentId !== undefined) {
+        updates.departmentId = departmentId || null;
+      }
       
       const updatedUser = await storage.updateUser(userId, updates);
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "user",
+        entityId: userId,
+        action: "updated",
+        description: `User updated: ${updatedUser.firstName} ${updatedUser.lastName}`,
+        userId: adminUserId,
+      });
+      
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user:", error);
