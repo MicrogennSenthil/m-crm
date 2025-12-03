@@ -239,6 +239,7 @@ function CustomersTab() {
                   <TableHead className="hidden lg:table-cell">Phone</TableHead>
                   <TableHead className="hidden xl:table-cell">Industry</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead className="hidden md:table-cell">Modules</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -255,6 +256,24 @@ function CustomersTab() {
                       <Badge variant="outline" className="capitalize">
                         {customer.customerType || "prospect"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {customer.selectedModules && customer.selectedModules.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {customer.selectedModules.slice(0, 2).map((mod) => (
+                            <Badge key={mod} variant="secondary" className="text-xs">
+                              {mod}
+                            </Badge>
+                          ))}
+                          {customer.selectedModules.length > 2 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{customer.selectedModules.length - 2}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">None</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={customer.status === "active" ? "default" : "secondary"}>
@@ -618,9 +637,9 @@ function CustomerForm({
         </div>
 
         <div className="grid gap-2">
-          <Label>Interested Modules</Label>
+          <Label>Purchased/Subscribed Modules</Label>
           <p className="text-xs text-muted-foreground mb-2">
-            Select the modules this customer is interested in
+            Select the modules this customer has purchased. Only these modules will be available when raising support tickets.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 border rounded-md bg-muted/30">
             {modulesList.length > 0 ? (
