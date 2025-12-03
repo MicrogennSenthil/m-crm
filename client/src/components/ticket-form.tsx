@@ -125,12 +125,28 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
     return customer?.projects || [];
   }, [selectedCustomerId, customersWithLifecycle]);
 
+  // Filter modules based on selected customer's purchased modules
+  const filteredModules = useMemo(() => {
+    if (!modules) return [];
+    if (!selectedCustomerId || !customersWithLifecycle) return modules; // Show all if no customer selected
+    
+    const selectedCustomer = customersWithLifecycle.find(c => c.id === selectedCustomerId);
+    const purchasedModuleNames = selectedCustomer?.selectedModules || [];
+    
+    // If customer has no specific modules, show all (for legacy data)
+    if (purchasedModuleNames.length === 0) return modules;
+    
+    // Filter to only show purchased modules
+    return modules.filter(m => purchasedModuleNames.includes(m.name));
+  }, [modules, selectedCustomerId, customersWithLifecycle]);
+
   const handleCustomerSelect = (customerId: string) => {
     if (customerId === "new") {
       setIsNewCustomer(true);
       setSelectedCustomerId(null);
       form.setValue("customerId", undefined);
       form.setValue("projectId", undefined);
+      form.setValue("moduleId", undefined);
       form.setValue("customerName", "");
       form.setValue("customerEmail", "");
       form.setValue("customerPhone", "");
@@ -143,8 +159,9 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
         form.setValue("customerName", selectedCustomer.name);
         form.setValue("customerEmail", selectedCustomer.email || "");
         form.setValue("customerPhone", selectedCustomer.phone || "");
-        // Clear project selection when customer changes
+        // Clear project and module selection when customer changes
         form.setValue("projectId", undefined);
+        form.setValue("moduleId", undefined);
       }
     }
   };
@@ -657,15 +674,24 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {modules?.map((module) => (
-                        <SelectItem key={module.id} value={module.id}>
-                          {module.name}
-                        </SelectItem>
-                      ))}
+                      {filteredModules.length > 0 ? (
+                        filteredModules.map((module) => (
+                          <SelectItem key={module.id} value={module.id}>
+                            {module.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="py-2 px-2 text-sm text-muted-foreground text-center">
+                          No modules purchased by this customer
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Select the module related to this support query
+                    {selectedCustomerId 
+                      ? `Showing ${filteredModules.length} purchased module${filteredModules.length !== 1 ? 's' : ''}`
+                      : "Select the module related to this support query"
+                    }
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
