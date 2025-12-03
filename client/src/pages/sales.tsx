@@ -170,20 +170,20 @@ export default function Sales() {
       </div>
 
       {/* Kanban Board */}
-      <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 pb-4">
         {STAGES.map((stage) => {
           const stageLeads = getLeadsByStage(stage.id);
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-72 sm:w-80"
+              className="min-w-0"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, stage.id)}
             >
-              <div className="mb-2 sm:mb-3 flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${stage.color}`} />
-                <h3 className="font-semibold text-sm sm:text-base">{stage.title}</h3>
-                <Badge variant="secondary" className="ml-auto">
+              <div className="mb-2 flex items-center gap-1.5">
+                <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
+                <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
+                <Badge variant="secondary" className="ml-auto flex-shrink-0 text-xs">
                   {stageLeads.length}
                 </Badge>
               </div>
@@ -202,32 +202,32 @@ export default function Sales() {
                       onClick={() => setSelectedLead(lead)}
                       data-testid={`card-lead-${lead.id}`}
                     >
-                      <CardHeader className="p-3 sm:p-4 space-y-1 sm:space-y-2">
-                        <CardTitle className="text-sm font-semibold leading-tight">
+                      <CardHeader className="p-2 sm:p-3 space-y-0.5">
+                        <CardTitle className="text-xs sm:text-sm font-semibold leading-tight truncate">
                           {lead.companyName}
                         </CardTitle>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground truncate">
                           {lead.contactPerson}
                         </div>
                       </CardHeader>
-                      <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+                      <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
                         {lead.estimatedValue && (
-                          <div className="text-sm font-medium">
+                          <div className="text-xs sm:text-sm font-medium">
                             ${lead.estimatedValue.toLocaleString()}
                           </div>
                         )}
                         {lead.demoDate && (
                           <div className="flex items-center gap-1 text-xs text-primary">
-                            <Clock className="h-3 w-3" />
-                            <span>{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
+                            <Clock className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
                           </div>
                         )}
-                        <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
-                          <Badge variant="outline" className="capitalize">
+                        <div className="flex items-center justify-between gap-1 text-xs">
+                          <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
                             {lead.leadSource}
                           </Badge>
-                          <span className="text-muted-foreground whitespace-nowrap">
-                            {lead.daysInStage}d in stage
+                          <span className="text-muted-foreground whitespace-nowrap text-xs">
+                            {lead.daysInStage}d
                           </span>
                         </div>
                       </CardContent>
@@ -235,7 +235,7 @@ export default function Sales() {
                   ))
                 ) : (
                   <Card className="border-dashed">
-                    <CardContent className="p-6 sm:p-8 text-center text-sm text-muted-foreground">
+                    <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
                       No leads
                     </CardContent>
                   </Card>
