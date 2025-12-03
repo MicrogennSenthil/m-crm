@@ -294,57 +294,39 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon" data-testid="sidebar-main">
-      <SidebarHeader className="h-[52px] px-3 flex items-center border-b-2 border-b-white">
-        <div className="flex items-center justify-between gap-2 w-full">
+      <SidebarHeader className="h-[52px] px-2 flex items-center border-b-2 border-b-white">
+        <div className="flex items-center justify-between gap-1 w-full">
           {!isCollapsed && (
-            <h1 className="text-lg font-bold text-[#FF9933]" data-testid="text-sidebar-title">
+            <h1 className="text-lg font-bold text-[#FF9933] truncate" data-testid="text-sidebar-title">
               M-CRM
             </h1>
           )}
-          <div className={`flex items-center gap-1 ${isCollapsed ? 'mx-auto' : ''}`}>
+          <div className={`flex items-center gap-0.5 ${isCollapsed ? 'mx-auto' : 'ml-auto'}`}>
             {!isMobile && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handlePin}
-                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                      data-testid="button-sidebar-pin"
-                    >
-                      {isPinned ? (
-                        <Pin className="h-4 w-4 fill-current" />
-                      ) : (
-                        <PinOff className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isPinned ? "Unpin sidebar" : "Pin sidebar"}
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleCollapse}
-                      className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                      data-testid="button-sidebar-collapse"
-                    >
-                      {isCollapsed ? (
-                        <PanelLeft className="h-4 w-4" />
-                      ) : (
-                        <PanelLeftClose className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  </TooltipContent>
-                </Tooltip>
-              </>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handlePin}
+                    className={`h-7 w-7 transition-colors ${
+                      isPinned 
+                        ? 'text-[#FF9933] hover:text-[#FF9933] hover:bg-sidebar-accent' 
+                        : 'text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                    }`}
+                    data-testid="button-sidebar-pin"
+                  >
+                    {isPinned ? (
+                      <Pin className="h-4 w-4" />
+                    ) : (
+                      <PinOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {isPinned ? "Unpin sidebar (auto-hide)" : "Pin sidebar (keep open)"}
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </div>

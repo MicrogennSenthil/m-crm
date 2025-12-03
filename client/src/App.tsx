@@ -52,15 +52,14 @@ function AuthenticatedLayout() {
   return (
     <SidebarProvider 
       style={style as React.CSSProperties}
-      open={isPinned ? true : undefined}
-      onOpenChange={isPinned ? undefined : undefined}
+      defaultOpen={isPinned}
     >
       <div className="flex h-screen w-full">
         <AppSidebar isPinned={isPinned} onPinChange={setIsPinned} />
         <SidebarInset className="flex flex-col flex-1">
           <header className="sticky top-0 z-50 h-[52px] flex items-center justify-between gap-2 px-2 sm:px-4 border-b-2 border-b-[#FF9933] bg-background">
             <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px] md:hidden" />
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="min-h-[44px] min-w-[44px]" />
               <img 
                 src={microgennLogo} 
                 alt="M-CRM" 
