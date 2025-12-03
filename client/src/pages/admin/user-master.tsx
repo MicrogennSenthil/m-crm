@@ -97,6 +97,8 @@ export default function UserMaster() {
 
   useEffect(() => {
     if (editingUser) {
+      console.log("Setting form data from editingUser:", editingUser);
+      console.log("editingUser.role:", editingUser.role);
       setFormData({
         email: editingUser.email || "",
         firstName: editingUser.firstName || "",
@@ -498,13 +500,22 @@ export default function UserMaster() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Role</Label>
+                <Label>Role *</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value) => setFormData({ ...formData, role: value })}
+                  onValueChange={(value) => {
+                    console.log("Role changed to:", value);
+                    setFormData({ ...formData, role: value });
+                  }}
                 >
                   <SelectTrigger data-testid="select-user-role">
-                    <SelectValue placeholder="Select role" />
+                    <SelectValue placeholder="Select role">
+                      {formData.role === "admin" && "Admin"}
+                      {formData.role === "sales_executive" && "Sales Executive"}
+                      {formData.role === "engineer" && "Engineer"}
+                      {formData.role === "support" && "Support"}
+                      {!["admin", "sales_executive", "engineer", "support"].includes(formData.role) && "Select role"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>

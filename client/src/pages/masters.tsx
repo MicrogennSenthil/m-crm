@@ -46,7 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2 } from "lucide-react";
-import type { Customer, Module, User, UserRole, UserRoleRight, Department } from "@shared/schema";
+import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule } from "@shared/schema";
 
 export default function Masters() {
   const [activeTab, setActiveTab] = useState("customers");
@@ -1942,13 +1942,17 @@ const AVAILABLE_MODULES = [
 
 function RoleRightsTab() {
   const { toast } = useToast();
-  const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+  const [selectedRoleId, setSelectedRoleId] = useState<string>("all");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingRight, setEditingRight] = useState<UserRoleRight | null>(null);
   const [deletingRight, setDeletingRight] = useState<UserRoleRight | null>(null);
 
   const { data: rolesList = [] } = useQuery<UserRole[]>({
     queryKey: ["/api/user-roles"],
+  });
+
+  const { data: systemModules = [] } = useQuery<SystemModule[]>({
+    queryKey: ["/api/system-modules"],
   });
 
   const { data: rightsList = [], isLoading } = useQuery<UserRoleRight[]>({
@@ -2008,6 +2012,11 @@ function RoleRightsTab() {
   const getRoleName = (roleId: string) => {
     const role = rolesList.find((r) => r.id === roleId);
     return role?.displayName || roleId;
+  };
+
+  const getModuleName = (moduleId: string) => {
+    const mod = systemModules.find((m) => m.id === moduleId);
+    return mod?.displayName || mod?.name || moduleId;
   };
 
   return (
@@ -2082,7 +2091,7 @@ function RoleRightsTab() {
                 {rightsList.map((right) => (
                   <TableRow key={right.id} data-testid={`row-right-${right.id}`}>
                     <TableCell className="font-medium">{getRoleName(right.roleId)}</TableCell>
-                    <TableCell className="capitalize">{right.module}</TableCell>
+                    <TableCell className="capitalize">{getModuleName(right.module)}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant={right.canView ? "default" : "secondary"} className="w-12">
                         {right.canView ? "Yes" : "No"}
