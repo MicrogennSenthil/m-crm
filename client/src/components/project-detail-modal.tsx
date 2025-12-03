@@ -14,11 +14,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { 
   Calendar, Clock, User, Building2, CheckCircle2, AlertCircle, 
   GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings,
-  Camera, Video, FileText, Image, Loader2
+  Camera, Video, FileText, Image, Loader2, CalendarIcon
 } from "lucide-react";
 import { DatePickerCompact } from "@/components/ui/date-picker";
 import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer, ProjectProgressEntry } from "@shared/schema";
@@ -300,6 +302,9 @@ function ModuleInstallationCard({
 export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
+  const [trainingDatePickerOpen, setTrainingDatePickerOpen] = useState(false);
+  const [trainingDateTime, setTrainingDateTime] = useState<Date | undefined>(undefined);
+  const [trainingTime, setTrainingTime] = useState("09:00");
   const [newSession, setNewSession] = useState({
     moduleId: "",
     recipientName: "",
@@ -419,6 +424,8 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "training-sessions"] });
       setNewSession({ moduleId: "", recipientName: "", recipientEmail: "", scheduledDate: "", scheduledHours: 2, notes: "" });
+      setTrainingDateTime(undefined);
+      setTrainingTime("09:00");
       toast({ title: "Success", description: "Training session scheduled" });
     },
     onError: (error: Error) => {
@@ -874,13 +881,54 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
 
                   <div className="space-y-2">
                     <Label className="text-xs">Scheduled Date</Label>
-                    <Input
-                      type="datetime-local"
-                      value={newSession.scheduledDate}
-                      onChange={(e) => setNewSession({ ...newSession, scheduledDate: e.target.value })}
-                      className="h-9"
-                      data-testid="input-training-date"
-                    />
+                    <Popover open={trainingDatePickerOpen} onOpenChange={setTrainingDatePickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full h-9 justify-start text-left font-normal"
+                          data-testid="input-training-date"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {trainingDateTime ? (
+                            <span>{format(trainingDateTime, "dd/MM/yyyy")} {trainingTime}</span>
+                          ) : (
+                            <span className="text-muted-foreground">dd/mm/yyyy --:--</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={trainingDateTime}
+                          onSelect={(date) => {
+                            setTrainingDateTime(date);
+                            if (date) {
+                              const dateStr = format(date, "yyyy-MM-dd");
+                              setNewSession({ ...newSession, scheduledDate: `${dateStr}T${trainingTime}` });
+                              setTrainingDatePickerOpen(false);
+                            }
+                          }}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                          initialFocus
+                        />
+                        <div className="p-3 border-t">
+                          <Label className="text-xs">Time</Label>
+                          <Input
+                            type="time"
+                            value={trainingTime}
+                            onChange={(e) => {
+                              setTrainingTime(e.target.value);
+                              if (trainingDateTime) {
+                                const dateStr = format(trainingDateTime, "yyyy-MM-dd");
+                                setNewSession({ ...newSession, scheduledDate: `${dateStr}T${e.target.value}` });
+                              }
+                            }}
+                            className="mt-1 h-8"
+                            data-testid="input-training-time"
+                          />
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="space-y-2">
