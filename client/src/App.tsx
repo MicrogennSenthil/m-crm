@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserProfileMenu } from "@/components/user-profile-menu";
 import { AppSidebar } from "@/components/app-sidebar";
+import { BottomNav } from "@/components/bottom-nav";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
@@ -72,7 +73,7 @@ function AuthenticatedLayout() {
               <UserProfileMenu />
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-3 sm:p-6">
+          <main className="flex-1 overflow-auto p-3 sm:p-6 pb-20 md:pb-6">
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/tasks" component={Tasks} />
@@ -100,6 +101,7 @@ function AuthenticatedLayout() {
               <Route component={NotFound} />
             </Switch>
           </main>
+          <BottomNav />
         </SidebarInset>
       </div>
     </SidebarProvider>

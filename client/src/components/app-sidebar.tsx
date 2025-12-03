@@ -62,17 +62,21 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 
-// Menu groups with collapsible sections
+// Menu groups with collapsible sections and colors
 const menuGroups = [
   {
     id: "main",
     label: "Main",
     icon: Home,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
     items: [
       {
         title: "Dashboard",
         url: "/",
         icon: LayoutDashboard,
+        color: "text-blue-500",
+        bgColor: "bg-blue-500/10",
         roles: ["sales_executive", "engineer", "support", "admin"],
       },
     ],
@@ -81,11 +85,15 @@ const menuGroups = [
     id: "sales",
     label: "Sales",
     icon: TrendingUp,
+    color: "text-green-500",
+    bgColor: "bg-green-500/10",
     items: [
       {
         title: "Sales Pipeline",
         url: "/sales",
         icon: TrendingUp,
+        color: "text-green-500",
+        bgColor: "bg-green-500/10",
         roles: ["sales_executive", "admin"],
       },
     ],
@@ -94,17 +102,23 @@ const menuGroups = [
     id: "operations",
     label: "Operations",
     icon: Briefcase,
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
     items: [
       {
         title: "Implementations",
         url: "/implementations",
         icon: Wrench,
+        color: "text-amber-500",
+        bgColor: "bg-amber-500/10",
         roles: ["engineer", "admin"],
       },
       {
         title: "Work Tracking",
         url: "/implementation-dashboard",
         icon: ClipboardCheck,
+        color: "text-yellow-500",
+        bgColor: "bg-yellow-500/10",
         roles: ["engineer", "admin"],
       },
     ],
@@ -113,11 +127,15 @@ const menuGroups = [
     id: "support",
     label: "Support",
     icon: Headphones,
+    color: "text-orange-500",
+    bgColor: "bg-orange-500/10",
     items: [
       {
         title: "Support Tickets",
         url: "/support",
         icon: Headphones,
+        color: "text-orange-500",
+        bgColor: "bg-orange-500/10",
         roles: ["support", "admin"],
       },
     ],
@@ -126,17 +144,23 @@ const menuGroups = [
     id: "knowledge",
     label: "Knowledge Base",
     icon: BookOpen,
+    color: "text-cyan-500",
+    bgColor: "bg-cyan-500/10",
     items: [
       {
         title: "Search",
         url: "/knowledge-base",
         icon: Search,
+        color: "text-cyan-500",
+        bgColor: "bg-cyan-500/10",
         roles: ["sales_executive", "engineer", "support", "admin"],
       },
       {
         title: "Manage Documents",
         url: "/admin/knowledge-base",
         icon: FileText,
+        color: "text-teal-500",
+        bgColor: "bg-teal-500/10",
         roles: ["admin"],
       },
     ],
@@ -149,11 +173,15 @@ const tasksSubItems = [
     title: "All Tasks",
     url: "/tasks",
     icon: ListTodo,
+    color: "text-purple-500",
+    bgColor: "bg-purple-500/10",
   },
   {
     title: "Today's Task",
     url: "/tasks/today",
     icon: ClipboardCheck,
+    color: "text-violet-500",
+    bgColor: "bg-violet-500/10",
   },
 ];
 
@@ -163,16 +191,22 @@ const reportsSubItems = [
     title: "Sales Reports",
     url: "/reports/sales",
     icon: TrendingUp,
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
   },
   {
     title: "Implementation Reports",
     url: "/reports/implementation",
     icon: Package,
+    color: "text-lime-500",
+    bgColor: "bg-lime-500/10",
   },
   {
     title: "Support Reports",
     url: "/reports/support",
     icon: TicketCheck,
+    color: "text-green-500",
+    bgColor: "bg-green-500/10",
   },
 ];
 
@@ -182,21 +216,29 @@ const userManagementSubItems = [
     title: "User",
     url: "/admin/users",
     icon: Users,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-500/10",
   },
   {
     title: "User Role",
     url: "/admin/user-roles",
     icon: Shield,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
   },
   {
     title: "User Rights Allocation",
     url: "/admin/user-rights",
     icon: Key,
+    color: "text-sky-500",
+    bgColor: "bg-sky-500/10",
   },
   {
     title: "User Approval",
     url: "/admin/user-approval",
     icon: UserCheck,
+    color: "text-cyan-500",
+    bgColor: "bg-cyan-500/10",
   },
 ];
 
@@ -206,11 +248,15 @@ const systemSettingsSubItems = [
     title: "SMTP Configuration",
     url: "/admin/smtp-config",
     icon: Mail,
+    color: "text-rose-500",
+    bgColor: "bg-rose-500/10",
   },
   {
     title: "Point Categories",
     url: "/admin/point-categories",
     icon: Star,
+    color: "text-yellow-500",
+    bgColor: "bg-yellow-500/10",
   },
 ];
 
@@ -372,10 +418,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                         <SidebarMenuButton
                           isActive={hasActiveItem}
                           data-testid={`nav-group-${group.id}`}
+                          className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                         >
-                          <group.icon className="h-4 w-4" />
-                          <span>{group.label}</span>
-                          <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                          <div className={`flex items-center justify-center rounded-lg p-1.5 ${hasActiveItem ? group.bgColor : ""}`}>
+                            <group.icon className={`h-4 w-4 ${group.color} ${hasActiveItem ? "" : "opacity-70"}`} />
+                          </div>
+                          {!isCollapsed && <span>{group.label}</span>}
+                          {!isCollapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />}
                         </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
@@ -388,7 +437,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                 data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                               >
                                 <Link href={item.url}>
-                                  <item.icon className="h-3.5 w-3.5" />
+                                  <div className={`flex items-center justify-center rounded-md p-1 ${location === item.url ? item.bgColor : ""}`}>
+                                    <item.icon className={`h-3.5 w-3.5 ${item.color} ${location === item.url ? "" : "opacity-70"}`} />
+                                  </div>
                                   <span>{item.title}</span>
                                 </Link>
                               </SidebarMenuSubButton>
@@ -408,10 +459,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                     <SidebarMenuButton
                       isActive={location.startsWith("/tasks")}
                       data-testid="nav-tasks"
+                      className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                     >
-                      <ListTodo className="h-4 w-4" />
-                      <span>Tasks</span>
-                      <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      <div className={`flex items-center justify-center rounded-lg p-1.5 ${location.startsWith("/tasks") ? "bg-purple-500/10" : ""}`}>
+                        <ListTodo className={`h-4 w-4 text-purple-500 ${location.startsWith("/tasks") ? "" : "opacity-70"}`} />
+                      </div>
+                      {!isCollapsed && <span>Tasks</span>}
+                      {!isCollapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />}
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
@@ -424,7 +478,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                             data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
                           >
                             <Link href={subItem.url}>
-                              <subItem.icon className="h-3.5 w-3.5" />
+                              <div className={`flex items-center justify-center rounded-md p-1 ${location === subItem.url ? subItem.bgColor : ""}`}>
+                                <subItem.icon className={`h-3.5 w-3.5 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
+                              </div>
                               <span>{subItem.title}</span>
                             </Link>
                           </SidebarMenuSubButton>
@@ -443,10 +499,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                       <SidebarMenuButton
                         isActive={isReportsActive}
                         data-testid="nav-reports"
+                        className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                       >
-                        <BarChart3 className="h-4 w-4" />
-                        <span>Reports</span>
-                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        <div className={`flex items-center justify-center rounded-lg p-1.5 ${isReportsActive ? "bg-emerald-500/10" : ""}`}>
+                          <BarChart3 className={`h-4 w-4 text-emerald-500 ${isReportsActive ? "" : "opacity-70"}`} />
+                        </div>
+                        {!isCollapsed && <span>Reports</span>}
+                        {!isCollapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />}
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -459,7 +518,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                               data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
                             >
                               <Link href={subItem.url}>
-                                <subItem.icon className="h-3.5 w-3.5" />
+                                <div className={`flex items-center justify-center rounded-md p-1 ${location === subItem.url ? subItem.bgColor : ""}`}>
+                                  <subItem.icon className={`h-3.5 w-3.5 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
+                                </div>
                                 <span>{subItem.title}</span>
                               </Link>
                             </SidebarMenuSubButton>
@@ -482,10 +543,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                       <SidebarMenuButton
                         isActive={location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive}
                         data-testid="nav-group-admin"
+                        className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                       >
-                        <Cog className="h-4 w-4" />
-                        <span>Administration</span>
-                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        <div className={`flex items-center justify-center rounded-lg p-1.5 ${(location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "bg-red-500/10" : ""}`}>
+                          <Cog className={`h-4 w-4 text-red-500 ${(location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "" : "opacity-70"}`} />
+                        </div>
+                        {!isCollapsed && <span>Administration</span>}
+                        {!isCollapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />}
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
@@ -497,7 +561,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                             data-testid="nav-masters"
                           >
                             <Link href="/masters">
-                              <Database className="h-3.5 w-3.5" />
+                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/masters" ? "bg-pink-500/10" : ""}`}>
+                                <Database className={`h-3.5 w-3.5 text-pink-500 ${location === "/masters" ? "" : "opacity-70"}`} />
+                              </div>
                               <span>Masters</span>
                             </Link>
                           </SidebarMenuSubButton>
@@ -509,7 +575,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                             data-testid="nav-settings"
                           >
                             <Link href="/settings">
-                              <Settings className="h-3.5 w-3.5" />
+                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/settings" ? "bg-slate-500/10" : ""}`}>
+                                <Settings className={`h-3.5 w-3.5 text-slate-500 ${location === "/settings" ? "" : "opacity-70"}`} />
+                              </div>
                               <span>Settings</span>
                             </Link>
                           </SidebarMenuSubButton>
@@ -524,7 +592,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                 data-testid="nav-user-management"
                                 className="cursor-pointer whitespace-nowrap"
                               >
-                                <UserCog className="h-3.5 w-3.5 shrink-0" />
+                                <div className={`flex items-center justify-center rounded-md p-1 ${isUserManagementActive ? "bg-indigo-500/10" : ""}`}>
+                                  <UserCog className={`h-3.5 w-3.5 shrink-0 text-indigo-500 ${isUserManagementActive ? "" : "opacity-70"}`} />
+                                </div>
                                 <span className="truncate">User Management</span>
                                 <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
                               </SidebarMenuSubButton>
@@ -541,7 +611,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                         className="text-xs whitespace-nowrap"
                                       >
                                         <Link href={subItem.url}>
-                                          <subItem.icon className="h-3 w-3 shrink-0" />
+                                          <div className={`flex items-center justify-center rounded-md p-0.5 ${location === subItem.url ? subItem.bgColor : ""}`}>
+                                            <subItem.icon className={`h-3 w-3 shrink-0 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
+                                          </div>
                                           <span className="truncate">{subItem.title}</span>
                                         </Link>
                                       </SidebarMenuSubButton>
@@ -565,7 +637,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                 data-testid="nav-system-settings"
                                 className="cursor-pointer whitespace-nowrap"
                               >
-                                <ServerCog className="h-3.5 w-3.5 shrink-0" />
+                                <div className={`flex items-center justify-center rounded-md p-1 ${isSystemSettingsActive ? "bg-rose-500/10" : ""}`}>
+                                  <ServerCog className={`h-3.5 w-3.5 shrink-0 text-rose-500 ${isSystemSettingsActive ? "" : "opacity-70"}`} />
+                                </div>
                                 <span className="truncate">System Settings</span>
                                 <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/syssettings:rotate-90" />
                               </SidebarMenuSubButton>
@@ -582,7 +656,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                         className="text-xs whitespace-nowrap"
                                       >
                                         <Link href={subItem.url}>
-                                          <subItem.icon className="h-3 w-3 shrink-0" />
+                                          <div className={`flex items-center justify-center rounded-md p-0.5 ${location === subItem.url ? subItem.bgColor : ""}`}>
+                                            <subItem.icon className={`h-3 w-3 shrink-0 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
+                                          </div>
                                           <span className="truncate">{subItem.title}</span>
                                         </Link>
                                       </SidebarMenuSubButton>
@@ -609,10 +685,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                     asChild
                     isActive={location === "/settings"}
                     data-testid="nav-settings"
+                    className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                   >
                     <Link href="/settings">
-                      <Settings className="h-4 w-4" />
-                      <span>Settings</span>
+                      <div className={`flex items-center justify-center rounded-lg p-1.5 ${location === "/settings" ? "bg-slate-500/10" : ""}`}>
+                        <Settings className={`h-4 w-4 text-slate-500 ${location === "/settings" ? "" : "opacity-70"}`} />
+                      </div>
+                      {!isCollapsed && <span>Settings</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
