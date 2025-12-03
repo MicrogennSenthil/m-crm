@@ -41,6 +41,7 @@ import KnowledgeBaseAdmin from "@/pages/knowledge-base-admin";
 import KnowledgeBaseSearch from "@/pages/knowledge-base-search";
 import SmtpConfig from "@/pages/admin/smtp-config";
 import PointCategories from "@/pages/admin/point-categories";
+import DatabaseControl from "@/pages/admin/database-control";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -98,6 +99,7 @@ function AuthenticatedLayout() {
               <Route path="/admin/knowledge-base" component={KnowledgeBaseAdmin} />
               <Route path="/admin/smtp-config" component={SmtpConfig} />
               <Route path="/admin/point-categories" component={PointCategories} />
+              <Route path="/admin/database-control" component={DatabaseControl} />
               <Route component={NotFound} />
             </Switch>
           </main>

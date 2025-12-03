@@ -5696,6 +5696,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========== Database Control - Truncate Tables ==========
+  
+  // Truncate Transaction Tables
+  app.post("/api/admin/truncate-transactions", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const transactionTables = [
+        'point_transactions',
+        'point_ledger',
+        'activities',
+        'quotes',
+        'follow_ups',
+        'tasks',
+        'ticket_messages',
+        'tickets',
+        'training_records',
+        'training_sessions',
+        'project_progress',
+        'project_handoffs',
+        'project_engineers',
+        'project_modules',
+        'projects',
+        'leads',
+      ];
+
+      // Execute truncate with CASCADE for each table in order
+      for (const table of transactionTables) {
+        try {
+          await db.execute(sql.raw(`TRUNCATE TABLE "${table}" CASCADE`));
+          console.log(`Truncated table: ${table}`);
+        } catch (tableError: any) {
+          console.warn(`Could not truncate ${table}: ${tableError.message}`);
+        }
+      }
+
+      // Log the action
+      await storage.logActivity({
+        userId: req.user.id,
+        entityType: "system",
+        entityId: "database",
+        action: "truncate_transactions",
+        description: "Truncated all transaction tables",
+        metadata: { tables: transactionTables },
+      });
+
+      res.json({ message: "Transaction tables truncated successfully", tables: transactionTables });
+    } catch (error) {
+      console.error("Error truncating transaction tables:", error);
+      res.status(500).json({ message: "Failed to truncate transaction tables" });
+    }
+  });
+
+  // Truncate Master Tables (will cascade delete related transaction data)
+  app.post("/api/admin/truncate-masters", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const masterTables = [
+        'point_transactions',
+        'point_ledger',
+        'point_categories',
+        'knowledge_base_documents',
+        'user_role_rights',
+        'user_roles',
+        'activities',
+        'quotes',
+        'follow_ups',
+        'tasks',
+        'ticket_messages',
+        'tickets',
+        'training_records',
+        'training_sessions',
+        'project_progress',
+        'project_handoffs',
+        'project_engineers',
+        'project_modules',
+        'projects',
+        'leads',
+        'customers',
+        'modules',
+        'departments',
+      ];
+
+      // Execute truncate with CASCADE for each table in order
+      for (const table of masterTables) {
+        try {
+          await db.execute(sql.raw(`TRUNCATE TABLE "${table}" CASCADE`));
+          console.log(`Truncated table: ${table}`);
+        } catch (tableError: any) {
+          console.warn(`Could not truncate ${table}: ${tableError.message}`);
+        }
+      }
+
+      // Log the action (create a new activity since we just truncated activities)
+      try {
+        await storage.logActivity({
+          userId: req.user.id,
+          entityType: "system",
+          entityId: "database",
+          action: "truncate_masters",
+          description: "Truncated all master and transaction tables",
+          metadata: { tables: masterTables },
+        });
+      } catch (logError) {
+        console.warn("Could not log activity (table may have been truncated)");
+      }
+
+      res.json({ message: "Master tables truncated successfully", tables: masterTables });
+    } catch (error) {
+      console.error("Error truncating master tables:", error);
+      res.status(500).json({ message: "Failed to truncate master tables" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
