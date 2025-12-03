@@ -1909,17 +1909,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Automatically create implementation project when deal is won
+      // Automatically create customer and implementation project when deal is won
       if (updateData.stage === "closed_won" && currentLead?.stage !== "closed_won") {
         try {
+          let customerId = updated.customerId;
+          
+          // Create customer record if it doesn't exist
+          if (!customerId) {
+            const newCustomer = await storage.createCustomer({
+              name: updated.companyName,
+              contactPerson: updated.contactPerson || null,
+              email: updated.contactEmail || null,
+              phone: updated.contactPhone || null,
+              customerType: "customer",
+              status: "active",
+              selectedModules: updated.selectedModules || [],
+            });
+            
+            customerId = newCustomer.id;
+            
+            // Link customer to lead
+            await storage.updateLead(req.params.id, { customerId });
+            
+            // Log customer creation activity
+            await storage.logActivity({
+              entityType: "customer",
+              entityId: newCustomer.id,
+              action: "created",
+              description: `Customer auto-created from won deal: ${updated.companyName}`,
+              userId: req.user.claims.sub,
+            });
+            
+            console.log(`[Auto-Customer] Created customer record for won deal: ${updated.companyName}`);
+          }
+          
           // Check if project already exists for this lead
           const existingProjects = await storage.getProjects();
           const projectExists = existingProjects.some(p => p.leadId === req.params.id);
           
           if (!projectExists) {
-            // Create new project from the won lead
+            // Create new project from the won lead with customer link
             const projectData = {
-              customerId: updated.customerId || null,
+              customerId: customerId,
               leadId: updated.id,
               clientName: updated.companyName,
               status: "not_started" as const,
@@ -1943,8 +1974,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`[Auto-Project] Created implementation project for won deal: ${updated.companyName}`);
           }
         } catch (projectError) {
-          console.error("Error auto-creating project from won lead:", projectError);
-          // Don't fail the lead update if project creation fails
+          console.error("Error auto-creating customer/project from won lead:", projectError);
+          // Don't fail the lead update if creation fails
         }
       }
       
