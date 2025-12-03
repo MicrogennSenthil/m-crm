@@ -126,19 +126,26 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   }, [selectedCustomerId, customersWithLifecycle]);
 
   // Filter modules based on selected customer's purchased modules
-  const filteredModules = useMemo(() => {
-    if (!modules) return [];
-    if (!selectedCustomerId || !customersWithLifecycle) return modules; // Show all if no customer selected
+  const { filteredModules, hasPurchasedModules } = useMemo(() => {
+    if (!modules) return { filteredModules: [], hasPurchasedModules: false };
+    if (!selectedCustomerId || !customersWithLifecycle || isNewCustomer) {
+      return { filteredModules: modules, hasPurchasedModules: false }; // Show all if no customer selected or new customer
+    }
     
     const selectedCustomer = customersWithLifecycle.find(c => c.id === selectedCustomerId);
     const purchasedModuleNames = selectedCustomer?.selectedModules || [];
     
-    // If customer has no specific modules, show all (for legacy data)
-    if (purchasedModuleNames.length === 0) return modules;
+    // If customer has no specific modules (existing customer not from sales), show all
+    if (purchasedModuleNames.length === 0) {
+      return { filteredModules: modules, hasPurchasedModules: false };
+    }
     
     // Filter to only show purchased modules
-    return modules.filter(m => purchasedModuleNames.includes(m.name));
-  }, [modules, selectedCustomerId, customersWithLifecycle]);
+    return { 
+      filteredModules: modules.filter(m => purchasedModuleNames.includes(m.name)),
+      hasPurchasedModules: true
+    };
+  }, [modules, selectedCustomerId, customersWithLifecycle, isNewCustomer]);
 
   const handleCustomerSelect = (customerId: string) => {
     if (customerId === "new") {
@@ -688,8 +695,8 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    {selectedCustomerId 
-                      ? `Showing ${filteredModules.length} purchased module${filteredModules.length !== 1 ? 's' : ''}`
+                    {hasPurchasedModules 
+                      ? `Showing ${filteredModules.length} purchased module${filteredModules.length !== 1 ? 's' : ''} for this customer`
                       : "Select the module related to this support query"
                     }
                   </FormDescription>
