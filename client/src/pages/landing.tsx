@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LayoutDashboard, TrendingUp, Wrench, Headphones, CheckCircle } from "lucide-react";
 import { useLocation } from "wouter";
-import microgennLogo from "@assets/MG Logo_1764263883732.png";
+import microgennLogo from "@assets/Logo_1764615397514.png";
 
 export default function Landing() {
   const [, setLocation] = useLocation();

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, KeyRound } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import microgennLogo from "@assets/MG Logo_1764263883732.png";
+import microgennLogo from "@assets/Logo_1764615397514.png";
 import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@/components/ui/input-otp";
 
 type ResetStep = "email" | "otp" | "password";
