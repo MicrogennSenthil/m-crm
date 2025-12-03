@@ -1909,6 +1909,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Automatically create implementation project when deal is won
+      if (updateData.stage === "closed_won" && currentLead?.stage !== "closed_won") {
+        try {
+          // Check if project already exists for this lead
+          const existingProjects = await storage.getProjects();
+          const projectExists = existingProjects.some(p => p.leadId === req.params.id);
+          
+          if (!projectExists) {
+            // Create new project from the won lead
+            const projectData = {
+              customerId: updated.customerId || null,
+              leadId: updated.id,
+              clientName: updated.companyName,
+              status: "not_started" as const,
+              completionPercentage: 0,
+            };
+            
+            // Get selected modules from the lead
+            const selectedModules = updated.selectedModules || [];
+            
+            const newProject = await storage.createProject(projectData, selectedModules.length > 0 ? selectedModules : undefined);
+            
+            // Log project creation activity
+            await storage.logActivity({
+              entityType: "project",
+              entityId: newProject.id,
+              action: "created",
+              description: `Implementation project auto-created from won deal: ${updated.companyName}`,
+              userId: req.user.claims.sub,
+            });
+            
+            console.log(`[Auto-Project] Created implementation project for won deal: ${updated.companyName}`);
+          }
+        } catch (projectError) {
+          console.error("Error auto-creating project from won lead:", projectError);
+          // Don't fail the lead update if project creation fails
+        }
+      }
+      
       // Default activity description if not set
       if (!activityDescription) {
         activityDescription = `Lead updated: ${updated.companyName} - Stage: ${updated.stage}`;
@@ -3069,8 +3108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               lead.contactPerson,
               project.clientName,
               module.name,
-              newTraining.trainingDate,
-              newTraining.trainingHours
+              newTraining.trainingDate
             );
           }
         }
@@ -3139,8 +3177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sessionData.recipientName,
             project.clientName,
             module.name,
-            newSession.scheduledDate,
-            newSession.scheduledHours
+            newSession.scheduledDate
           );
         }
       } catch (emailError) {
