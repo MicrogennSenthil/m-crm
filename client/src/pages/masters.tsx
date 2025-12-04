@@ -1293,29 +1293,39 @@ function UsersTab() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<User>) => {
-      return await apiRequest("POST", "/api/users", data);
+      const response = await apiRequest("POST", "/api/users", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
       setIsAddOpen(false);
       toast({ title: "User created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create user", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create user", variant: "destructive" });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => {
-      return await apiRequest("PATCH", `/api/users/${id}`, data);
+      const response = await apiRequest("PATCH", `/api/users/${id}`, data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update user");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/all"] });
       setEditingUser(null);
       toast({ title: "User updated successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to update user", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to update user", variant: "destructive" });
     },
   });
 

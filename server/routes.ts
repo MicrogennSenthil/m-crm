@@ -809,6 +809,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserSchema.parse(req.body);
+      
+      // Check if email already exists
+      if (validatedData.email) {
+        const existingUser = await storage.getUserByEmail(validatedData.email);
+        if (existingUser) {
+          return res.status(400).json({ message: "A user with this email already exists" });
+        }
+      }
+      
       const newUser = await storage.createUser(validatedData);
       
       await storage.logActivity({
@@ -829,8 +838,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(newUser);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating user:", error);
+      // Check for unique constraint violation
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A user with this email already exists" });
+      }
       res.status(400).json({ message: "Failed to create user" });
     }
   });
