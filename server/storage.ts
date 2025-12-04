@@ -127,7 +127,7 @@ import {
   type InsertUserPointBalance,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, isNotNull } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -461,7 +461,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsersByRole(role: string): Promise<User[]> {
-    return await db.select().from(users).where(eq(users.role, role));
+    return await db.select().from(users).where(
+      and(
+        eq(users.role, role),
+        eq(users.isActive, true),
+        isNotNull(users.approvedAt)
+      )
+    );
   }
 
   async getUsers(): Promise<User[]> {
