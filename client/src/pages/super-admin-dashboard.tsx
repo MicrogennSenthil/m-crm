@@ -753,25 +753,34 @@ function SalesDrilldown({ viewMode }: { viewMode: ViewMode }) {
       )}
       
       {/* Graphical View */}
-      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+      {viewMode === 'graphical' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Sales Trend</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="newLeads" name="New Leads" fill={CHART_COLORS.info} />
-                  <Bar dataKey="dealsWon" name="Won" fill={CHART_COLORS.success} />
-                  <Bar dataKey="dealsLost" name="Lost" fill={CHART_COLORS.danger} />
-                </BarChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="newLeads" name="New Leads" fill={CHART_COLORS.info} />
+                    <Bar dataKey="dealsWon" name="Won" fill={CHART_COLORS.success} />
+                    <Bar dataKey="dealsLost" name="Lost" fill={CHART_COLORS.danger} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No sales data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -779,17 +788,26 @@ function SalesDrilldown({ viewMode }: { viewMode: ViewMode }) {
               <CardTitle className="text-base">Revenue Trend</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis tickFormatter={(value) => formatCurrency(value)} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  <Legend />
-                  <Area type="monotone" dataKey="dealsWonValue" name="Won Value" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="dealsLostValue" name="Lost Value" stroke={CHART_COLORS.danger} fill={CHART_COLORS.danger} fillOpacity={0.3} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis tickFormatter={(value) => formatCurrency(value)} />
+                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                    <Legend />
+                    <Area type="monotone" dataKey="dealsWonValue" name="Won Value" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                    <Area type="monotone" dataKey="dealsLostValue" name="Lost Value" stroke={CHART_COLORS.danger} fill={CHART_COLORS.danger} fillOpacity={0.3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No revenue data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -947,44 +965,62 @@ function ImplementationDrilldown({ viewMode }: { viewMode: ViewMode }) {
       )}
       
       {/* Graphical View */}
-      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+      {viewMode === 'graphical' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Implementation Trend</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="started" name="Started" fill={CHART_COLORS.info} />
-                  <Bar dataKey="completed" name="Completed" fill={CHART_COLORS.success} />
-                  <Bar dataKey="overdue" name="Overdue" fill={CHART_COLORS.danger} />
-                </BarChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="started" name="Started" fill={CHART_COLORS.info} />
+                    <Bar dataKey="completed" name="Completed" fill={CHART_COLORS.success} />
+                    <Bar dataKey="overdue" name="Overdue" fill={CHART_COLORS.danger} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Briefcase className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No implementation data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">Completion Rate</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip formatter={(value: number, name: string) => name === 'Rate' ? `${value}%` : value} />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey={(d: ImplementationBucket) => d.started > 0 ? ((d.completed / d.started) * 100).toFixed(0) : 0} 
-                    name="Rate" 
-                    stroke={CHART_COLORS.accent} 
-                    strokeWidth={2} 
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip formatter={(value: number, name: string) => name === 'Rate' ? `${value}%` : value} />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey={(d: ImplementationBucket) => d.started > 0 ? ((d.completed / d.started) * 100).toFixed(0) : 0} 
+                      name="Rate" 
+                      stroke={CHART_COLORS.accent} 
+                      strokeWidth={2} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Percent className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No completion data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1134,39 +1170,57 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
       )}
       
       {/* Graphical View */}
-      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+      {viewMode === 'graphical' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Support Trend</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="opened" name="Opened" fill={CHART_COLORS.info} />
-                  <Bar dataKey="closed" name="Closed" fill={CHART_COLORS.success} />
-                  <Bar dataKey="critical" name="Critical" fill={CHART_COLORS.danger} />
-                </BarChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="opened" name="Opened" fill={CHART_COLORS.info} />
+                    <Bar dataKey="closed" name="Closed" fill={CHART_COLORS.success} />
+                    <Bar dataKey="critical" name="Critical" fill={CHART_COLORS.danger} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <HeadphonesIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No support data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-base">Resolution Rate</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={data.buckets}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis domain={[0, 'auto']} />
-                  <Tooltip />
-                  <Legend />
-                  <Area type="monotone" dataKey="opened" name="Opened" stroke={CHART_COLORS.info} fill={CHART_COLORS.info} fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="closed" name="Closed" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis domain={[0, 'auto']} />
+                    <Tooltip />
+                    <Legend />
+                    <Area type="monotone" dataKey="opened" name="Opened" stroke={CHART_COLORS.info} fill={CHART_COLORS.info} fillOpacity={0.3} />
+                    <Area type="monotone" dataKey="closed" name="Closed" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No resolution data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1310,18 +1364,27 @@ function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data?.topPerformers?.slice(0, 5) || []} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="scores.sales" name="Sales" fill={CHART_COLORS.accent} stackId="a" />
-                  <Bar dataKey="scores.implementation" name="Implementation" fill={CHART_COLORS.info} stackId="a" />
-                  <Bar dataKey="scores.support" name="Support" fill={CHART_COLORS.success} stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
+              {data?.topPerformers && data.topPerformers.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.topPerformers.slice(0, 5)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="scores.sales" name="Sales" fill={CHART_COLORS.accent} stackId="a" />
+                    <Bar dataKey="scores.implementation" name="Implementation" fill={CHART_COLORS.info} stackId="a" />
+                    <Bar dataKey="scores.support" name="Support" fill={CHART_COLORS.success} stackId="a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Trophy className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No performance data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1331,29 +1394,38 @@ function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
               <CardTitle className="text-base">Department Contribution</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Sales', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.sales, 0) || 0, color: CHART_COLORS.accent },
-                      { name: 'Implementation', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.implementation, 0) || 0, color: CHART_COLORS.info },
-                      { name: 'Support', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.support, 0) || 0, color: CHART_COLORS.success },
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    <Cell fill={CHART_COLORS.accent} />
-                    <Cell fill={CHART_COLORS.info} />
-                    <Cell fill={CHART_COLORS.success} />
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {data?.topPerformers && data.topPerformers.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Sales', value: data.topPerformers.reduce((sum, u) => sum + u.scores.sales, 0), color: CHART_COLORS.accent },
+                        { name: 'Implementation', value: data.topPerformers.reduce((sum, u) => sum + u.scores.implementation, 0), color: CHART_COLORS.info },
+                        { name: 'Support', value: data.topPerformers.reduce((sum, u) => sum + u.scores.support, 0), color: CHART_COLORS.success },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}`}
+                    >
+                      <Cell fill={CHART_COLORS.accent} />
+                      <Cell fill={CHART_COLORS.info} />
+                      <Cell fill={CHART_COLORS.success} />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No department data available for this period</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
