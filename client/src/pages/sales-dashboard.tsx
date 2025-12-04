@@ -182,8 +182,6 @@ const PERIOD_LABELS: Record<PeriodType, string> = {
 interface GroupedStatCardProps {
   category: CategoryType;
   stats: GroupedStats[CategoryType];
-  selectedPeriod: PeriodType;
-  onPeriodChange: (period: PeriodType) => void;
   isActive: boolean;
   onClick: () => void;
 }
@@ -191,16 +189,14 @@ interface GroupedStatCardProps {
 function GroupedStatCard({ 
   category, 
   stats, 
-  selectedPeriod, 
-  onPeriodChange, 
   isActive,
   onClick 
 }: GroupedStatCardProps) {
   const config = CATEGORY_CONFIG[category];
   const Icon = config.icon;
-  
-  const currentStats = stats[selectedPeriod];
   const isFollowup = category === 'followup';
+  
+  const periods: PeriodType[] = ['today', 'month', 'year'];
   
   return (
     <Card 
@@ -211,62 +207,59 @@ function GroupedStatCard({
       data-testid={`card-${category}`}
     >
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3 mb-3">
           <div className={`p-2 rounded-lg ${config.color} bg-white/80 dark:bg-gray-900/50`}>
             <Icon className="h-5 w-5" />
           </div>
-          <div className="flex gap-1">
-            {(['today', 'month', 'year'] as PeriodType[]).map((period) => (
-              <Button
-                key={period}
-                variant={selectedPeriod === period ? "default" : "ghost"}
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPeriodChange(period);
-                }}
-                data-testid={`button-period-${category}-${period}`}
-              >
-                {PERIOD_LABELS[period]}
-              </Button>
-            ))}
+          <h3 className={`text-sm font-semibold ${config.color}`}>
+            {config.label}
+          </h3>
+        </div>
+        
+        {/* Table header */}
+        <div className="grid grid-cols-3 gap-2 mb-2 px-1">
+          <div className="text-xs font-medium text-muted-foreground"></div>
+          <div className="text-xs font-medium text-center text-muted-foreground">Qty</div>
+          <div className="text-xs font-medium text-center text-muted-foreground">
+            {isFollowup ? 'Status' : 'Amount'}
           </div>
         </div>
         
-        <h3 className={`text-sm font-medium ${config.color} mb-2`}>
-          {config.label}
-        </h3>
-        
+        {/* Period rows */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Quantity</span>
-            <span className="text-lg font-bold">{currentStats.qty}</span>
-          </div>
-          
-          {isFollowup ? (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Pending</span>
-                <Badge variant="outline" className="text-yellow-600 border-yellow-300">
-                  {(currentStats as FollowupPeriodStats).pending}
-                </Badge>
+          {periods.map((period) => {
+            const periodStats = stats[period];
+            return (
+              <div 
+                key={period}
+                className="grid grid-cols-3 gap-2 py-1.5 px-2 rounded-md bg-white/50 dark:bg-gray-900/30"
+                data-testid={`row-${category}-${period}`}
+              >
+                <div className="flex items-center">
+                  <span className="text-xs font-medium">{PERIOD_LABELS[period]}</span>
+                </div>
+                <div className="flex items-center justify-center">
+                  <span className="text-base font-bold">{periodStats.qty}</span>
+                </div>
+                <div className="flex items-center justify-center">
+                  {isFollowup ? (
+                    <div className="flex gap-1">
+                      <Badge variant="outline" className="text-[10px] px-1 h-5 text-yellow-600 border-yellow-300">
+                        {(periodStats as FollowupPeriodStats).pending}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] px-1 h-5 text-green-600 border-green-300">
+                        {(periodStats as FollowupPeriodStats).completed}
+                      </Badge>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {formatCurrency((periodStats as PeriodStats).amount)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Completed</span>
-                <Badge variant="outline" className="text-green-600 border-green-300">
-                  {(currentStats as FollowupPeriodStats).completed}
-                </Badge>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Amount</span>
-              <span className="text-sm font-semibold text-muted-foreground">
-                {formatCurrency((currentStats as PeriodStats).amount)}
-              </span>
-            </div>
-          )}
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -422,12 +415,6 @@ export default function SalesDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState<CategoryType | null>(null);
-  const [categoryPeriods, setCategoryPeriods] = useState<Record<CategoryType, PeriodType>>({
-    newLead: 'today',
-    followup: 'today',
-    deal: 'month',
-    negotiation: 'month',
-  });
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLead, setSelectedLead] = useState<LeadWithSalesExec | null>(null);
@@ -479,89 +466,25 @@ export default function SalesDashboard() {
   const isDeptHead = departments.some((d: any) => d.managerId === user?.id);
   const canComment = isSuperAdmin || isDeptHead;
 
-  const handlePeriodChange = (category: CategoryType, period: PeriodType) => {
-    setCategoryPeriods(prev => ({ ...prev, [category]: period }));
-  };
-
   const filterLeadsByCategory = (): LeadWithSalesExec[] => {
     if (!activeCategory) return allLeads;
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const thisYearStart = new Date(today.getFullYear(), 0, 1);
-    const thisYearEnd = new Date(today.getFullYear(), 11, 31, 23, 59, 59, 999);
-    
-    const period = categoryPeriods[activeCategory];
-    
-    let filtered = allLeads;
-    
     switch (activeCategory) {
       case 'newLead':
-        if (period === 'today') {
-          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow);
-        } else if (period === 'month') {
-          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= thisMonthStart && new Date(l.createdAt) <= thisMonthEnd);
-        } else {
-          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= thisYearStart && new Date(l.createdAt) <= thisYearEnd);
-        }
-        break;
+        // Show all leads (new leads are all leads in the system)
+        return allLeads;
       case 'deal':
-        filtered = allLeads.filter(l => l.stage === 'closed_won');
-        if (period === 'today') {
-          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow);
-        } else if (period === 'month') {
-          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= thisMonthStart && new Date(l.closedDate) <= thisMonthEnd);
-        } else {
-          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= thisYearStart && new Date(l.closedDate) <= thisYearEnd);
-        }
-        break;
+        return allLeads.filter(l => l.stage === 'closed_won');
       case 'negotiation':
-        filtered = allLeads.filter(l => l.stage === 'negotiation');
-        if (period === 'today') {
-          filtered = filtered.filter(l => l.negotiationDate && new Date(l.negotiationDate) >= today && new Date(l.negotiationDate) < tomorrow);
-        } else if (period === 'month') {
-          filtered = filtered.filter(l => l.negotiationDate && new Date(l.negotiationDate) >= thisMonthStart && new Date(l.negotiationDate) <= thisMonthEnd);
-        }
-        break;
+        return allLeads.filter(l => l.stage === 'negotiation');
+      default:
+        return allLeads;
     }
-    
-    return filtered;
   };
 
-  const filterFollowUpsByPeriod = (): FollowUpWithLead[] => {
+  const filterFollowUpsByCategory = (): FollowUpWithLead[] => {
     if (activeCategory !== 'followup') return allFollowUps;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    const thisYearStart = new Date(today.getFullYear(), 0, 1);
-    const thisYearEnd = new Date(today.getFullYear(), 11, 31, 23, 59, 59, 999);
-    
-    const period = categoryPeriods.followup;
-    
-    if (period === 'today') {
-      return allFollowUps.filter(f => {
-        const fDate = new Date(f.followUpDate);
-        return fDate >= today && fDate < tomorrow;
-      });
-    } else if (period === 'month') {
-      return allFollowUps.filter(f => {
-        const fDate = new Date(f.followUpDate);
-        return fDate >= thisMonthStart && fDate <= thisMonthEnd;
-      });
-    } else {
-      return allFollowUps.filter(f => {
-        const fDate = new Date(f.followUpDate);
-        return fDate >= thisYearStart && fDate <= thisYearEnd;
-      });
-    }
+    return allFollowUps;
   };
 
   const isFollowUpView = activeCategory === 'followup';
@@ -576,7 +499,7 @@ export default function SalesDashboard() {
     );
   });
 
-  const filteredFollowUps = isFollowUpView ? filterFollowUpsByPeriod().filter(f => {
+  const filteredFollowUps = isFollowUpView ? filterFollowUpsByCategory().filter(f => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
@@ -589,8 +512,7 @@ export default function SalesDashboard() {
   const getFilterLabel = (): string => {
     if (!activeCategory) return 'All Leads';
     const config = CATEGORY_CONFIG[activeCategory];
-    const period = categoryPeriods[activeCategory];
-    return `${config.label} - ${PERIOD_LABELS[period]}`;
+    return config.label;
   };
 
   const handleAddComment = () => {
@@ -649,32 +571,24 @@ export default function SalesDashboard() {
           <GroupedStatCard
             category="newLead"
             stats={grouped.newLead}
-            selectedPeriod={categoryPeriods.newLead}
-            onPeriodChange={(period) => handlePeriodChange('newLead', period)}
             isActive={activeCategory === 'newLead'}
             onClick={() => setActiveCategory(activeCategory === 'newLead' ? null : 'newLead')}
           />
           <GroupedStatCard
             category="followup"
             stats={grouped.followup}
-            selectedPeriod={categoryPeriods.followup}
-            onPeriodChange={(period) => handlePeriodChange('followup', period)}
             isActive={activeCategory === 'followup'}
             onClick={() => setActiveCategory(activeCategory === 'followup' ? null : 'followup')}
           />
           <GroupedStatCard
             category="deal"
             stats={grouped.deal}
-            selectedPeriod={categoryPeriods.deal}
-            onPeriodChange={(period) => handlePeriodChange('deal', period)}
             isActive={activeCategory === 'deal'}
             onClick={() => setActiveCategory(activeCategory === 'deal' ? null : 'deal')}
           />
           <GroupedStatCard
             category="negotiation"
             stats={grouped.negotiation}
-            selectedPeriod={categoryPeriods.negotiation}
-            onPeriodChange={(period) => handlePeriodChange('negotiation', period)}
             isActive={activeCategory === 'negotiation'}
             onClick={() => setActiveCategory(activeCategory === 'negotiation' ? null : 'negotiation')}
           />
