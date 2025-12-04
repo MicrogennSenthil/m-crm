@@ -6604,6 +6604,881 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============ SUPER ADMIN DASHBOARD ENDPOINTS ============
+
+  // Helper function to get date ranges
+  const getDateRanges = () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Week (Monday to Sunday)
+    const weekStart = new Date(today);
+    const dayOfWeek = today.getDay();
+    weekStart.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    
+    return { today, tomorrow, weekStart, weekEnd, monthStart, monthEnd, yearStart, yearEnd, now };
+  };
+
+  // Super Admin Dashboard Overview - Combined stats for all modules
+  app.get("/api/admin/dashboard/overview", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { today, tomorrow, weekStart, weekEnd, monthStart, monthEnd, yearStart, yearEnd, now } = getDateRanges();
+      
+      // Get all data
+      const [allLeads, allProjects, allTickets, allFollowUps, allUsers] = await Promise.all([
+        storage.getLeads({}),
+        storage.getProjects({}),
+        storage.getTickets({}),
+        storage.getFollowUps(),
+        storage.getUsers(),
+      ]);
+      
+      // Helper function to filter by date
+      const filterByPeriod = (items: any[], dateField: string, period: 'today' | 'week' | 'month' | 'year') => {
+        return items.filter(item => {
+          const date = item[dateField] ? new Date(item[dateField]) : null;
+          if (!date) return false;
+          switch (period) {
+            case 'today': return date >= today && date < tomorrow;
+            case 'week': return date >= weekStart && date <= weekEnd;
+            case 'month': return date >= monthStart && date <= monthEnd;
+            case 'year': return date >= yearStart && date <= yearEnd;
+          }
+        });
+      };
+      
+      // Sales Stats
+      const salesStats = {
+        today: {
+          newLeads: filterByPeriod(allLeads, 'createdAt', 'today').length,
+          followups: filterByPeriod(allFollowUps, 'followUpDate', 'today').length,
+          dealsWon: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'today').length,
+          dealsWonValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'today')
+            .reduce((sum, l) => sum + (l.confirmedOrderValue || 0), 0),
+          dealsLost: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'today').length,
+          dealsLostValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'today')
+            .reduce((sum, l) => sum + (l.lostAmount || l.estimatedValue || 0), 0),
+        },
+        week: {
+          newLeads: filterByPeriod(allLeads, 'createdAt', 'week').length,
+          followups: filterByPeriod(allFollowUps, 'followUpDate', 'week').length,
+          dealsWon: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'week').length,
+          dealsWonValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'week')
+            .reduce((sum, l) => sum + (l.confirmedOrderValue || 0), 0),
+          dealsLost: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'week').length,
+          dealsLostValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'week')
+            .reduce((sum, l) => sum + (l.lostAmount || l.estimatedValue || 0), 0),
+        },
+        month: {
+          newLeads: filterByPeriod(allLeads, 'createdAt', 'month').length,
+          followups: filterByPeriod(allFollowUps, 'followUpDate', 'month').length,
+          dealsWon: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'month').length,
+          dealsWonValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'month')
+            .reduce((sum, l) => sum + (l.confirmedOrderValue || 0), 0),
+          dealsLost: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'month').length,
+          dealsLostValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'month')
+            .reduce((sum, l) => sum + (l.lostAmount || l.estimatedValue || 0), 0),
+        },
+        year: {
+          newLeads: filterByPeriod(allLeads, 'createdAt', 'year').length,
+          followups: filterByPeriod(allFollowUps, 'followUpDate', 'year').length,
+          dealsWon: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'year').length,
+          dealsWonValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_won'), 'closedDate', 'year')
+            .reduce((sum, l) => sum + (l.confirmedOrderValue || 0), 0),
+          dealsLost: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'year').length,
+          dealsLostValue: filterByPeriod(allLeads.filter(l => l.stage === 'closed_lost'), 'closedDate', 'year')
+            .reduce((sum, l) => sum + (l.lostAmount || l.estimatedValue || 0), 0),
+        },
+        total: {
+          leads: allLeads.length,
+          activeLeads: allLeads.filter(l => !['closed_won', 'closed_lost'].includes(l.stage)).length,
+          negotiation: allLeads.filter(l => l.stage === 'negotiation').length,
+        }
+      };
+      
+      // Implementation Stats
+      const overdueProjects = allProjects.filter(p => {
+        if (p.status === 'completed') return false;
+        const dueDate = p.targetGoLiveDate || p.plannedEndDate;
+        return dueDate && new Date(dueDate) < now;
+      });
+      
+      const implementationStats = {
+        today: {
+          started: filterByPeriod(allProjects, 'createdAt', 'today').length,
+          completed: filterByPeriod(allProjects.filter(p => p.status === 'completed'), 'updatedAt', 'today').length,
+        },
+        week: {
+          started: filterByPeriod(allProjects, 'createdAt', 'week').length,
+          completed: filterByPeriod(allProjects.filter(p => p.status === 'completed'), 'updatedAt', 'week').length,
+        },
+        month: {
+          started: filterByPeriod(allProjects, 'createdAt', 'month').length,
+          completed: filterByPeriod(allProjects.filter(p => p.status === 'completed'), 'updatedAt', 'month').length,
+        },
+        year: {
+          started: filterByPeriod(allProjects, 'createdAt', 'year').length,
+          completed: filterByPeriod(allProjects.filter(p => p.status === 'completed'), 'updatedAt', 'year').length,
+        },
+        total: {
+          projects: allProjects.length,
+          inProgress: allProjects.filter(p => p.status === 'in_progress').length,
+          training: allProjects.filter(p => p.status === 'training').length,
+          completed: allProjects.filter(p => p.status === 'completed').length,
+          overdue: overdueProjects.length,
+        }
+      };
+      
+      // Support Stats
+      const overdueTickets = allTickets.filter(t => {
+        if (t.status === 'closed') return false;
+        return t.dueDate && new Date(t.dueDate) < now;
+      });
+      
+      const supportStats = {
+        today: {
+          opened: filterByPeriod(allTickets, 'createdAt', 'today').length,
+          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'today').length,
+        },
+        week: {
+          opened: filterByPeriod(allTickets, 'createdAt', 'week').length,
+          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'week').length,
+        },
+        month: {
+          opened: filterByPeriod(allTickets, 'createdAt', 'month').length,
+          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'month').length,
+        },
+        year: {
+          opened: filterByPeriod(allTickets, 'createdAt', 'year').length,
+          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'year').length,
+        },
+        total: {
+          tickets: allTickets.length,
+          open: allTickets.filter(t => t.status === 'open').length,
+          inProgress: allTickets.filter(t => t.status === 'in_progress').length,
+          escalated: allTickets.filter(t => t.status === 'escalated').length,
+          critical: allTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
+          overdue: overdueTickets.length,
+        }
+      };
+      
+      res.json({
+        sales: salesStats,
+        implementation: implementationStats,
+        support: supportStats,
+      });
+    } catch (error) {
+      console.error("Error fetching admin dashboard overview:", error);
+      res.status(500).json({ message: "Failed to fetch admin dashboard overview" });
+    }
+  });
+
+  // Admin Dashboard - Sales Drill-down with bucketing
+  app.get("/api/admin/dashboard/sales", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const bucket = req.query.bucket as string || 'month'; // year, month, week, day
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = req.query.month ? parseInt(req.query.month as string) : null;
+      const week = req.query.week ? parseInt(req.query.week as string) : null;
+      const day = req.query.day ? parseInt(req.query.day as string) : null;
+      
+      const [allLeads, allFollowUps, allUsers] = await Promise.all([
+        storage.getLeads({}),
+        storage.getFollowUps(),
+        storage.getUsers(),
+      ]);
+      
+      // Build buckets based on drill-down level
+      let buckets: any[] = [];
+      let items: any[] = [];
+      
+      if (bucket === 'year') {
+        // Return monthly buckets for the year
+        for (let m = 0; m < 12; m++) {
+          const start = new Date(year, m, 1);
+          const end = new Date(year, m + 1, 0, 23, 59, 59, 999);
+          
+          const monthLeads = allLeads.filter(l => {
+            const date = l.createdAt ? new Date(l.createdAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          const wonLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_won') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          const lostLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_lost') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          buckets.push({
+            period: `${year}-${String(m + 1).padStart(2, '0')}`,
+            label: new Date(year, m).toLocaleDateString('en-US', { month: 'short' }),
+            newLeads: monthLeads.length,
+            newLeadsValue: monthLeads.reduce((s, l) => s + (l.estimatedValue || 0), 0),
+            dealsWon: wonLeads.length,
+            dealsWonValue: wonLeads.reduce((s, l) => s + (l.confirmedOrderValue || 0), 0),
+            dealsLost: lostLeads.length,
+            dealsLostValue: lostLeads.reduce((s, l) => s + (l.lostAmount || l.estimatedValue || 0), 0),
+          });
+        }
+      } else if (bucket === 'month' && month !== null) {
+        // Return weekly buckets for the month
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+        let weekNum = 1;
+        let weekStart = new Date(monthStart);
+        
+        while (weekStart <= monthEnd) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
+          weekEnd.setHours(23, 59, 59, 999);
+          
+          const ws = new Date(weekStart);
+          const we = new Date(weekEnd);
+          
+          const weekLeads = allLeads.filter(l => {
+            const date = l.createdAt ? new Date(l.createdAt) : null;
+            return date && date >= ws && date <= we;
+          });
+          
+          const wonLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_won') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= ws && date <= we;
+          });
+          
+          const lostLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_lost') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= ws && date <= we;
+          });
+          
+          buckets.push({
+            period: `W${weekNum}`,
+            label: `Week ${weekNum}`,
+            weekNumber: weekNum,
+            startDate: ws.toISOString().split('T')[0],
+            endDate: we.toISOString().split('T')[0],
+            newLeads: weekLeads.length,
+            newLeadsValue: weekLeads.reduce((s, l) => s + (l.estimatedValue || 0), 0),
+            dealsWon: wonLeads.length,
+            dealsWonValue: wonLeads.reduce((s, l) => s + (l.confirmedOrderValue || 0), 0),
+            dealsLost: lostLeads.length,
+            dealsLostValue: lostLeads.reduce((s, l) => s + (l.lostAmount || l.estimatedValue || 0), 0),
+          });
+          
+          weekStart.setDate(weekStart.getDate() + 7);
+          weekNum++;
+        }
+      } else if (bucket === 'week' && month !== null && week !== null) {
+        // Return daily buckets for the week
+        const monthStart = new Date(year, month - 1, 1);
+        let weekStart = new Date(monthStart);
+        weekStart.setDate(weekStart.getDate() + (week - 1) * 7);
+        
+        for (let d = 0; d < 7; d++) {
+          const dayStart = new Date(weekStart);
+          dayStart.setDate(weekStart.getDate() + d);
+          const dayEnd = new Date(dayStart);
+          dayEnd.setHours(23, 59, 59, 999);
+          
+          const ds = new Date(dayStart);
+          const de = new Date(dayEnd);
+          
+          const dayLeads = allLeads.filter(l => {
+            const date = l.createdAt ? new Date(l.createdAt) : null;
+            return date && date >= ds && date <= de;
+          });
+          
+          const wonLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_won') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= ds && date <= de;
+          });
+          
+          const lostLeads = allLeads.filter(l => {
+            if (l.stage !== 'closed_lost') return false;
+            const date = l.closedDate ? new Date(l.closedDate) : null;
+            return date && date >= ds && date <= de;
+          });
+          
+          buckets.push({
+            period: dayStart.toISOString().split('T')[0],
+            label: dayStart.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
+            newLeads: dayLeads.length,
+            newLeadsValue: dayLeads.reduce((s, l) => s + (l.estimatedValue || 0), 0),
+            dealsWon: wonLeads.length,
+            dealsWonValue: wonLeads.reduce((s, l) => s + (l.confirmedOrderValue || 0), 0),
+            dealsLost: lostLeads.length,
+            dealsLostValue: lostLeads.reduce((s, l) => s + (l.lostAmount || l.estimatedValue || 0), 0),
+          });
+        }
+      } else if (bucket === 'day' && month !== null && day !== null) {
+        // Return individual leads for the day
+        const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+        
+        items = allLeads.filter(l => {
+          const date = l.createdAt ? new Date(l.createdAt) : null;
+          return date && date >= dayStart && date <= dayEnd;
+        }).map(l => {
+          const salesExec = allUsers.find(u => u.id === l.salesExecutiveId);
+          return {
+            ...l,
+            salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() : null,
+          };
+        });
+      }
+      
+      // Get loss data
+      const lostLeads = allLeads.filter(l => l.stage === 'closed_lost').map(l => {
+        const salesExec = allUsers.find(u => u.id === l.salesExecutiveId);
+        return {
+          ...l,
+          salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() : null,
+        };
+      });
+      
+      res.json({
+        buckets,
+        items,
+        lostLeads: lostLeads.slice(0, 50), // Recent 50 lost leads
+        summary: {
+          totalLeads: allLeads.length,
+          totalWon: allLeads.filter(l => l.stage === 'closed_won').length,
+          totalLost: allLeads.filter(l => l.stage === 'closed_lost').length,
+          totalLostValue: allLeads.filter(l => l.stage === 'closed_lost')
+            .reduce((s, l) => s + (l.lostAmount || l.estimatedValue || 0), 0),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching admin sales dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch admin sales dashboard" });
+    }
+  });
+
+  // Admin Dashboard - Implementation Drill-down
+  app.get("/api/admin/dashboard/implementation", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const bucket = req.query.bucket as string || 'month';
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = req.query.month ? parseInt(req.query.month as string) : null;
+      const week = req.query.week ? parseInt(req.query.week as string) : null;
+      
+      const now = new Date();
+      const [allProjects, allUsers] = await Promise.all([
+        storage.getProjects({}),
+        storage.getUsers(),
+      ]);
+      
+      // Get project details
+      const projectsWithDetails = await Promise.all(
+        allProjects.map(async (project) => {
+          const modules = await storage.getProjectModules(project.id);
+          const engineers = await storage.getProjectEngineers(project.id);
+          const engineerNames = engineers.map(e => {
+            const user = allUsers.find(u => u.id === e.engineerId);
+            return user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '';
+          }).filter(Boolean);
+          
+          const dueDate = project.targetGoLiveDate || project.plannedEndDate;
+          const isOverdue = dueDate && new Date(dueDate) < now && project.status !== 'completed';
+          
+          return {
+            ...project,
+            modulesCompleted: modules.filter(m => m.status === 'completed').length,
+            totalModules: modules.length,
+            engineers: engineerNames,
+            isOverdue,
+            daysOverdue: isOverdue && dueDate ? Math.floor((now.getTime() - new Date(dueDate).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+          };
+        })
+      );
+      
+      let buckets: any[] = [];
+      let items: any[] = [];
+      
+      if (bucket === 'year') {
+        for (let m = 0; m < 12; m++) {
+          const start = new Date(year, m, 1);
+          const end = new Date(year, m + 1, 0, 23, 59, 59, 999);
+          
+          const monthProjects = projectsWithDetails.filter(p => {
+            const date = p.createdAt ? new Date(p.createdAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          const completedProjects = projectsWithDetails.filter(p => {
+            if (p.status !== 'completed') return false;
+            const date = p.updatedAt ? new Date(p.updatedAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          buckets.push({
+            period: `${year}-${String(m + 1).padStart(2, '0')}`,
+            label: new Date(year, m).toLocaleDateString('en-US', { month: 'short' }),
+            started: monthProjects.length,
+            completed: completedProjects.length,
+            overdue: monthProjects.filter(p => p.isOverdue).length,
+          });
+        }
+      } else if (bucket === 'month' && month !== null) {
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+        let weekNum = 1;
+        let weekStart = new Date(monthStart);
+        
+        while (weekStart <= monthEnd) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
+          weekEnd.setHours(23, 59, 59, 999);
+          
+          const ws = new Date(weekStart);
+          const we = new Date(weekEnd);
+          
+          const weekProjects = projectsWithDetails.filter(p => {
+            const date = p.createdAt ? new Date(p.createdAt) : null;
+            return date && date >= ws && date <= we;
+          });
+          
+          buckets.push({
+            period: `W${weekNum}`,
+            label: `Week ${weekNum}`,
+            weekNumber: weekNum,
+            started: weekProjects.length,
+            completed: weekProjects.filter(p => p.status === 'completed').length,
+            overdue: weekProjects.filter(p => p.isOverdue).length,
+          });
+          
+          weekStart.setDate(weekStart.getDate() + 7);
+          weekNum++;
+        }
+        
+        // Include all projects for the month as items
+        items = projectsWithDetails.filter(p => {
+          const date = p.createdAt ? new Date(p.createdAt) : null;
+          return date && date.getFullYear() === year && date.getMonth() === month - 1;
+        });
+      }
+      
+      // Get overdue projects
+      const overdueProjects = projectsWithDetails.filter(p => p.isOverdue);
+      
+      res.json({
+        buckets,
+        items,
+        overdueProjects,
+        summary: {
+          total: allProjects.length,
+          notStarted: allProjects.filter(p => p.status === 'not_started').length,
+          inProgress: allProjects.filter(p => p.status === 'in_progress').length,
+          training: allProjects.filter(p => p.status === 'training').length,
+          completed: allProjects.filter(p => p.status === 'completed').length,
+          overdue: overdueProjects.length,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching admin implementation dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch admin implementation dashboard" });
+    }
+  });
+
+  // Admin Dashboard - Support Drill-down
+  app.get("/api/admin/dashboard/support", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const bucket = req.query.bucket as string || 'month';
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = req.query.month ? parseInt(req.query.month as string) : null;
+      const week = req.query.week ? parseInt(req.query.week as string) : null;
+      
+      const now = new Date();
+      const [allTickets, allUsers] = await Promise.all([
+        storage.getTickets({}),
+        storage.getUsers(),
+      ]);
+      
+      // Enrich tickets with user info and overdue status
+      const ticketsWithDetails = allTickets.map(t => {
+        const assignee = allUsers.find(u => u.id === t.assignedEngineerId);
+        const isOverdue = t.dueDate && new Date(t.dueDate) < now && t.status !== 'closed';
+        return {
+          ...t,
+          assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() : null,
+          isOverdue,
+          daysOverdue: isOverdue && t.dueDate ? Math.floor((now.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+        };
+      });
+      
+      let buckets: any[] = [];
+      let items: any[] = [];
+      
+      if (bucket === 'year') {
+        for (let m = 0; m < 12; m++) {
+          const start = new Date(year, m, 1);
+          const end = new Date(year, m + 1, 0, 23, 59, 59, 999);
+          
+          const monthTickets = ticketsWithDetails.filter(t => {
+            const date = t.createdAt ? new Date(t.createdAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          const closedTickets = ticketsWithDetails.filter(t => {
+            if (t.status !== 'closed') return false;
+            const date = t.closedAt ? new Date(t.closedAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          buckets.push({
+            period: `${year}-${String(m + 1).padStart(2, '0')}`,
+            label: new Date(year, m).toLocaleDateString('en-US', { month: 'short' }),
+            opened: monthTickets.length,
+            closed: closedTickets.length,
+            critical: monthTickets.filter(t => t.priority === 'critical').length,
+            overdue: monthTickets.filter(t => t.isOverdue).length,
+          });
+        }
+      } else if (bucket === 'month' && month !== null) {
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+        let weekNum = 1;
+        let weekStart = new Date(monthStart);
+        
+        while (weekStart <= monthEnd) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
+          weekEnd.setHours(23, 59, 59, 999);
+          
+          const ws = new Date(weekStart);
+          const we = new Date(weekEnd);
+          
+          const weekTickets = ticketsWithDetails.filter(t => {
+            const date = t.createdAt ? new Date(t.createdAt) : null;
+            return date && date >= ws && date <= we;
+          });
+          
+          buckets.push({
+            period: `W${weekNum}`,
+            label: `Week ${weekNum}`,
+            weekNumber: weekNum,
+            opened: weekTickets.length,
+            closed: weekTickets.filter(t => t.status === 'closed').length,
+            critical: weekTickets.filter(t => t.priority === 'critical').length,
+            overdue: weekTickets.filter(t => t.isOverdue).length,
+          });
+          
+          weekStart.setDate(weekStart.getDate() + 7);
+          weekNum++;
+        }
+        
+        // Include all tickets for the month as items
+        items = ticketsWithDetails.filter(t => {
+          const date = t.createdAt ? new Date(t.createdAt) : null;
+          return date && date.getFullYear() === year && date.getMonth() === month - 1;
+        });
+      } else if (bucket === 'day' && month !== null) {
+        const day = req.query.day ? parseInt(req.query.day as string) : new Date().getDate();
+        const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+        
+        items = ticketsWithDetails.filter(t => {
+          const date = t.createdAt ? new Date(t.createdAt) : null;
+          return date && date >= dayStart && date <= dayEnd;
+        });
+      }
+      
+      // Get overdue tickets
+      const overdueTickets = ticketsWithDetails.filter(t => t.isOverdue);
+      
+      res.json({
+        buckets,
+        items,
+        overdueTickets,
+        summary: {
+          total: allTickets.length,
+          open: allTickets.filter(t => t.status === 'open').length,
+          inProgress: allTickets.filter(t => t.status === 'in_progress').length,
+          escalated: allTickets.filter(t => t.status === 'escalated').length,
+          closed: allTickets.filter(t => t.status === 'closed').length,
+          critical: allTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
+          overdue: overdueTickets.length,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching admin support dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch admin support dashboard" });
+    }
+  });
+
+  // Admin Dashboard - Employee Performance across departments
+  app.get("/api/admin/dashboard/performance", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const period = req.query.period as string || 'month'; // today, week, month, year
+      const { today, tomorrow, weekStart, weekEnd, monthStart, monthEnd, yearStart, yearEnd } = getDateRanges();
+      
+      let startDate: Date, endDate: Date;
+      switch (period) {
+        case 'today':
+          startDate = today;
+          endDate = tomorrow;
+          break;
+        case 'week':
+          startDate = weekStart;
+          endDate = weekEnd;
+          break;
+        case 'year':
+          startDate = yearStart;
+          endDate = yearEnd;
+          break;
+        default:
+          startDate = monthStart;
+          endDate = monthEnd;
+      }
+      
+      const [allUsers, allLeads, allProjects, allTickets, allFollowUps, departments] = await Promise.all([
+        storage.getUsers(),
+        storage.getLeads({}),
+        storage.getProjects({}),
+        storage.getTickets({}),
+        storage.getFollowUps(),
+        storage.getDepartments(),
+      ]);
+      
+      // Get project engineers for each project
+      const projectEngineersMap = new Map<string, string[]>();
+      await Promise.all(
+        allProjects.map(async (p) => {
+          const engineers = await storage.getProjectEngineers(p.id);
+          projectEngineersMap.set(p.id, engineers.map(e => e.engineerId));
+        })
+      );
+      
+      // Calculate performance metrics for each user
+      const performance = allUsers.map(user => {
+        const dept = departments.find(d => d.id === user.departmentId);
+        
+        // Sales metrics
+        const userLeads = allLeads.filter(l => l.salesExecutiveId === user.id);
+        const periodLeads = userLeads.filter(l => {
+          const date = l.createdAt ? new Date(l.createdAt) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        const periodDealsWon = userLeads.filter(l => {
+          if (l.stage !== 'closed_won') return false;
+          const date = l.closedDate ? new Date(l.closedDate) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        const periodDealsLost = userLeads.filter(l => {
+          if (l.stage !== 'closed_lost') return false;
+          const date = l.closedDate ? new Date(l.closedDate) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        const periodFollowUps = allFollowUps.filter(f => {
+          const lead = userLeads.find(l => l.id === f.leadId);
+          if (!lead) return false;
+          const date = f.followUpDate ? new Date(f.followUpDate) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        
+        // Implementation metrics
+        const userProjects = allProjects.filter(p => {
+          const engineers = projectEngineersMap.get(p.id) || [];
+          return engineers.includes(user.id);
+        });
+        const periodProjectsCompleted = userProjects.filter(p => {
+          if (p.status !== 'completed') return false;
+          const date = p.updatedAt ? new Date(p.updatedAt) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        
+        // Support metrics
+        const userTickets = allTickets.filter(t => t.assignedEngineerId === user.id);
+        const periodTicketsClosed = userTickets.filter(t => {
+          if (t.status !== 'closed') return false;
+          const date = t.closedAt ? new Date(t.closedAt) : null;
+          return date && date >= startDate && date < endDate;
+        });
+        const overdueTickets = userTickets.filter(t => {
+          if (t.status === 'closed') return false;
+          return t.dueDate && new Date(t.dueDate) < new Date();
+        });
+        
+        // Calculate scores
+        const salesScore = periodDealsWon.length * 10 + periodFollowUps.filter(f => f.completed).length * 2 - periodDealsLost.length * 3;
+        const implScore = periodProjectsCompleted.length * 15;
+        const supportScore = periodTicketsClosed.length * 5 - overdueTickets.length * 5;
+        
+        return {
+          id: user.id,
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+          email: user.email,
+          role: user.role,
+          department: dept?.name || 'Unassigned',
+          departmentId: user.departmentId,
+          metrics: {
+            sales: {
+              leadsGenerated: periodLeads.length,
+              dealsWon: periodDealsWon.length,
+              dealsWonValue: periodDealsWon.reduce((s, l) => s + (l.confirmedOrderValue || 0), 0),
+              dealsLost: periodDealsLost.length,
+              followUpsCompleted: periodFollowUps.filter(f => f.completed).length,
+              winRate: userLeads.length > 0 ? Math.round((periodDealsWon.length / (periodDealsWon.length + periodDealsLost.length || 1)) * 100) : 0,
+            },
+            implementation: {
+              projectsAssigned: userProjects.length,
+              projectsCompleted: periodProjectsCompleted.length,
+            },
+            support: {
+              ticketsAssigned: userTickets.filter(t => t.status !== 'closed').length,
+              ticketsClosed: periodTicketsClosed.length,
+              overdueTickets: overdueTickets.length,
+            },
+          },
+          scores: {
+            sales: salesScore,
+            implementation: implScore,
+            support: supportScore,
+            total: salesScore + implScore + supportScore,
+          },
+        };
+      });
+      
+      // Sort by total score for top performers
+      const topPerformers = [...performance]
+        .filter(p => p.scores.total > 0)
+        .sort((a, b) => b.scores.total - a.scores.total)
+        .slice(0, 10);
+      
+      // Get top performers by department
+      const salesPerformers = [...performance]
+        .filter(p => p.role === 'sales_executive' && p.scores.sales > 0)
+        .sort((a, b) => b.scores.sales - a.scores.sales)
+        .slice(0, 5);
+      
+      const implPerformers = [...performance]
+        .filter(p => p.role === 'engineer' && p.scores.implementation > 0)
+        .sort((a, b) => b.scores.implementation - a.scores.implementation)
+        .slice(0, 5);
+      
+      const supportPerformers = [...performance]
+        .filter(p => ['engineer', 'support'].includes(p.role || '') && p.scores.support > 0)
+        .sort((a, b) => b.scores.support - a.scores.support)
+        .slice(0, 5);
+      
+      res.json({
+        period,
+        topPerformers,
+        byDepartment: {
+          sales: salesPerformers,
+          implementation: implPerformers,
+          support: supportPerformers,
+        },
+        allUsers: performance,
+      });
+    } catch (error) {
+      console.error("Error fetching admin performance dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch admin performance dashboard" });
+    }
+  });
+
+  // Admin Dashboard - Drill-down to specific items
+  app.get("/api/admin/dashboard/drilldown", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const module = req.query.module as string; // sales, implementation, support
+      const date = req.query.date as string; // YYYY-MM-DD format
+      const type = req.query.type as string; // leads, deals_won, deals_lost, projects, tickets, followups
+      
+      if (!module || !date) {
+        return res.status(400).json({ message: "Module and date are required" });
+      }
+      
+      const targetDate = new Date(date);
+      const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      
+      const [allUsers] = await Promise.all([storage.getUsers()]);
+      
+      let items: any[] = [];
+      
+      if (module === 'sales') {
+        const allLeads = await storage.getLeads({});
+        
+        switch (type) {
+          case 'leads':
+            items = allLeads.filter(l => {
+              const d = l.createdAt ? new Date(l.createdAt) : null;
+              return d && d >= dayStart && d < dayEnd;
+            });
+            break;
+          case 'deals_won':
+            items = allLeads.filter(l => {
+              if (l.stage !== 'closed_won') return false;
+              const d = l.closedDate ? new Date(l.closedDate) : null;
+              return d && d >= dayStart && d < dayEnd;
+            });
+            break;
+          case 'deals_lost':
+            items = allLeads.filter(l => {
+              if (l.stage !== 'closed_lost') return false;
+              const d = l.closedDate ? new Date(l.closedDate) : null;
+              return d && d >= dayStart && d < dayEnd;
+            });
+            break;
+        }
+        
+        items = items.map(l => {
+          const salesExec = allUsers.find(u => u.id === l.salesExecutiveId);
+          return {
+            ...l,
+            salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() : null,
+          };
+        });
+      } else if (module === 'implementation') {
+        const allProjects = await storage.getProjects({});
+        items = allProjects.filter(p => {
+          const d = p.createdAt ? new Date(p.createdAt) : null;
+          return d && d >= dayStart && d < dayEnd;
+        });
+      } else if (module === 'support') {
+        const allTickets = await storage.getTickets({});
+        items = allTickets.filter(t => {
+          const d = t.createdAt ? new Date(t.createdAt) : null;
+          return d && d >= dayStart && d < dayEnd;
+        }).map(t => {
+          const assignee = allUsers.find(u => u.id === t.assignedEngineerId);
+          return {
+            ...t,
+            assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() : null,
+          };
+        });
+      }
+      
+      res.json({ items, date, module, type });
+    } catch (error) {
+      console.error("Error fetching drilldown data:", error);
+      res.status(500).json({ message: "Failed to fetch drilldown data" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

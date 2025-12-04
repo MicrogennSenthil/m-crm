@@ -188,6 +188,7 @@ export const leads = pgTable("leads", {
   closedDate: timestamp("closed_date"), // When deal was closed (won or lost)
   confirmedOrderValue: integer("confirmed_order_value"), // Final confirmed order value
   closedReason: text("closed_reason"), // Reason for lost deals
+  lostAmount: integer("lost_amount"), // Value of the lost deal for tracking
   daysInStage: integer("days_in_stage").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -302,6 +303,8 @@ export const projects = pgTable("projects", {
   leadId: varchar("lead_id").references(() => leads.id),
   clientName: text("client_name").notNull(), // Denormalized for display
   implementationDate: timestamp("implementation_date"),
+  targetGoLiveDate: timestamp("target_go_live_date"), // Target completion date for overdue tracking
+  plannedEndDate: timestamp("planned_end_date"), // Planned project end date
   status: text("status").notNull().default("not_started"), // not_started, in_progress, training, completed
   completionPercentage: integer("completion_percentage").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -527,6 +530,8 @@ export const tickets = pgTable("tickets", {
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
   status: text("status").notNull().default("open"), // open, in_progress, pending_customer, escalated, closed, reopened
   assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
+  dueDate: timestamp("due_date"), // Due date for SLA tracking and overdue detection
+  resolvedAt: timestamp("resolved_at"), // When the ticket was actually resolved (for MTTR calculation)
   escalationLevel: integer("escalation_level").default(1), // 1: Support Engineer, 2: Senior Support, 3: Development Team
   escalatedAt: timestamp("escalated_at"),
   closedAt: timestamp("closed_at"),
