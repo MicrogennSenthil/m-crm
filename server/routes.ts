@@ -1192,63 +1192,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Approval routes (Admin only)
   app.post("/api/users/:id/approve", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const userId = req.params.id;
+      const adminUserId = req.user?.claims?.sub;
+      
+      console.log(`[User Approval] Approving user ${userId} by admin ${adminUserId}`);
+      
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const updated = await storage.updateUser(req.params.id, {
+      const updated = await storage.updateUser(userId, {
         isApproved: true,
         isActive: true,
         approvedAt: new Date(),
-        approvedBy: req.user.claims.sub,
+        approvedBy: adminUserId,
       });
 
-      await storage.logActivity({
-        entityType: "user",
-        entityId: updated.id,
-        action: "approved",
-        description: `User approved: ${updated.firstName} ${updated.lastName}`,
-        userId: req.user.claims.sub,
-      });
+      // Log activity - don't block on failure
+      try {
+        await storage.logActivity({
+          entityType: "user",
+          entityId: updated.id,
+          action: "approved",
+          description: `User approved: ${updated.firstName} ${updated.lastName}`,
+          userId: adminUserId,
+        });
+      } catch (logError) {
+        console.error("Failed to log approval activity:", logError);
+      }
 
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving user:", error);
-      res.status(500).json({ message: "Failed to approve user" });
+      res.status(500).json({ message: error?.message || "Failed to approve user" });
     }
   });
 
   app.post("/api/users/:id/reject", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const userId = req.params.id;
+      const adminUserId = req.user?.claims?.sub;
+      
+      console.log(`[User Rejection] Rejecting user ${userId} by admin ${adminUserId}`);
+      
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const updated = await storage.updateUser(req.params.id, {
+      const updated = await storage.updateUser(userId, {
         isApproved: false,
         isActive: false,
       });
 
-      await storage.logActivity({
-        entityType: "user",
-        entityId: updated.id,
-        action: "rejected",
-        description: `User rejected: ${updated.firstName} ${updated.lastName}. Reason: ${req.body.reason || "No reason provided"}`,
-        userId: req.user.claims.sub,
-      });
+      // Log activity - don't block on failure
+      try {
+        await storage.logActivity({
+          entityType: "user",
+          entityId: updated.id,
+          action: "rejected",
+          description: `User rejected: ${updated.firstName} ${updated.lastName}. Reason: ${req.body.reason || "No reason provided"}`,
+          userId: adminUserId,
+        });
+      } catch (logError) {
+        console.error("Failed to log rejection activity:", logError);
+      }
 
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting user:", error);
-      res.status(500).json({ message: "Failed to reject user" });
+      res.status(500).json({ message: error?.message || "Failed to reject user" });
     }
   });
 
   app.post("/api/users/:id/revoke-approval", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const userId = req.params.id;
+      const adminUserId = req.user?.claims?.sub;
+      
+      console.log(`[User Revoke] Revoking approval for user ${userId} by admin ${adminUserId}`);
+      
+      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -1258,22 +1283,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Cannot revoke super admin approval" });
       }
 
-      const updated = await storage.updateUser(req.params.id, {
+      const updated = await storage.updateUser(userId, {
         isApproved: false,
       });
 
-      await storage.logActivity({
-        entityType: "user",
-        entityId: updated.id,
-        action: "approval_revoked",
-        description: `User approval revoked: ${updated.firstName} ${updated.lastName}`,
-        userId: req.user.claims.sub,
-      });
+      // Log activity - don't block on failure
+      try {
+        await storage.logActivity({
+          entityType: "user",
+          entityId: updated.id,
+          action: "approval_revoked",
+          description: `User approval revoked: ${updated.firstName} ${updated.lastName}`,
+          userId: adminUserId,
+        });
+      } catch (logError) {
+        console.error("Failed to log revoke activity:", logError);
+      }
 
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error revoking user approval:", error);
-      res.status(500).json({ message: "Failed to revoke user approval" });
+      res.status(500).json({ message: error?.message || "Failed to revoke user approval" });
     }
   });
 
@@ -3659,6 +3689,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, or department head role." });
       }
       
+      // Get users first for department filtering
+      const allUsers = await storage.getUsers();
+      
       // Get leads - filter based on role/department
       let allLeads = await storage.getLeads({});
       
@@ -3669,7 +3702,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Department heads see leads assigned to users in their department
       else if (!isSuperAdmin && !isAdmin && isDeptHead) {
         // Get all users in the department head's department
-        const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+        const deptUsers = allUsers.filter(u => u.departmentId === managedDepartment!.id);
         const deptUserIds = new Set(deptUsers.map(u => u.id));
         allLeads = allLeads.filter(l => l.salesExecutiveId && deptUserIds.has(l.salesExecutiveId));
       }
@@ -3678,8 +3711,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Filter followups to only those for visible leads
       const leadIds = new Set(allLeads.map(l => l.id));
       const filteredFollowUps = allFollowUps.filter(f => leadIds.has(f.leadId));
-      
-      const users = await storage.getUsers();
       
       // Get current date boundaries
       const now = new Date();
@@ -3841,7 +3872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Add user info to leads for display
       const leadsWithSalesExec = allLeads.map(lead => {
-        const salesExec = users.find(u => u.id === lead.salesExecutiveId);
+        const salesExec = allUsers.find(u => u.id === lead.salesExecutiveId);
         return {
           ...lead,
           salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() || salesExec.email : null,
@@ -7003,7 +7034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           return {
             ...project,
-            modulesCompleted: modules.filter(m => m.status === 'completed').length,
+            modulesCompleted: modules.filter(m => m.completed === true).length,
             totalModules: modules.length,
             engineers: engineerNames,
             isOverdue,
