@@ -5,6 +5,7 @@ import {
   customers,
   leads,
   followUps,
+  leadComments,
   demoDateHistory,
   negotiationDateHistory,
   quotes,
@@ -47,6 +48,8 @@ import {
   type InsertLead,
   type FollowUp,
   type InsertFollowUp,
+  type LeadComment,
+  type InsertLeadComment,
   type DemoDateHistory,
   type InsertDemoDateHistory,
   type NegotiationDateHistory,
@@ -183,8 +186,15 @@ export interface IStorage {
 
   // Follow-up operations
   getFollowUpsByLead(leadId: string): Promise<FollowUp[]>;
+  getAllFollowUps(): Promise<FollowUp[]>;
   createFollowUp(followUp: InsertFollowUp): Promise<FollowUp>;
   updateFollowUp(id: string, data: Partial<InsertFollowUp>): Promise<FollowUp>;
+
+  // Lead Comment operations
+  getLeadComments(leadId: string): Promise<LeadComment[]>;
+  createLeadComment(comment: InsertLeadComment): Promise<LeadComment>;
+  updateLeadComment(id: string, data: Partial<InsertLeadComment>): Promise<LeadComment>;
+  deleteLeadComment(id: string): Promise<void>;
 
   // Demo Date History operations
   getDemoDateHistory(leadId: string): Promise<DemoDateHistory[]>;
@@ -891,6 +901,40 @@ export class DatabaseStorage implements IStorage {
       .where(eq(followUps.id, id))
       .returning();
     return updated;
+  }
+
+  async getAllFollowUps(): Promise<FollowUp[]> {
+    return await db
+      .select()
+      .from(followUps)
+      .orderBy(desc(followUps.followUpDate));
+  }
+
+  // Lead Comment operations
+  async getLeadComments(leadId: string): Promise<LeadComment[]> {
+    return await db
+      .select()
+      .from(leadComments)
+      .where(eq(leadComments.leadId, leadId))
+      .orderBy(desc(leadComments.createdAt));
+  }
+
+  async createLeadComment(comment: InsertLeadComment): Promise<LeadComment> {
+    const [newComment] = await db.insert(leadComments).values(comment).returning();
+    return newComment;
+  }
+
+  async updateLeadComment(id: string, data: Partial<InsertLeadComment>): Promise<LeadComment> {
+    const [updated] = await db
+      .update(leadComments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(leadComments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLeadComment(id: string): Promise<void> {
+    await db.delete(leadComments).where(eq(leadComments.id, id));
   }
 
   // Demo Date History operations

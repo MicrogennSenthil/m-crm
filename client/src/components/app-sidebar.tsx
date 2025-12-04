@@ -97,6 +97,14 @@ const menuGroups = [
         bgColor: "bg-green-500/10",
         roles: ["sales_executive", "admin"],
       },
+      {
+        title: "Sales Dashboard",
+        url: "/sales-dashboard",
+        icon: BarChart3,
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+        roles: ["sales_executive", "admin"],
+      },
     ],
   },
   {

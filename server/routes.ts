@@ -3638,6 +3638,380 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sales Dashboard API - restricted to admin and sales_executive roles
+  app.get("/api/dashboard/sales", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      // Check if user has access to sales dashboard (admin, sales_executive, or super admin)
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser?.role === 'admin';
+      const isSalesExec = currentUser?.role === 'sales_executive';
+      
+      // Check if user is a department head and get their department
+      const departments = await storage.getDepartments();
+      const managedDepartment = departments.find(d => d.managerId === userId);
+      const isDeptHead = !!managedDepartment;
+      
+      if (!isSuperAdmin && !isAdmin && !isSalesExec && !isDeptHead) {
+        return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, or department head role." });
+      }
+      
+      // Get leads - filter based on role/department
+      let allLeads = await storage.getLeads({});
+      
+      // Non-admin sales executives only see their own leads
+      if (!isSuperAdmin && !isAdmin && isSalesExec && !isDeptHead) {
+        allLeads = allLeads.filter(l => l.salesExecutiveId === userId);
+      }
+      // Department heads only see leads from their department
+      else if (!isSuperAdmin && !isAdmin && isDeptHead) {
+        allLeads = allLeads.filter(l => l.departmentId === managedDepartment!.id);
+      }
+      
+      const allFollowUps = await storage.getAllFollowUps();
+      // Filter followups to only those for visible leads
+      const leadIds = new Set(allLeads.map(l => l.id));
+      const filteredFollowUps = allFollowUps.filter(f => leadIds.has(f.leadId));
+      
+      const users = await storage.getUsers();
+      
+      // Get current date boundaries
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // Last week and last month calculations
+      const lastWeekStart = new Date(today);
+      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+      const lastMonthStart = new Date(today);
+      lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+      
+      // This month start and end
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Calculate sales value (closed won deals)
+      const closedWonLeads = allLeads.filter(l => l.stage === 'closed_won');
+      const totalSalesValue = closedWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
+      const totalSalesCount = closedWonLeads.length;
+      
+      // Last month won deals
+      const lastMonthWonLeads = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= lastMonthStart && new Date(l.closedDate) < today
+      );
+      const lastMonthSalesValue = lastMonthWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
+      
+      // Last week won deals
+      const lastWeekWonLeads = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= lastWeekStart && new Date(l.closedDate) < today
+      );
+      const lastWeekSalesValue = lastWeekWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
+      
+      // Total leads count
+      const totalLeadsCount = allLeads.length;
+      
+      // Today's new leads
+      const todayNewLeads = allLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow
+      );
+      const todayNewCount = todayNewLeads.length;
+      
+      // Total followup count
+      const totalFollowupCount = filteredFollowUps.length;
+      
+      // Today's followups
+      const todayFollowups = filteredFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= today && fDate < tomorrow;
+      });
+      const todayFollowupCount = todayFollowups.length;
+      
+      // Today's pending followups (not completed)
+      const todayPendingFollowupCount = todayFollowups.filter(f => !f.completed).length;
+      
+      // Today's completed followups
+      const todayCompletedFollowupCount = todayFollowups.filter(f => f.completed).length;
+      
+      // Expected closing (negotiation stage leads)
+      const expectedClosingLeads = allLeads.filter(l => l.stage === 'negotiation');
+      const totalExpClosingCount = expectedClosingLeads.length;
+      
+      // This month expected closing
+      const thisMonthExpClosingCount = expectedClosingLeads.filter(l => {
+        if (!l.negotiationDate) return false;
+        const negDate = new Date(l.negotiationDate);
+        return negDate >= thisMonthStart && negDate <= thisMonthEnd;
+      }).length;
+      
+      // Today's won count
+      const todayWonCount = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
+      ).length;
+      
+      // Today's loss count
+      const closedLostLeads = allLeads.filter(l => l.stage === 'closed_lost');
+      const todayLossCount = closedLostLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
+      ).length;
+      
+      // Add user info to leads for display
+      const leadsWithSalesExec = allLeads.map(lead => {
+        const salesExec = users.find(u => u.id === lead.salesExecutiveId);
+        return {
+          ...lead,
+          salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() || salesExec.email : null,
+        };
+      });
+      
+      // Add lead info to followups
+      const followUpsWithLead = filteredFollowUps.map(followUp => {
+        const lead = allLeads.find(l => l.id === followUp.leadId);
+        return {
+          ...followUp,
+          leadCompanyName: lead?.companyName || null,
+          leadContactPerson: lead?.contactPerson || null,
+          leadStage: lead?.stage || null,
+        };
+      });
+      
+      res.json({
+        stats: {
+          totalSalesCount,
+          totalSalesValue,
+          lastMonthSalesValue,
+          lastWeekSalesValue,
+          totalLeadsCount,
+          todayNewCount,
+          totalFollowupCount,
+          todayFollowupCount,
+          todayPendingFollowupCount,
+          todayCompletedFollowupCount,
+          totalExpClosingCount,
+          thisMonthExpClosingCount,
+          todayWonCount,
+          todayLossCount,
+        },
+        leads: leadsWithSalesExec,
+        followUps: followUpsWithLead,
+      });
+    } catch (error) {
+      console.error("Error fetching sales dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch sales dashboard" });
+    }
+  });
+
+  // Lead Comments API - with authorization
+  app.get("/api/leads/:id/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      // Get the lead to check authorization
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: "Lead not found" });
+      }
+      
+      // Authorization check (same as history)
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser?.role === 'admin';
+      const isSalesExec = currentUser?.role === 'sales_executive';
+      
+      const departments = await storage.getDepartments();
+      const managedDepartment = departments.find(d => d.managerId === userId);
+      const isDeptHead = !!managedDepartment;
+      
+      if (!isSuperAdmin && !isAdmin) {
+        if (isDeptHead) {
+          if (lead.departmentId !== managedDepartment!.id) {
+            return res.status(403).json({ message: "You can only view comments for leads in your department" });
+          }
+        } else if (isSalesExec) {
+          if (lead.salesExecutiveId !== userId) {
+            return res.status(403).json({ message: "You can only view comments for your own leads" });
+          }
+        } else {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+      
+      const comments = await storage.getLeadComments(req.params.id);
+      
+      // Add user info to comments
+      const users = await storage.getUsers();
+      const commentsWithUser = comments.map(comment => {
+        const user = users.find(u => u.id === comment.userId);
+        return {
+          ...comment,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+          userRole: user?.role || null,
+        };
+      });
+      
+      res.json(commentsWithUser);
+    } catch (error) {
+      console.error("Error fetching lead comments:", error);
+      res.status(500).json({ message: "Failed to fetch lead comments" });
+    }
+  });
+
+  app.post("/api/leads/:id/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      // Validate comment field
+      if (!req.body.comment || typeof req.body.comment !== 'string' || req.body.comment.trim().length === 0) {
+        return res.status(400).json({ message: "Comment is required and must be a non-empty string" });
+      }
+      
+      // Check if user is super admin or department head
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+      
+      // Check if user is a department head
+      const departments = await storage.getDepartments();
+      const isDeptHead = departments.some(d => d.managerId === userId);
+      
+      if (!isSuperAdmin && !isDeptHead) {
+        return res.status(403).json({ message: "Only super admin and department heads can add comments" });
+      }
+      
+      const newComment = await storage.createLeadComment({
+        leadId: req.params.id,
+        userId,
+        comment: req.body.comment.trim(),
+      });
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: req.params.id,
+        action: "comment_added",
+        description: `Comment added on lead: ${req.body.comment.substring(0, 50)}...`,
+        userId,
+      });
+      
+      res.json(newComment);
+    } catch (error) {
+      console.error("Error creating lead comment:", error);
+      res.status(400).json({ message: "Failed to create lead comment" });
+    }
+  });
+
+  app.delete("/api/leads/:leadId/comments/:commentId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      // Only super admin can delete comments
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      if (user?.email !== SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ message: "Only super admin can delete comments" });
+      }
+      
+      await storage.deleteLeadComment(req.params.commentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting lead comment:", error);
+      res.status(400).json({ message: "Failed to delete lead comment" });
+    }
+  });
+
+  // Lead full history API - with authorization check
+  app.get("/api/leads/:id/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: "Lead not found" });
+      }
+      
+      // Authorization check: admin, sales exec (own leads), dept head (own department)
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser?.role === 'admin';
+      const isSalesExec = currentUser?.role === 'sales_executive';
+      
+      const departments = await storage.getDepartments();
+      const managedDepartment = departments.find(d => d.managerId === userId);
+      const isDeptHead = !!managedDepartment;
+      
+      // Authorization:
+      // - Super admin and admin can see all
+      // - Department heads can see leads from their department
+      // - Sales executives can only view their own leads
+      if (!isSuperAdmin && !isAdmin) {
+        if (isDeptHead) {
+          // Department head can only see leads from their department
+          if (lead.departmentId !== managedDepartment!.id) {
+            return res.status(403).json({ message: "You can only view history for leads in your department" });
+          }
+        } else if (isSalesExec) {
+          // Sales exec can only see their own leads
+          if (lead.salesExecutiveId !== userId) {
+            return res.status(403).json({ message: "You can only view history for your own leads" });
+          }
+        } else {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+      
+      // Get all related data
+      const [followUps, demoHistory, negotiationHistory, quotes, comments, allTasks] = await Promise.all([
+        storage.getFollowUpsByLead(req.params.id),
+        storage.getDemoDateHistory(req.params.id),
+        storage.getNegotiationDateHistory(req.params.id),
+        storage.getQuotesByLead(req.params.id),
+        storage.getLeadComments(req.params.id),
+        storage.getTasks({ includeAll: true }),
+      ]);
+      
+      // Filter tasks related to this lead
+      const tasks = allTasks.filter(t => 
+        t.relatedEntityType === 'lead' && t.relatedEntityId === req.params.id
+      );
+      
+      const users = await storage.getUsers();
+      
+      // Add user info to comments
+      const commentsWithUser = comments.map((comment: any) => {
+        const user = users.find(u => u.id === comment.userId);
+        return {
+          ...comment,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+          userRole: user?.role || null,
+        };
+      });
+      
+      // Get sales executive info
+      const salesExec = users.find(u => u.id === lead.salesExecutiveId);
+      
+      res.json({
+        lead: {
+          ...lead,
+          salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() || salesExec.email : null,
+        },
+        followUps,
+        demoHistory,
+        negotiationHistory,
+        quotes,
+        comments: commentsWithUser,
+        tasks,
+      });
+    } catch (error) {
+      console.error("Error fetching lead history:", error);
+      res.status(500).json({ message: "Failed to fetch lead history" });
+    }
+  });
+
   // Implementation Dashboard stats
   app.get("/api/dashboard/implementation", isAuthenticated, async (req, res) => {
     try {

@@ -20,6 +20,7 @@ import Implementations from "@/pages/implementations";
 import ImplementationDashboard from "@/pages/implementation-dashboard";
 import Support from "@/pages/support";
 import SupportDashboard from "@/pages/support-dashboard";
+import SalesDashboard from "@/pages/sales-dashboard";
 import DepartmentUsers from "@/pages/department-users";
 import Reports from "@/pages/reports";
 import SalesReports from "@/pages/reports-sales";
@@ -83,6 +84,7 @@ function AuthenticatedLayout() {
               <Route path="/tasks/today" component={TodaysTasks} />
               <Route path="/tasks/:id" component={TaskDetail} />
               <Route path="/sales" component={Sales} />
+              <Route path="/sales-dashboard" component={SalesDashboard} />
               <Route path="/implementations" component={Implementations} />
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />
               <Route path="/support" component={Support} />

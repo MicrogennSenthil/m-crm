@@ -221,6 +221,25 @@ export const insertFollowUpSchema = createInsertSchema(followUps).omit({
 export type InsertFollowUp = z.infer<typeof insertFollowUpSchema>;
 export type FollowUp = typeof followUps.$inferSelect;
 
+// Lead Comments table - Comments from admins/heads on leads
+export const leadComments = pgTable("lead_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLeadCommentSchema = createInsertSchema(leadComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertLeadComment = z.infer<typeof insertLeadCommentSchema>;
+export type LeadComment = typeof leadComments.$inferSelect;
+
 // Demo Date History table - Track all demo date changes
 export const demoDateHistory = pgTable("demo_date_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
