@@ -129,15 +129,20 @@ function CustomersTab() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Customer>) => {
-      return await apiRequest("POST", "/api/customers", data);
+      const response = await apiRequest("POST", "/api/customers", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create customer");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
       setIsAddOpen(false);
       toast({ title: "Customer created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create customer", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create customer", variant: "destructive" });
     },
   });
 
@@ -717,15 +722,20 @@ function DepartmentsTab() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Department>) => {
-      return await apiRequest("POST", "/api/departments", data);
+      const response = await apiRequest("POST", "/api/departments", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create department");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
       setIsAddOpen(false);
       toast({ title: "Department created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create department", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create department", variant: "destructive" });
     },
   });
 
@@ -1029,15 +1039,20 @@ function ModulesTab() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Module>) => {
-      return await apiRequest("POST", "/api/modules", data);
+      const response = await apiRequest("POST", "/api/modules", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create module");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/modules"] });
       setIsAddOpen(false);
       toast({ title: "Module created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create module", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create module", variant: "destructive" });
     },
   });
 
@@ -1665,15 +1680,20 @@ function UserRolesTab() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<UserRole>) => {
-      return await apiRequest("POST", "/api/user-roles", data);
+      const response = await apiRequest("POST", "/api/user-roles", data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user role");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user-roles"] });
       setIsAddOpen(false);
       toast({ title: "User role created successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to create user role", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to create user role", variant: "destructive" });
     },
   });
 

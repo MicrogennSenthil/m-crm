@@ -152,6 +152,7 @@ export interface IStorage {
   // User Role operations (Master data)
   getUserRoles(): Promise<UserRole[]>;
   getUserRole(id: string): Promise<UserRole | undefined>;
+  getUserRoleByName(name: string): Promise<UserRole | undefined>;
   createUserRole(role: InsertUserRole): Promise<UserRole>;
   updateUserRole(id: string, data: Partial<InsertUserRole>): Promise<UserRole>;
   deleteUserRole(id: string): Promise<void>;
@@ -167,6 +168,7 @@ export interface IStorage {
   getCustomers(): Promise<Customer[]>;
   getCustomersWithLifecycle(): Promise<CustomerWithLifecycle[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomerByName(name: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer>;
   deleteCustomer(id: string): Promise<void>;
@@ -210,6 +212,7 @@ export interface IStorage {
   // Module operations (Master data)
   getModules(): Promise<Module[]>;
   getModule(id: string): Promise<Module | undefined>;
+  getModuleByName(name: string): Promise<Module | undefined>;
   createModule(module: InsertModule): Promise<Module>;
   updateModule(id: string, data: Partial<InsertModule>): Promise<Module>;
   deleteModule(id: string): Promise<void>;
@@ -320,6 +323,7 @@ export interface IStorage {
   // Department operations (User Management)
   getDepartments(): Promise<Department[]>;
   getDepartment(id: string): Promise<Department | undefined>;
+  getDepartmentByName(name: string): Promise<Department | undefined>;
   createDepartment(dept: InsertDepartment): Promise<Department>;
   updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department>;
   deleteDepartment(id: string): Promise<void>;
@@ -651,6 +655,11 @@ export class DatabaseStorage implements IStorage {
     return role;
   }
 
+  async getUserRoleByName(name: string): Promise<UserRole | undefined> {
+    const [role] = await db.select().from(userRoles).where(eq(userRoles.name, name));
+    return role;
+  }
+
   async createUserRole(role: InsertUserRole): Promise<UserRole> {
     const [newRole] = await db.insert(userRoles).values(role).returning();
     return newRole;
@@ -764,6 +773,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCustomer(id: string): Promise<Customer | undefined> {
     const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+
+  async getCustomerByName(name: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.name, name));
     return customer;
   }
 
@@ -980,6 +994,11 @@ export class DatabaseStorage implements IStorage {
 
   async getModule(id: string): Promise<Module | undefined> {
     const [module] = await db.select().from(modules).where(eq(modules.id, id));
+    return module;
+  }
+
+  async getModuleByName(name: string): Promise<Module | undefined> {
+    const [module] = await db.select().from(modules).where(eq(modules.name, name));
     return module;
   }
 
@@ -2153,6 +2172,11 @@ export class DatabaseStorage implements IStorage {
 
   async getDepartment(id: string): Promise<Department | undefined> {
     const [dept] = await db.select().from(departments).where(eq(departments.id, id));
+    return dept;
+  }
+
+  async getDepartmentByName(name: string): Promise<Department | undefined> {
+    const [dept] = await db.select().from(departments).where(eq(departments.name, name));
     return dept;
   }
 

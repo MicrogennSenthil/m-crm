@@ -648,6 +648,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/customers", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCustomerSchema.parse(req.body);
+      
+      // Check if customer name already exists
+      const existingCustomer = await storage.getCustomerByName(validatedData.name);
+      if (existingCustomer) {
+        return res.status(400).json({ message: "A customer with this name already exists" });
+      }
+      
       const newCustomer = await storage.createCustomer(validatedData);
       
       await storage.logActivity({
@@ -659,8 +666,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(newCustomer);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating customer:", error);
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A customer with this name already exists" });
+      }
       res.status(400).json({ message: "Failed to create customer" });
     }
   });
@@ -735,6 +745,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/modules", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertModuleSchema.parse(req.body);
+      
+      // Check if module name already exists
+      const existingModule = await storage.getModuleByName(validatedData.name);
+      if (existingModule) {
+        return res.status(400).json({ message: "A module with this name already exists" });
+      }
+      
       const newModule = await storage.createModule(validatedData);
       
       await storage.logActivity({
@@ -746,8 +763,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(newModule);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating module:", error);
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A module with this name already exists" });
+      }
       res.status(400).json({ message: "Failed to create module" });
     }
   });
@@ -1105,6 +1125,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/user-roles", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertUserRoleSchema.parse(req.body);
+      
+      // Check if role name already exists
+      const existingRole = await storage.getUserRoleByName(validatedData.name);
+      if (existingRole) {
+        return res.status(400).json({ message: "A role with this name already exists" });
+      }
+      
       const newRole = await storage.createUserRole(validatedData);
       
       await storage.logActivity({
@@ -1116,8 +1143,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(newRole);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating user role:", error);
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A role with this name already exists" });
+      }
       res.status(400).json({ message: "Failed to create user role" });
     }
   });
@@ -1337,6 +1367,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/departments", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const validatedData = insertDepartmentSchema.parse(req.body);
+      
+      // Check if department name already exists
+      const existingDept = await storage.getDepartmentByName(validatedData.name);
+      if (existingDept) {
+        return res.status(400).json({ message: "A department with this name already exists" });
+      }
+      
       const newDept = await storage.createDepartment(validatedData);
       
       await storage.logActivity({
@@ -1348,8 +1385,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(newDept);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating department:", error);
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A department with this name already exists" });
+      }
       res.status(400).json({ message: "Failed to create department" });
     }
   });
