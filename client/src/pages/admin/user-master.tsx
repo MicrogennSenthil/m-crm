@@ -274,8 +274,12 @@ export default function UserMaster() {
     }
 
     const submitData = {
-      ...formData,
-      departmentId: formData.departmentId || null,
+      email: formData.email,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      role: formData.role,
+      departmentId: formData.departmentId || undefined,
+      isActive: formData.isActive,
     };
 
     if (editingUser) {
@@ -510,18 +514,15 @@ export default function UserMaster() {
                 >
                   <SelectTrigger data-testid="select-user-role">
                     <SelectValue placeholder="Select role">
-                      {formData.role === "admin" && "Admin"}
-                      {formData.role === "sales_executive" && "Sales Executive"}
-                      {formData.role === "engineer" && "Engineer"}
-                      {formData.role === "support" && "Support"}
-                      {!["admin", "sales_executive", "engineer", "support"].includes(formData.role) && "Select role"}
+                      {roles.find(r => r.name === formData.role)?.displayName || formData.role || "Select role"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="sales_executive">Sales Executive</SelectItem>
-                    <SelectItem value="engineer">Engineer</SelectItem>
-                    <SelectItem value="support">Support</SelectItem>
+                    {roles.filter(r => r.isActive).map((role) => (
+                      <SelectItem key={role.id} value={role.name}>
+                        {role.displayName}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

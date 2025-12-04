@@ -93,6 +93,7 @@ export const userRoles = pgTable("user_roles", {
   displayName: text("display_name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true),
+  isSupportAssignable: boolean("is_support_assignable").default(false), // Can be assigned to support tickets
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

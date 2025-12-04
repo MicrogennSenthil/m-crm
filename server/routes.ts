@@ -606,6 +606,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get users who can be assigned to support tickets (based on role's isSupportAssignable flag)
+  app.get("/api/users/support-assignable", isAuthenticated, async (req, res) => {
+    try {
+      const supportUsers = await storage.getSupportAssignableUsers();
+      res.json(supportUsers);
+    } catch (error) {
+      console.error("Error fetching support assignable users:", error);
+      res.status(500).json({ message: "Failed to fetch support assignable users" });
+    }
+  });
+
   // =============================================
   // MASTER DATA ROUTES
   // =============================================
@@ -3615,7 +3626,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Round-robin assignment if not specified
       if (!validatedData.assignedEngineerId) {
-        const supportEngineers = await storage.getUsersByRole("support");
+        // Get users with roles marked as support-assignable
+        const supportEngineers = await storage.getSupportAssignableUsers();
         if (supportEngineers.length > 0) {
           // Get last assigned engineer and assign to next one
           const recentTickets = await storage.getTickets({});

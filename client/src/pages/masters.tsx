@@ -1790,6 +1790,7 @@ function UserRolesTab() {
                   <TableHead>Display Name</TableHead>
                   <TableHead className="hidden sm:table-cell">Description</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="hidden md:table-cell">Support Ticket</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1805,6 +1806,13 @@ function UserRolesTab() {
                       <Badge variant={role.isActive ? "default" : "secondary"}>
                         {role.isActive ? "Active" : "Inactive"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {role.isSupportAssignable ? (
+                        <Badge variant="outline" className="text-green-600 border-green-600">Assignable</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -1886,6 +1894,7 @@ function UserRoleForm({
     displayName: role?.displayName || "",
     description: role?.description || "",
     isActive: role?.isActive ?? true,
+    isSupportAssignable: role?.isSupportAssignable ?? false,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1943,6 +1952,15 @@ function UserRoleForm({
             data-testid="checkbox-role-active"
           />
           <Label htmlFor="role-isActive">Active</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="role-isSupportAssignable"
+            checked={formData.isSupportAssignable}
+            onCheckedChange={(checked) => setFormData({ ...formData, isSupportAssignable: checked === true })}
+            data-testid="checkbox-role-support-assignable"
+          />
+          <Label htmlFor="role-isSupportAssignable">Can be assigned to Support Tickets</Label>
         </div>
       </div>
       <DialogFooter>

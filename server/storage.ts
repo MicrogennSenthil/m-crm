@@ -141,6 +141,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
+  getSupportAssignableUsers(): Promise<User[]>;
   getUserAssignments(userId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number; total: number }>;
   reassignUserItems(fromUserId: string, toUserId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number }>;
 
@@ -468,6 +469,32 @@ export class DatabaseStorage implements IStorage {
         isNotNull(users.approvedAt)
       )
     );
+  }
+
+  async getSupportAssignableUsers(): Promise<User[]> {
+    // Get all roles that are marked as support-assignable
+    const supportRoles = await db.select().from(userRoles).where(
+      and(
+        eq(userRoles.isSupportAssignable, true),
+        eq(userRoles.isActive, true)
+      )
+    );
+    
+    if (supportRoles.length === 0) {
+      return [];
+    }
+    
+    // Get users with any of these roles who are active and approved
+    const roleNames = supportRoles.map(r => r.name);
+    const supportUsers = await db.select().from(users).where(
+      and(
+        eq(users.isActive, true),
+        isNotNull(users.approvedAt)
+      )
+    );
+    
+    // Filter users whose role is in the support-assignable list
+    return supportUsers.filter(u => roleNames.includes(u.role || ''));
   }
 
   async getUsers(): Promise<User[]> {
