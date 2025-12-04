@@ -3666,9 +3666,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isSuperAdmin && !isAdmin && isSalesExec && !isDeptHead) {
         allLeads = allLeads.filter(l => l.salesExecutiveId === userId);
       }
-      // Department heads only see leads from their department
+      // Department heads see leads assigned to users in their department
       else if (!isSuperAdmin && !isAdmin && isDeptHead) {
-        allLeads = allLeads.filter(l => l.departmentId === managedDepartment!.id);
+        // Get all users in the department head's department
+        const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+        const deptUserIds = new Set(deptUsers.map(u => u.id));
+        allLeads = allLeads.filter(l => l.salesExecutiveId && deptUserIds.has(l.salesExecutiveId));
       }
       
       const allFollowUps = await storage.getAllFollowUps();
@@ -3684,75 +3687,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       
-      // Last week and last month calculations
-      const lastWeekStart = new Date(today);
-      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-      const lastMonthStart = new Date(today);
-      lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
-      
       // This month start and end
       const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       
-      // Calculate sales value (closed won deals)
-      const closedWonLeads = allLeads.filter(l => l.stage === 'closed_won');
-      const totalSalesValue = closedWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
-      const totalSalesCount = closedWonLeads.length;
+      // This year start and end
+      const thisYearStart = new Date(now.getFullYear(), 0, 1);
+      const thisYearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
       
-      // Last month won deals
-      const lastMonthWonLeads = closedWonLeads.filter(l => 
-        l.closedDate && new Date(l.closedDate) >= lastMonthStart && new Date(l.closedDate) < today
-      );
-      const lastMonthSalesValue = lastMonthWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
+      // Helper function to calculate lead value
+      const getLeadValue = (lead: any) => lead.confirmedOrderValue || lead.estimatedValue || 0;
       
-      // Last week won deals
-      const lastWeekWonLeads = closedWonLeads.filter(l => 
-        l.closedDate && new Date(l.closedDate) >= lastWeekStart && new Date(l.closedDate) < today
-      );
-      const lastWeekSalesValue = lastWeekWonLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || l.estimatedValue || 0), 0);
+      // ============= NEW LEAD STATS =============
+      const newLeadStageLeads = allLeads.filter(l => l.stage === 'new_lead');
       
-      // Total leads count
-      const totalLeadsCount = allLeads.length;
-      
-      // Today's new leads
+      // Today's new leads (created today)
       const todayNewLeads = allLeads.filter(l => 
         l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow
       );
-      const todayNewCount = todayNewLeads.length;
+      const newLeadToday = {
+        qty: todayNewLeads.length,
+        amount: todayNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
       
-      // Total followup count
-      const totalFollowupCount = filteredFollowUps.length;
+      // This month new leads
+      const thisMonthNewLeads = allLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= thisMonthStart && new Date(l.createdAt) <= thisMonthEnd
+      );
+      const newLeadMonth = {
+        qty: thisMonthNewLeads.length,
+        amount: thisMonthNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
       
+      // This year new leads
+      const thisYearNewLeads = allLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= thisYearStart && new Date(l.createdAt) <= thisYearEnd
+      );
+      const newLeadYear = {
+        qty: thisYearNewLeads.length,
+        amount: thisYearNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // ============= FOLLOWUP STATS =============
       // Today's followups
       const todayFollowups = filteredFollowUps.filter(f => {
         const fDate = new Date(f.followUpDate);
         return fDate >= today && fDate < tomorrow;
       });
-      const todayFollowupCount = todayFollowups.length;
+      const followupToday = {
+        qty: todayFollowups.length,
+        pending: todayFollowups.filter(f => !f.completed).length,
+        completed: todayFollowups.filter(f => f.completed).length,
+      };
       
-      // Today's pending followups (not completed)
-      const todayPendingFollowupCount = todayFollowups.filter(f => !f.completed).length;
+      // This month followups
+      const thisMonthFollowups = filteredFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= thisMonthStart && fDate <= thisMonthEnd;
+      });
+      const followupMonth = {
+        qty: thisMonthFollowups.length,
+        pending: thisMonthFollowups.filter(f => !f.completed).length,
+        completed: thisMonthFollowups.filter(f => f.completed).length,
+      };
       
-      // Today's completed followups
-      const todayCompletedFollowupCount = todayFollowups.filter(f => f.completed).length;
+      // This year followups
+      const thisYearFollowups = filteredFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= thisYearStart && fDate <= thisYearEnd;
+      });
+      const followupYear = {
+        qty: thisYearFollowups.length,
+        pending: thisYearFollowups.filter(f => !f.completed).length,
+        completed: thisYearFollowups.filter(f => f.completed).length,
+      };
       
-      // Expected closing (negotiation stage leads)
-      const expectedClosingLeads = allLeads.filter(l => l.stage === 'negotiation');
-      const totalExpClosingCount = expectedClosingLeads.length;
+      // ============= DEAL STATS (Closed Won) =============
+      const closedWonLeads = allLeads.filter(l => l.stage === 'closed_won');
       
-      // This month expected closing
-      const thisMonthExpClosingCount = expectedClosingLeads.filter(l => {
+      // Today's deals
+      const todayDeals = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
+      );
+      const dealToday = {
+        qty: todayDeals.length,
+        amount: todayDeals.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // This month deals
+      const thisMonthDeals = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= thisMonthStart && new Date(l.closedDate) <= thisMonthEnd
+      );
+      const dealMonth = {
+        qty: thisMonthDeals.length,
+        amount: thisMonthDeals.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // This year deals
+      const thisYearDeals = closedWonLeads.filter(l => 
+        l.closedDate && new Date(l.closedDate) >= thisYearStart && new Date(l.closedDate) <= thisYearEnd
+      );
+      const dealYear = {
+        qty: thisYearDeals.length,
+        amount: thisYearDeals.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // ============= NEGOTIATION STATS =============
+      const negotiationLeads = allLeads.filter(l => l.stage === 'negotiation');
+      
+      // Today's negotiation (entered negotiation today)
+      const todayNegotiations = negotiationLeads.filter(l => {
+        if (!l.negotiationDate) return false;
+        const negDate = new Date(l.negotiationDate);
+        return negDate >= today && negDate < tomorrow;
+      });
+      const negotiationToday = {
+        qty: todayNegotiations.length,
+        amount: todayNegotiations.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // This month negotiation
+      const thisMonthNegotiations = negotiationLeads.filter(l => {
         if (!l.negotiationDate) return false;
         const negDate = new Date(l.negotiationDate);
         return negDate >= thisMonthStart && negDate <= thisMonthEnd;
-      }).length;
+      });
+      const negotiationMonth = {
+        qty: thisMonthNegotiations.length,
+        amount: thisMonthNegotiations.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
       
-      // Today's won count
-      const todayWonCount = closedWonLeads.filter(l => 
-        l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
-      ).length;
+      // This year negotiation (or all current negotiations)
+      const thisYearNegotiations = negotiationLeads.filter(l => {
+        if (!l.negotiationDate) return true; // Include all active negotiations
+        const negDate = new Date(l.negotiationDate);
+        return negDate >= thisYearStart && negDate <= thisYearEnd;
+      });
+      const negotiationYear = {
+        qty: thisYearNegotiations.length,
+        amount: thisYearNegotiations.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
       
-      // Today's loss count
+      // ============= LEGACY STATS (for backwards compatibility) =============
+      const totalLeadsCount = allLeads.length;
+      const totalFollowupCount = filteredFollowUps.length;
+      const totalSalesCount = closedWonLeads.length;
+      const totalSalesValue = closedWonLeads.reduce((sum, l) => sum + getLeadValue(l), 0);
+      const totalExpClosingCount = negotiationLeads.length;
       const closedLostLeads = allLeads.filter(l => l.stage === 'closed_lost');
       const todayLossCount = closedLostLeads.filter(l => 
         l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
@@ -3782,18 +3863,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stats: {
           totalSalesCount,
           totalSalesValue,
-          lastMonthSalesValue,
-          lastWeekSalesValue,
           totalLeadsCount,
-          todayNewCount,
           totalFollowupCount,
-          todayFollowupCount,
-          todayPendingFollowupCount,
-          todayCompletedFollowupCount,
           totalExpClosingCount,
-          thisMonthExpClosingCount,
-          todayWonCount,
           todayLossCount,
+        },
+        grouped: {
+          newLead: {
+            today: newLeadToday,
+            month: newLeadMonth,
+            year: newLeadYear,
+          },
+          followup: {
+            today: followupToday,
+            month: followupMonth,
+            year: followupYear,
+          },
+          deal: {
+            today: dealToday,
+            month: dealMonth,
+            year: dealYear,
+          },
+          negotiation: {
+            today: negotiationToday,
+            month: negotiationMonth,
+            year: negotiationYear,
+          },
         },
         leads: leadsWithSalesExec,
         followUps: followUpsWithLead,
@@ -3826,9 +3921,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const managedDepartment = departments.find(d => d.managerId === userId);
       const isDeptHead = !!managedDepartment;
       
+      // Get users to check department membership
+      const users = await storage.getUsers();
+      
       if (!isSuperAdmin && !isAdmin) {
         if (isDeptHead) {
-          if (lead.departmentId !== managedDepartment!.id) {
+          // Get users in department head's department
+          const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+          const deptUserIds = new Set(deptUsers.map(u => u.id));
+          if (!lead.salesExecutiveId || !deptUserIds.has(lead.salesExecutiveId)) {
             return res.status(403).json({ message: "You can only view comments for leads in your department" });
           }
         } else if (isSalesExec) {
@@ -3842,8 +3943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const comments = await storage.getLeadComments(req.params.id);
       
-      // Add user info to comments
-      const users = await storage.getUsers();
+      // Add user info to comments (users already fetched above)
       const commentsWithUser = comments.map(comment => {
         const user = users.find(u => u.id === comment.userId);
         return {
@@ -3944,14 +4044,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const managedDepartment = departments.find(d => d.managerId === userId);
       const isDeptHead = !!managedDepartment;
       
+      // Get users to check department membership
+      const users = await storage.getUsers();
+      
       // Authorization:
       // - Super admin and admin can see all
-      // - Department heads can see leads from their department
+      // - Department heads can see leads assigned to users in their department
       // - Sales executives can only view their own leads
       if (!isSuperAdmin && !isAdmin) {
         if (isDeptHead) {
-          // Department head can only see leads from their department
-          if (lead.departmentId !== managedDepartment!.id) {
+          // Get users in department head's department
+          const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+          const deptUserIds = new Set(deptUsers.map(u => u.id));
+          // Check if lead's sales exec is in department
+          if (!lead.salesExecutiveId || !deptUserIds.has(lead.salesExecutiveId)) {
             return res.status(403).json({ message: "You can only view history for leads in your department" });
           }
         } else if (isSalesExec) {
@@ -3979,8 +4085,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.relatedEntityType === 'lead' && t.relatedEntityId === req.params.id
       );
       
-      const users = await storage.getUsers();
-      
+      // users already fetched above for authorization check
       // Add user info to comments
       const commentsWithUser = comments.map((comment: any) => {
         const user = users.find(u => u.id === comment.userId);

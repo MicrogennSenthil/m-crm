@@ -25,7 +25,7 @@ import {
   Target, Search, MessageSquare, Send, ArrowLeft, 
   Phone, Mail, Building2, DollarSign, Plus, XCircle,
   PlayCircle, Image, Video, Mic, FileText, LayoutGrid, List,
-  CalendarDays, ArrowUpRight, ArrowDownRight, UserCheck, Timer
+  CalendarDays, Handshake, UserPlus
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,25 +43,52 @@ interface FollowUpWithLead extends FollowUp {
   leadStage: string | null;
 }
 
+interface PeriodStats {
+  qty: number;
+  amount: number;
+}
+
+interface FollowupPeriodStats {
+  qty: number;
+  pending: number;
+  completed: number;
+}
+
+interface GroupedStats {
+  newLead: {
+    today: PeriodStats;
+    month: PeriodStats;
+    year: PeriodStats;
+  };
+  followup: {
+    today: FollowupPeriodStats;
+    month: FollowupPeriodStats;
+    year: FollowupPeriodStats;
+  };
+  deal: {
+    today: PeriodStats;
+    month: PeriodStats;
+    year: PeriodStats;
+  };
+  negotiation: {
+    today: PeriodStats;
+    month: PeriodStats;
+    year: PeriodStats;
+  };
+}
+
 interface SalesDashboardStats {
   totalSalesCount: number;
   totalSalesValue: number;
-  lastMonthSalesValue: number;
-  lastWeekSalesValue: number;
   totalLeadsCount: number;
-  todayNewCount: number;
   totalFollowupCount: number;
-  todayFollowupCount: number;
-  todayPendingFollowupCount: number;
-  todayCompletedFollowupCount: number;
   totalExpClosingCount: number;
-  thisMonthExpClosingCount: number;
-  todayWonCount: number;
   todayLossCount: number;
 }
 
 interface SalesDashboardData {
   stats: SalesDashboardStats;
+  grouped: GroupedStats;
   leads: LeadWithSalesExec[];
   followUps: FollowUpWithLead[];
 }
@@ -76,10 +103,8 @@ interface LeadHistoryData {
   tasks: Task[];
 }
 
-type FilterType = 'all' | 'total_sales' | 'today_new' | 'total_followup' | 'today_followup' | 
-                  'today_pending' | 'today_completed' | 'exp_closing' | 'today_won' | 'today_loss' |
-                  'this_month_exp';
-
+type CategoryType = 'newLead' | 'followup' | 'deal' | 'negotiation';
+type PeriodType = 'today' | 'month' | 'year';
 type ViewMode = 'grid' | 'tabs';
 
 const STAGE_CONFIG: Record<string, { color: string; label: string }> = {
@@ -111,54 +136,298 @@ function formatCurrency(value: number): string {
   return `₹${value.toLocaleString()}`;
 }
 
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  count: number | string;
-  subLabel?: string;
-  subValue?: string;
+const CATEGORY_CONFIG: Record<CategoryType, { 
+  label: string; 
+  icon: any; 
   color: string;
+  bgColor: string;
+  borderColor: string;
+}> = {
+  newLead: { 
+    label: "New Leads", 
+    icon: UserPlus, 
+    color: "text-blue-600",
+    bgColor: "bg-blue-50 dark:bg-blue-950/30",
+    borderColor: "border-blue-200 dark:border-blue-800"
+  },
+  followup: { 
+    label: "Follow-ups", 
+    icon: Calendar, 
+    color: "text-purple-600",
+    bgColor: "bg-purple-50 dark:bg-purple-950/30",
+    borderColor: "border-purple-200 dark:border-purple-800"
+  },
+  deal: { 
+    label: "Deals Won", 
+    icon: DollarSign, 
+    color: "text-green-600",
+    bgColor: "bg-green-50 dark:bg-green-950/30",
+    borderColor: "border-green-200 dark:border-green-800"
+  },
+  negotiation: { 
+    label: "Negotiation", 
+    icon: Handshake, 
+    color: "text-amber-600",
+    bgColor: "bg-amber-50 dark:bg-amber-950/30",
+    borderColor: "border-amber-200 dark:border-amber-800"
+  },
+};
+
+const PERIOD_LABELS: Record<PeriodType, string> = {
+  today: "Today",
+  month: "Month",
+  year: "Year",
+};
+
+interface GroupedStatCardProps {
+  category: CategoryType;
+  stats: GroupedStats[CategoryType];
+  selectedPeriod: PeriodType;
+  onPeriodChange: (period: PeriodType) => void;
   isActive: boolean;
   onClick: () => void;
-  trend?: 'up' | 'down' | 'neutral';
 }
 
-function StatCard({ icon, label, count, subLabel, subValue, color, isActive, onClick, trend }: StatCardProps) {
+function GroupedStatCard({ 
+  category, 
+  stats, 
+  selectedPeriod, 
+  onPeriodChange, 
+  isActive,
+  onClick 
+}: GroupedStatCardProps) {
+  const config = CATEGORY_CONFIG[category];
+  const Icon = config.icon;
+  
+  const currentStats = stats[selectedPeriod];
+  const isFollowup = category === 'followup';
+  
   return (
     <Card 
-      className={`cursor-pointer transition-all hover-elevate ${isActive ? 'ring-2 ring-primary' : ''}`}
+      className={`cursor-pointer transition-all hover-elevate ${
+        isActive ? 'ring-2 ring-primary ring-offset-2' : ''
+      } ${config.bgColor} ${config.borderColor} border`}
       onClick={onClick}
-      data-testid={`stat-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
+      data-testid={`card-${category}`}
     >
-      <CardContent className="p-3 sm:p-4">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`p-2 rounded-lg ${color} text-white flex-shrink-0`}>
-            {icon}
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className={`p-2 rounded-lg ${config.color} bg-white/80 dark:bg-gray-900/50`}>
+            <Icon className="h-5 w-5" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground truncate">{label}</p>
-            <div className="flex items-center gap-1">
-              <p className="text-lg sm:text-xl font-bold">{count}</p>
-              {trend && (
-                <span className={trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : 'text-gray-500'}>
-                  {trend === 'up' ? <ArrowUpRight className="h-4 w-4" /> : trend === 'down' ? <ArrowDownRight className="h-4 w-4" /> : null}
-                </span>
-              )}
+          <div className="flex gap-1">
+            {(['today', 'month', 'year'] as PeriodType[]).map((period) => (
+              <Button
+                key={period}
+                variant={selectedPeriod === period ? "default" : "ghost"}
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPeriodChange(period);
+                }}
+                data-testid={`button-period-${category}-${period}`}
+              >
+                {PERIOD_LABELS[period]}
+              </Button>
+            ))}
+          </div>
+        </div>
+        
+        <h3 className={`text-sm font-medium ${config.color} mb-2`}>
+          {config.label}
+        </h3>
+        
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Quantity</span>
+            <span className="text-lg font-bold">{currentStats.qty}</span>
+          </div>
+          
+          {isFollowup ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Pending</span>
+                <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                  {(currentStats as FollowupPeriodStats).pending}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Completed</span>
+                <Badge variant="outline" className="text-green-600 border-green-300">
+                  {(currentStats as FollowupPeriodStats).completed}
+                </Badge>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Amount</span>
+              <span className="text-sm font-semibold text-muted-foreground">
+                {formatCurrency((currentStats as PeriodStats).amount)}
+              </span>
             </div>
-            {subLabel && subValue && (
-              <p className="text-xs text-muted-foreground">{subLabel}: {subValue}</p>
-            )}
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
 
+function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSelectLead: (lead: LeadWithSalesExec) => void }) {
+  if (leads.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No leads found
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Company</TableHead>
+            <TableHead className="hidden md:table-cell">Contact</TableHead>
+            <TableHead>Stage</TableHead>
+            <TableHead className="hidden sm:table-cell">Value</TableHead>
+            <TableHead className="hidden lg:table-cell">Sales Exec</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {leads.map((lead) => {
+            const stageConfig = STAGE_CONFIG[lead.stage || 'new_lead'];
+            return (
+              <TableRow 
+                key={lead.id} 
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => onSelectLead(lead)}
+                data-testid={`row-lead-${lead.id}`}
+              >
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                    <div>
+                      <div className="font-medium">{lead.companyName}</div>
+                      <div className="text-xs text-muted-foreground md:hidden">
+                        {lead.contactPerson}
+                      </div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <div>
+                    <div>{lead.contactPerson}</div>
+                    <div className="text-xs text-muted-foreground">{lead.contactEmail}</div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge className={stageConfig.color} data-testid={`badge-stage-${lead.id}`}>
+                    {stageConfig.label}
+                  </Badge>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  {formatCurrency(lead.confirmedOrderValue || lead.estimatedValue || 0)}
+                </TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  {lead.salesExecutiveName || '-'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function FollowUpsTable({ 
+  followUps, 
+  allLeads,
+  onSelectLead 
+}: { 
+  followUps: FollowUpWithLead[]; 
+  allLeads: LeadWithSalesExec[];
+  onSelectLead: (leadId: string) => void;
+}) {
+  if (followUps.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No follow-ups found
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date & Time</TableHead>
+            <TableHead>Company</TableHead>
+            <TableHead className="hidden md:table-cell">Notes</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {followUps.map((followUp) => (
+            <TableRow 
+              key={followUp.id}
+              className="cursor-pointer hover:bg-muted/50"
+              onClick={() => onSelectLead(followUp.leadId)}
+              data-testid={`row-followup-${followUp.id}`}
+            >
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div>{format(new Date(followUp.followUpDate), 'MMM dd, yyyy')}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {format(new Date(followUp.followUpDate), 'HH:mm')}
+                    </div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div>
+                  <div className="font-medium">{followUp.leadCompanyName}</div>
+                  <div className="text-xs text-muted-foreground">{followUp.leadContactPerson}</div>
+                </div>
+              </TableCell>
+              <TableCell className="hidden md:table-cell max-w-[200px] truncate">
+                {followUp.notes || '-'}
+              </TableCell>
+              <TableCell>
+                {followUp.completed ? (
+                  <Badge className="bg-green-500 text-white">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Done
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                    <Clock className="h-3 w-3 mr-1" />
+                    Pending
+                  </Badge>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export default function SalesDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeCategory, setActiveCategory] = useState<CategoryType | null>(null);
+  const [categoryPeriods, setCategoryPeriods] = useState<Record<CategoryType, PeriodType>>({
+    newLead: 'today',
+    followup: 'today',
+    deal: 'month',
+    negotiation: 'month',
+  });
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLead, setSelectedLead] = useState<LeadWithSalesExec | null>(null);
@@ -201,6 +470,7 @@ export default function SalesDashboard() {
   });
 
   const stats = dashboardData?.stats;
+  const grouped = dashboardData?.grouped;
   const allLeads = dashboardData?.leads || [];
   const allFollowUps = dashboardData?.followUps || [];
 
@@ -209,76 +479,93 @@ export default function SalesDashboard() {
   const isDeptHead = departments.some((d: any) => d.managerId === user?.id);
   const canComment = isSuperAdmin || isDeptHead;
 
-  const filterLeads = (leads: LeadWithSalesExec[], filter: FilterType): LeadWithSalesExec[] => {
+  const handlePeriodChange = (category: CategoryType, period: PeriodType) => {
+    setCategoryPeriods(prev => ({ ...prev, [category]: period }));
+  };
+
+  const filterLeadsByCategory = (): LeadWithSalesExec[] => {
+    if (!activeCategory) return allLeads;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const thisYearStart = new Date(today.getFullYear(), 0, 1);
+    const thisYearEnd = new Date(today.getFullYear(), 11, 31, 23, 59, 59, 999);
     
-    switch (filter) {
-      case 'total_sales':
-        return leads.filter(l => l.stage === 'closed_won');
-      case 'today_new':
-        return leads.filter(l => 
-          l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow
-        );
-      case 'exp_closing':
-        return leads.filter(l => l.stage === 'negotiation');
-      case 'this_month_exp':
-        return leads.filter(l => {
-          if (l.stage !== 'negotiation' || !l.negotiationDate) return false;
-          const negDate = new Date(l.negotiationDate);
-          return negDate >= thisMonthStart && negDate <= thisMonthEnd;
-        });
-      case 'today_won':
-        return leads.filter(l => 
-          l.stage === 'closed_won' && l.closedDate && 
-          new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
-        );
-      case 'today_loss':
-        return leads.filter(l => 
-          l.stage === 'closed_lost' && l.closedDate && 
-          new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
-        );
-      default:
-        return leads;
+    const period = categoryPeriods[activeCategory];
+    
+    let filtered = allLeads;
+    
+    switch (activeCategory) {
+      case 'newLead':
+        if (period === 'today') {
+          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow);
+        } else if (period === 'month') {
+          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= thisMonthStart && new Date(l.createdAt) <= thisMonthEnd);
+        } else {
+          filtered = allLeads.filter(l => l.createdAt && new Date(l.createdAt) >= thisYearStart && new Date(l.createdAt) <= thisYearEnd);
+        }
+        break;
+      case 'deal':
+        filtered = allLeads.filter(l => l.stage === 'closed_won');
+        if (period === 'today') {
+          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow);
+        } else if (period === 'month') {
+          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= thisMonthStart && new Date(l.closedDate) <= thisMonthEnd);
+        } else {
+          filtered = filtered.filter(l => l.closedDate && new Date(l.closedDate) >= thisYearStart && new Date(l.closedDate) <= thisYearEnd);
+        }
+        break;
+      case 'negotiation':
+        filtered = allLeads.filter(l => l.stage === 'negotiation');
+        if (period === 'today') {
+          filtered = filtered.filter(l => l.negotiationDate && new Date(l.negotiationDate) >= today && new Date(l.negotiationDate) < tomorrow);
+        } else if (period === 'month') {
+          filtered = filtered.filter(l => l.negotiationDate && new Date(l.negotiationDate) >= thisMonthStart && new Date(l.negotiationDate) <= thisMonthEnd);
+        }
+        break;
     }
+    
+    return filtered;
   };
 
-  const filterFollowUps = (followUps: FollowUpWithLead[], filter: FilterType): FollowUpWithLead[] => {
+  const filterFollowUpsByPeriod = (): FollowUpWithLead[] => {
+    if (activeCategory !== 'followup') return allFollowUps;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const thisYearStart = new Date(today.getFullYear(), 0, 1);
+    const thisYearEnd = new Date(today.getFullYear(), 11, 31, 23, 59, 59, 999);
     
-    switch (filter) {
-      case 'total_followup':
-        return followUps;
-      case 'today_followup':
-        return followUps.filter(f => {
-          const fDate = new Date(f.followUpDate);
-          return fDate >= today && fDate < tomorrow;
-        });
-      case 'today_pending':
-        return followUps.filter(f => {
-          const fDate = new Date(f.followUpDate);
-          return fDate >= today && fDate < tomorrow && !f.completed;
-        });
-      case 'today_completed':
-        return followUps.filter(f => {
-          const fDate = new Date(f.followUpDate);
-          return fDate >= today && fDate < tomorrow && f.completed;
-        });
-      default:
-        return [];
+    const period = categoryPeriods.followup;
+    
+    if (period === 'today') {
+      return allFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= today && fDate < tomorrow;
+      });
+    } else if (period === 'month') {
+      return allFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= thisMonthStart && fDate <= thisMonthEnd;
+      });
+    } else {
+      return allFollowUps.filter(f => {
+        const fDate = new Date(f.followUpDate);
+        return fDate >= thisYearStart && fDate <= thisYearEnd;
+      });
     }
   };
 
-  const isFollowUpFilter = ['total_followup', 'today_followup', 'today_pending', 'today_completed'].includes(activeFilter);
-  const filteredLeads = isFollowUpFilter ? [] : filterLeads(allLeads, activeFilter).filter(lead => {
+  const isFollowUpView = activeCategory === 'followup';
+  const filteredLeads = isFollowUpView ? [] : filterLeadsByCategory().filter(lead => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
@@ -289,7 +576,7 @@ export default function SalesDashboard() {
     );
   });
 
-  const filteredFollowUps = isFollowUpFilter ? filterFollowUps(allFollowUps, activeFilter).filter(f => {
+  const filteredFollowUps = isFollowUpView ? filterFollowUpsByPeriod().filter(f => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
@@ -299,21 +586,11 @@ export default function SalesDashboard() {
     );
   }) : [];
 
-  const getFilterLabel = (filter: FilterType): string => {
-    const labels: Record<FilterType, string> = {
-      all: 'All Leads',
-      total_sales: 'Closed Won Deals',
-      today_new: "Today's New Leads",
-      total_followup: 'All Follow-ups',
-      today_followup: "Today's Follow-ups",
-      today_pending: 'Today Pending Follow-ups',
-      today_completed: 'Today Completed Follow-ups',
-      exp_closing: 'Expected Closing',
-      this_month_exp: 'This Month Expected',
-      today_won: "Today's Won",
-      today_loss: "Today's Lost",
-    };
-    return labels[filter];
+  const getFilterLabel = (): string => {
+    if (!activeCategory) return 'All Leads';
+    const config = CATEGORY_CONFIG[activeCategory];
+    const period = categoryPeriods[activeCategory];
+    return `${config.label} - ${PERIOD_LABELS[period]}`;
   };
 
   const handleAddComment = () => {
@@ -325,9 +602,9 @@ export default function SalesDashboard() {
     return (
       <div className="space-y-6 p-4">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {Array(12).fill(0).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array(4).fill(0).map((_, i) => (
+            <Skeleton key={i} className="h-40" />
           ))}
         </div>
         <Skeleton className="h-96" />
@@ -366,114 +643,70 @@ export default function SalesDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <StatCard
-          icon={<DollarSign className="h-5 w-5" />}
-          label="Total Sales"
-          count={stats?.totalSalesCount || 0}
-          subLabel="Value"
-          subValue={formatCurrency(stats?.totalSalesValue || 0)}
-          color="bg-green-500"
-          isActive={activeFilter === 'total_sales'}
-          onClick={() => { setActiveFilter('total_sales'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<ArrowDownRight className="h-5 w-5" />}
-          label="Last Month"
-          count={formatCurrency(stats?.lastMonthSalesValue || 0)}
-          color="bg-blue-500"
-          isActive={false}
-          onClick={() => {}}
-        />
-        <StatCard
-          icon={<ArrowUpRight className="h-5 w-5" />}
-          label="Last Week"
-          count={formatCurrency(stats?.lastWeekSalesValue || 0)}
-          color="bg-indigo-500"
-          isActive={false}
-          onClick={() => {}}
-        />
-        <StatCard
-          icon={<Users className="h-5 w-5" />}
-          label="Total Leads"
-          count={stats?.totalLeadsCount || 0}
-          color="bg-slate-500"
-          isActive={activeFilter === 'all'}
-          onClick={() => { setActiveFilter('all'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<Plus className="h-5 w-5" />}
-          label="Today's New"
-          count={stats?.todayNewCount || 0}
-          color="bg-cyan-500"
-          isActive={activeFilter === 'today_new'}
-          onClick={() => { setActiveFilter('today_new'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<Calendar className="h-5 w-5" />}
-          label="Total Follow-ups"
-          count={stats?.totalFollowupCount || 0}
-          color="bg-purple-500"
-          isActive={activeFilter === 'total_followup'}
-          onClick={() => { setActiveFilter('total_followup'); setActiveTab('followups'); }}
-        />
-        <StatCard
-          icon={<CalendarDays className="h-5 w-5" />}
-          label="Today Follow-ups"
-          count={stats?.todayFollowupCount || 0}
-          color="bg-orange-500"
-          isActive={activeFilter === 'today_followup'}
-          onClick={() => { setActiveFilter('today_followup'); setActiveTab('followups'); }}
-        />
-        <StatCard
-          icon={<Clock className="h-5 w-5" />}
-          label="Today Pending"
-          count={stats?.todayPendingFollowupCount || 0}
-          color="bg-yellow-500"
-          isActive={activeFilter === 'today_pending'}
-          onClick={() => { setActiveFilter('today_pending'); setActiveTab('followups'); }}
-        />
-        <StatCard
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          label="Today Completed"
-          count={stats?.todayCompletedFollowupCount || 0}
-          color="bg-emerald-500"
-          isActive={activeFilter === 'today_completed'}
-          onClick={() => { setActiveFilter('today_completed'); setActiveTab('followups'); }}
-        />
-        <StatCard
-          icon={<Target className="h-5 w-5" />}
-          label="Exp. Closing"
-          count={stats?.totalExpClosingCount || 0}
-          color="bg-amber-500"
-          isActive={activeFilter === 'exp_closing'}
-          onClick={() => { setActiveFilter('exp_closing'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<UserCheck className="h-5 w-5" />}
-          label="Today's Won"
-          count={stats?.todayWonCount || 0}
-          color="bg-green-600"
-          isActive={activeFilter === 'today_won'}
-          onClick={() => { setActiveFilter('today_won'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<XCircle className="h-5 w-5" />}
-          label="Today's Lost"
-          count={stats?.todayLossCount || 0}
-          color="bg-red-500"
-          isActive={activeFilter === 'today_loss'}
-          onClick={() => { setActiveFilter('today_loss'); setActiveTab('leads'); }}
-        />
-        <StatCard
-          icon={<Timer className="h-5 w-5" />}
-          label="This Month Exp"
-          count={stats?.thisMonthExpClosingCount || 0}
-          color="bg-rose-500"
-          isActive={activeFilter === 'this_month_exp'}
-          onClick={() => { setActiveFilter('this_month_exp'); setActiveTab('leads'); }}
-        />
+      {/* Grouped Stats Cards */}
+      {grouped && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <GroupedStatCard
+            category="newLead"
+            stats={grouped.newLead}
+            selectedPeriod={categoryPeriods.newLead}
+            onPeriodChange={(period) => handlePeriodChange('newLead', period)}
+            isActive={activeCategory === 'newLead'}
+            onClick={() => setActiveCategory(activeCategory === 'newLead' ? null : 'newLead')}
+          />
+          <GroupedStatCard
+            category="followup"
+            stats={grouped.followup}
+            selectedPeriod={categoryPeriods.followup}
+            onPeriodChange={(period) => handlePeriodChange('followup', period)}
+            isActive={activeCategory === 'followup'}
+            onClick={() => setActiveCategory(activeCategory === 'followup' ? null : 'followup')}
+          />
+          <GroupedStatCard
+            category="deal"
+            stats={grouped.deal}
+            selectedPeriod={categoryPeriods.deal}
+            onPeriodChange={(period) => handlePeriodChange('deal', period)}
+            isActive={activeCategory === 'deal'}
+            onClick={() => setActiveCategory(activeCategory === 'deal' ? null : 'deal')}
+          />
+          <GroupedStatCard
+            category="negotiation"
+            stats={grouped.negotiation}
+            selectedPeriod={categoryPeriods.negotiation}
+            onPeriodChange={(period) => handlePeriodChange('negotiation', period)}
+            isActive={activeCategory === 'negotiation'}
+            onClick={() => setActiveCategory(activeCategory === 'negotiation' ? null : 'negotiation')}
+          />
+        </div>
+      )}
+
+      {/* Summary Stats Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="bg-slate-50 dark:bg-slate-900/30">
+          <CardContent className="p-3 text-center">
+            <div className="text-2xl font-bold">{stats?.totalLeadsCount || 0}</div>
+            <div className="text-xs text-muted-foreground">Total Leads</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-green-50 dark:bg-green-900/30">
+          <CardContent className="p-3 text-center">
+            <div className="text-2xl font-bold">{stats?.totalSalesCount || 0}</div>
+            <div className="text-xs text-muted-foreground">Total Deals</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 dark:bg-purple-900/30">
+          <CardContent className="p-3 text-center">
+            <div className="text-2xl font-bold">{stats?.totalFollowupCount || 0}</div>
+            <div className="text-xs text-muted-foreground">Total Follow-ups</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-amber-50 dark:bg-amber-900/30">
+          <CardContent className="p-3 text-center">
+            <div className="text-2xl font-bold">{formatCurrency(stats?.totalSalesValue || 0)}</div>
+            <div className="text-xs text-muted-foreground">Total Value</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Content Area */}
@@ -481,9 +714,9 @@ export default function SalesDashboard() {
         <CardHeader className="p-4 sm:p-6 pb-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle className="text-base sm:text-lg">{getFilterLabel(activeFilter)}</CardTitle>
+              <CardTitle className="text-base sm:text-lg">{getFilterLabel()}</CardTitle>
               <CardDescription>
-                {isFollowUpFilter 
+                {isFollowUpView 
                   ? `${filteredFollowUps.length} follow-up${filteredFollowUps.length !== 1 ? 's' : ''} found`
                   : `${filteredLeads.length} lead${filteredLeads.length !== 1 ? 's' : ''} found`
                 }
@@ -492,7 +725,7 @@ export default function SalesDashboard() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder={isFollowUpFilter ? "Search follow-ups..." : "Search leads..."}
+                placeholder={isFollowUpView ? "Search follow-ups..." : "Search leads..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -511,13 +744,13 @@ export default function SalesDashboard() {
               </TabsList>
               <TabsContent value="leads">
                 <LeadsTable 
-                  leads={isFollowUpFilter ? allLeads : filteredLeads} 
+                  leads={isFollowUpView ? allLeads : filteredLeads} 
                   onSelectLead={setSelectedLead} 
                 />
               </TabsContent>
               <TabsContent value="followups">
                 <FollowUpsTable 
-                  followUps={isFollowUpFilter ? filteredFollowUps : allFollowUps}
+                  followUps={isFollowUpView ? filteredFollowUps : allFollowUps}
                   allLeads={allLeads}
                   onSelectLead={(leadId) => {
                     const lead = allLeads.find(l => l.id === leadId);
@@ -527,7 +760,7 @@ export default function SalesDashboard() {
               </TabsContent>
             </Tabs>
           ) : (
-            isFollowUpFilter ? (
+            isFollowUpView ? (
               <FollowUpsTable 
                 followUps={filteredFollowUps}
                 allLeads={allLeads}
@@ -537,396 +770,213 @@ export default function SalesDashboard() {
                 }}
               />
             ) : (
-              <LeadsTable leads={filteredLeads} onSelectLead={setSelectedLead} />
+              <LeadsTable 
+                leads={filteredLeads} 
+                onSelectLead={setSelectedLead} 
+              />
             )
           )}
         </CardContent>
       </Card>
 
       {/* Lead Detail Dialog */}
-      <Dialog open={!!selectedLead} onOpenChange={(open) => !open && setSelectedLead(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <Dialog open={!!selectedLead} onOpenChange={() => setSelectedLead(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setSelectedLead(null)}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              Lead Details - {selectedLead?.companyName}
+              <Building2 className="h-5 w-5" />
+              {selectedLead?.companyName}
             </DialogTitle>
             <DialogDescription>
-              Complete history and information about this lead
+              Lead details and history
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 pr-4">
-            {historyLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-32" />
-                <Skeleton className="h-64" />
-              </div>
-            ) : leadHistory ? (
+          {historyLoading ? (
+            <div className="space-y-4 p-4">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-40" />
+            </div>
+          ) : leadHistory ? (
+            <ScrollArea className="flex-1 pr-4">
               <div className="space-y-6">
                 {/* Lead Info */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Lead Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{leadHistory.lead.companyName}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span>{leadHistory.lead.contactPerson}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        <span>{leadHistory.lead.contactEmail}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span>{leadHistory.lead.contactPhone || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <Separator />
-                    <div className="flex flex-wrap gap-2">
-                      <Badge className={STAGE_CONFIG[leadHistory.lead.stage]?.color || "bg-gray-500"}>
-                        {STAGE_CONFIG[leadHistory.lead.stage]?.label || leadHistory.lead.stage}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Contact Person</Label>
+                    <p className="font-medium">{leadHistory.lead.contactPerson}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Stage</Label>
+                    <div>
+                      <Badge className={STAGE_CONFIG[leadHistory.lead.stage || 'new_lead'].color}>
+                        {STAGE_CONFIG[leadHistory.lead.stage || 'new_lead'].label}
                       </Badge>
-                      <Badge variant="outline">
-                        Source: {leadHistory.lead.leadSource}
-                      </Badge>
-                      {leadHistory.lead.estimatedValue && (
-                        <Badge variant="secondary">
-                          Est. Value: {formatCurrency(leadHistory.lead.estimatedValue)}
-                        </Badge>
-                      )}
-                      {leadHistory.lead.salesExecutiveName && (
-                        <Badge variant="outline">
-                          Assigned: {leadHistory.lead.salesExecutiveName}
-                        </Badge>
-                      )}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Email</Label>
+                    <p className="text-sm flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {leadHistory.lead.contactEmail || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Phone</Label>
+                    <p className="text-sm flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {leadHistory.lead.contactPhone || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Estimated Value</Label>
+                    <p className="font-medium">{formatCurrency(leadHistory.lead.estimatedValue || 0)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Sales Executive</Label>
+                    <p className="text-sm">{leadHistory.lead.salesExecutiveName || '-'}</p>
+                  </div>
+                </div>
 
-                {/* Follow-ups with Timeline */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Follow-up History ({leadHistory.followUps.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {leadHistory.followUps.length === 0 ? (
-                      <p className="text-muted-foreground text-sm text-center py-4">No follow-ups recorded</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {leadHistory.followUps.map((fu) => (
-                          <div key={fu.id} className="flex gap-3 p-3 bg-muted/50 rounded-lg">
-                            <div className={`w-2 h-2 mt-2 rounded-full ${fu.completed ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">
-                                  {format(new Date(fu.followUpDate), 'PPP p')}
-                                </span>
-                                <Badge variant={fu.completed ? "default" : "secondary"}>
-                                  {fu.completed ? 'Completed' : 'Pending'}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-muted-foreground mt-1">{fu.notes}</p>
-                            </div>
+                <Separator />
+
+                {/* Follow-ups */}
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Follow-ups ({leadHistory.followUps.length})
+                  </h4>
+                  {leadHistory.followUps.length > 0 ? (
+                    <div className="space-y-2">
+                      {leadHistory.followUps.map((fu) => (
+                        <div key={fu.id} className="flex items-start gap-3 p-2 bg-muted/50 rounded-lg">
+                          <div className={`p-1 rounded ${fu.completed ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                            {fu.completed ? <CheckCircle2 className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="font-medium">
+                                {format(new Date(fu.followUpDate), 'MMM dd, yyyy HH:mm')}
+                              </span>
+                            </div>
+                            {fu.notes && <p className="text-sm text-muted-foreground mt-1">{fu.notes}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No follow-ups recorded</p>
+                  )}
+                </div>
 
-                {/* Tasks with Media */}
+                {/* Tasks */}
                 {leadHistory.tasks.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center gap-2">
+                  <>
+                    <Separator />
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center gap-2">
                         <FileText className="h-4 w-4" />
                         Related Tasks ({leadHistory.tasks.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {leadHistory.tasks.map((task: any) => (
-                          <div key={task.id} className="p-3 bg-muted/50 rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium">{task.title}</span>
-                              <Badge variant={task.status === 'completed' ? 'default' : 'secondary'}>
+                      </h4>
+                      <div className="space-y-2">
+                        {leadHistory.tasks.map((task) => (
+                          <div key={task.id} className="p-2 bg-muted/50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-sm">{task.title}</span>
+                              <Badge variant="outline" className="text-xs">
                                 {task.status}
                               </Badge>
                             </div>
                             {task.description && (
-                              <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
                             )}
-                            
-                            {/* Media Attachments */}
-                            <div className="flex flex-wrap gap-2">
+                            {/* Media attachments */}
+                            <div className="flex gap-2 mt-2">
                               {task.voiceNoteUrl && (
-                                <Button variant="outline" size="sm" asChild>
-                                  <a href={task.voiceNoteUrl} target="_blank" rel="noopener noreferrer">
-                                    <Mic className="h-4 w-4 mr-1" />
-                                    Voice ({task.voiceNoteDuration}s)
-                                  </a>
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
+                                  <Mic className="h-3 w-3 mr-1" />
+                                  Voice
                                 </Button>
                               )}
-                              {task.attachments?.map((att: any, idx: number) => (
-                                <Button key={idx} variant="outline" size="sm" asChild>
-                                  <a href={att.url} target="_blank" rel="noopener noreferrer">
-                                    {att.type === 'video' && <Video className="h-4 w-4 mr-1" />}
-                                    {att.type === 'photo' && <Image className="h-4 w-4 mr-1" />}
-                                    {att.type === 'file' && <FileText className="h-4 w-4 mr-1" />}
-                                    {att.name}
-                                  </a>
+                              {task.attachments && (task.attachments as any[]).filter((a: any) => a.type === 'video').length > 0 && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
+                                  <Video className="h-3 w-3 mr-1" />
+                                  Video
                                 </Button>
-                              ))}
+                              )}
+                              {task.attachments && (task.attachments as any[]).filter((a: any) => a.type === 'photo').length > 0 && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs">
+                                  <Image className="h-3 w-3 mr-1" />
+                                  Photo
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </>
                 )}
 
-                {/* Quotes */}
-                {leadHistory.quotes.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        Quotes ({leadHistory.quotes.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {leadHistory.quotes.map((quote: any) => (
-                          <div key={quote.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                            <div>
-                              <span className="font-medium">{formatCurrency(quote.amount)}</span>
-                              <p className="text-sm text-muted-foreground">{quote.description}</p>
+                {/* Comments */}
+                <Separator />
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Comments ({leadHistory.comments.length})
+                  </h4>
+                  
+                  {leadHistory.comments.length > 0 && (
+                    <div className="space-y-3 mb-4">
+                      {leadHistory.comments.map((comment) => (
+                        <div key={comment.id} className="flex gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">
+                              {comment.userName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{comment.userName}</span>
+                              {comment.userRole && (
+                                <Badge variant="outline" className="text-xs">{comment.userRole}</Badge>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                {comment.createdAt ? format(new Date(comment.createdAt), 'MMM dd, yyyy HH:mm') : '-'}
+                              </span>
                             </div>
-                            <Badge variant={quote.status === 'accepted' ? 'default' : quote.status === 'rejected' ? 'destructive' : 'secondary'}>
-                              {quote.status}
-                            </Badge>
+                            <p className="text-sm mt-1">{comment.comment}</p>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Comments Section */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Comments ({leadHistory.comments.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {leadHistory.comments.length === 0 ? (
-                      <p className="text-muted-foreground text-sm text-center py-4">No comments yet</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {leadHistory.comments.map((comment) => (
-                          <div key={comment.id} className="flex gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback>
-                                {comment.userName?.charAt(0) || 'U'}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 bg-muted/50 rounded-lg p-3">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm">{comment.userName}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {comment.createdAt && format(new Date(comment.createdAt), 'PPp')}
-                                </span>
-                              </div>
-                              <p className="text-sm mt-1">{comment.comment}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Add Comment */}
-                    {canComment && (
-                      <div className="pt-4 border-t">
-                        <Label className="text-sm font-medium mb-2 block">Add Comment</Label>
-                        <div className="flex gap-2">
-                          <Textarea
-                            placeholder="Write your comment..."
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            className="min-h-[80px]"
-                            data-testid="textarea-comment"
-                          />
                         </div>
-                        <Button 
-                          className="mt-2" 
-                          onClick={handleAddComment}
-                          disabled={!newComment.trim() || addCommentMutation.isPending}
-                          data-testid="button-add-comment"
-                        >
-                          <Send className="h-4 w-4 mr-2" />
-                          {addCommentMutation.isPending ? "Adding..." : "Add Comment"}
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {canComment && (
+                    <div className="flex gap-2">
+                      <Textarea
+                        placeholder="Add a comment..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        className="min-h-[60px]"
+                        data-testid="textarea-comment"
+                      />
+                      <Button 
+                        size="icon"
+                        onClick={handleAddComment}
+                        disabled={!newComment.trim() || addCommentMutation.isPending}
+                        data-testid="button-add-comment"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
-            ) : null}
-          </ScrollArea>
+            </ScrollArea>
+          ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// Leads Table Component
-function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSelectLead: (lead: LeadWithSalesExec) => void }) {
-  if (leads.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>No leads found for this filter</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Company</TableHead>
-            <TableHead>Contact</TableHead>
-            <TableHead className="hidden md:table-cell">Source</TableHead>
-            <TableHead>Stage</TableHead>
-            <TableHead className="hidden sm:table-cell">Est. Value</TableHead>
-            <TableHead className="hidden lg:table-cell">Assigned To</TableHead>
-            <TableHead className="hidden lg:table-cell">Created</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {leads.map((lead) => (
-            <TableRow 
-              key={lead.id} 
-              className="cursor-pointer hover-elevate"
-              onClick={() => onSelectLead(lead)}
-              data-testid={`row-lead-${lead.id}`}
-            >
-              <TableCell className="font-medium">{lead.companyName}</TableCell>
-              <TableCell>
-                <div>
-                  <div className="font-medium">{lead.contactPerson}</div>
-                  <div className="text-xs text-muted-foreground hidden sm:block">
-                    {lead.contactEmail}
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="outline" className={SOURCE_CONFIG[lead.leadSource]?.color}>
-                  {lead.leadSource}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge className={STAGE_CONFIG[lead.stage]?.color || "bg-gray-500"}>
-                  {STAGE_CONFIG[lead.stage]?.label || lead.stage}
-                </Badge>
-              </TableCell>
-              <TableCell className="hidden sm:table-cell">
-                {lead.estimatedValue ? formatCurrency(lead.estimatedValue) : '-'}
-              </TableCell>
-              <TableCell className="hidden lg:table-cell">
-                {lead.salesExecutiveName || '-'}
-              </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                {lead.createdAt && format(new Date(lead.createdAt), 'PP')}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-// Follow-ups Table Component
-function FollowUpsTable({ 
-  followUps, 
-  allLeads,
-  onSelectLead 
-}: { 
-  followUps: FollowUpWithLead[]; 
-  allLeads: LeadWithSalesExec[];
-  onSelectLead: (leadId: string) => void;
-}) {
-  if (followUps.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>No follow-ups found for this filter</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date & Time</TableHead>
-            <TableHead>Company</TableHead>
-            <TableHead className="hidden md:table-cell">Contact</TableHead>
-            <TableHead className="hidden lg:table-cell">Notes</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden sm:table-cell">Stage</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {followUps.map((fu) => (
-            <TableRow 
-              key={fu.id} 
-              className="cursor-pointer hover-elevate"
-              onClick={() => onSelectLead(fu.leadId)}
-              data-testid={`row-followup-${fu.id}`}
-            >
-              <TableCell className="font-medium text-sm">
-                {format(new Date(fu.followUpDate), 'PPP')}
-                <div className="text-xs text-muted-foreground">
-                  {format(new Date(fu.followUpDate), 'p')}
-                </div>
-              </TableCell>
-              <TableCell>{fu.leadCompanyName || '-'}</TableCell>
-              <TableCell className="hidden md:table-cell">{fu.leadContactPerson || '-'}</TableCell>
-              <TableCell className="hidden lg:table-cell max-w-xs truncate">{fu.notes}</TableCell>
-              <TableCell>
-                <Badge variant={fu.completed ? "default" : "secondary"}>
-                  {fu.completed ? 'Completed' : 'Pending'}
-                </Badge>
-              </TableCell>
-              <TableCell className="hidden sm:table-cell">
-                {fu.leadStage && (
-                  <Badge className={STAGE_CONFIG[fu.leadStage]?.color || "bg-gray-500"}>
-                    {STAGE_CONFIG[fu.leadStage]?.label || fu.leadStage}
-                  </Badge>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
     </div>
   );
 }
