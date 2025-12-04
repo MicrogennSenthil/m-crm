@@ -23,6 +23,7 @@ import {
   Users,
   Shield,
   Key,
+  KeyRound,
   UserCheck,
   Home,
   Briefcase,
@@ -247,6 +248,13 @@ const userManagementSubItems = [
     icon: UserCheck,
     color: "text-cyan-500",
     bgColor: "bg-cyan-500/10",
+  },
+  {
+    title: "Reset Password",
+    url: "/department-users",
+    icon: KeyRound,
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
   },
 ];
 

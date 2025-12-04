@@ -663,3 +663,63 @@ export async function sendPasswordResetSuccessEmail(toEmail: string, userName: s
     return { success: false, error };
   }
 }
+
+// Password reset notification email (sent by admin/department head)
+export async function sendPasswordResetNotificationEmail(
+  toEmail: string, 
+  userName: string, 
+  newPassword: string,
+  resetByName: string
+) {
+  try {
+    await sendEmailUnified({
+      to: toEmail,
+      subject: 'Your Password Has Been Reset - Microgenn CRM',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #1a2b6d; padding: 20px; text-align: center;">
+            <h1 style="color: #f5a623; margin: 0;">Microgenn CRM</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f8f9fa;">
+            <h2 style="color: #1a2b6d; margin-top: 0;">Password Reset</h2>
+            
+            <p>Hello ${userName},</p>
+            
+            <p>Your password has been reset by <strong>${resetByName}</strong>. Below are your new login credentials:</p>
+            
+            <div style="background-color: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${toEmail}</p>
+              <p style="margin: 0;"><strong>New Password:</strong> <code style="background-color: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-size: 16px;">${newPassword}</code></p>
+            </div>
+            
+            <p style="color: #e74c3c; font-weight: bold;">
+              For security reasons, please change your password immediately after logging in.
+            </p>
+            
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="${process.env.APP_URL || 'https://mcrm.replit.app'}/auth/login" 
+                 style="background-color: #1a2b6d; color: #f5a623; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                Login Now
+              </a>
+            </div>
+            
+            <p style="color: #666; font-size: 14px;">
+              If you did not expect this password reset, please contact your administrator immediately.
+            </p>
+          </div>
+          
+          <div style="background-color: #1a2b6d; color: #f5a623; padding: 15px; text-align: center; font-size: 12px;">
+            Microgenn - Empowering Your Hotel's Digital Evolution
+          </div>
+        </div>
+      `
+    });
+    
+    console.log(`✅ Password reset notification email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send password reset notification email:', error);
+    throw error;
+  }
+}

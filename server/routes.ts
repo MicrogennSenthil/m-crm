@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
-import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
+import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
@@ -557,6 +557,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Reset/Assign password - Available to admins and department heads
+  app.post("/api/users/:userId/reset-password", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const { userId } = req.params;
+      const { newPassword, sendEmail } = req.body;
+      
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Get current user info
+      const currentUser = await storage.getUser(currentUserId);
+      if (!currentUser) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      // Get target user
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Authorization check:
+      // 1. Admins can reset any user's password (except super admin)
+      // 2. Department heads can reset passwords for users in their department
+      let isAuthorized = false;
+      
+      if (currentUser.role === "admin") {
+        // Admins can reset any password except super admin (unless they ARE the super admin)
+        if (targetUser.email === SUPER_ADMIN_EMAIL && currentUser.email !== SUPER_ADMIN_EMAIL) {
+          return res.status(403).json({ message: "Cannot reset super admin password" });
+        }
+        isAuthorized = true;
+      } else {
+        // Check if current user is a department head
+        const departments = await storage.getDepartments();
+        const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+        
+        if (managedDepartments.length > 0) {
+          // Check if target user is in one of the managed departments
+          const managedDeptIds = managedDepartments.map(d => d.id);
+          if (targetUser.departmentId && managedDeptIds.includes(targetUser.departmentId)) {
+            isAuthorized = true;
+          }
+        }
+      }
+      
+      if (!isAuthorized) {
+        return res.status(403).json({ message: "You don't have permission to reset this user's password" });
+      }
+      
+      // Hash the new password
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      
+      // Update the user's password
+      await storage.updateUser(userId, { passwordHash });
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "user",
+        entityId: userId,
+        action: "password_reset",
+        description: `Password reset for user: ${targetUser.firstName} ${targetUser.lastName} by ${currentUser.firstName} ${currentUser.lastName}`,
+        userId: currentUserId,
+      });
+      
+      // Send email notification if requested
+      if (sendEmail && targetUser.email) {
+        try {
+          await sendPasswordResetNotificationEmail(
+            targetUser.email,
+            targetUser.firstName || "User",
+            newPassword,
+            currentUser.firstName || "Administrator"
+          );
+        } catch (emailError) {
+          console.error("Failed to send password reset email:", emailError);
+          // Don't fail the request if email fails
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `Password ${sendEmail ? 'reset and sent to' : 'reset for'} ${targetUser.email}` 
+      });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Get users in department (for department heads)
+  app.get("/api/department-users", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(currentUserId);
+      
+      if (!currentUser) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      // Admins see all users
+      if (currentUser.role === "admin") {
+        const allUsers = await storage.getUsers();
+        return res.json(allUsers);
+      }
+      
+      // Get departments where current user is the head
+      const departments = await storage.getDepartments();
+      const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+      
+      if (managedDepartments.length === 0) {
+        return res.json([]);
+      }
+      
+      // Get all users in managed departments
+      const allUsers = await storage.getUsers();
+      const managedDeptIds = managedDepartments.map(d => d.id);
+      const departmentUsers = allUsers.filter(u => 
+        u.departmentId && managedDeptIds.includes(u.departmentId)
+      );
+      
+      res.json(departmentUsers);
+    } catch (error) {
+      console.error("Error fetching department users:", error);
+      res.status(500).json({ message: "Failed to fetch department users" });
+    }
+  });
+
+  // Check if current user can manage passwords
+  app.get("/api/can-manage-passwords", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(currentUserId);
+      
+      if (!currentUser) {
+        return res.json({ canManage: false, role: null, managedDepartments: [] });
+      }
+      
+      // Admins can always manage
+      if (currentUser.role === "admin") {
+        return res.json({ 
+          canManage: true, 
+          role: "admin", 
+          managedDepartments: [] 
+        });
+      }
+      
+      // Check if department head
+      const departments = await storage.getDepartments();
+      const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+      
+      if (managedDepartments.length > 0) {
+        return res.json({ 
+          canManage: true, 
+          role: "department_head", 
+          managedDepartments: managedDepartments.map(d => ({ id: d.id, name: d.name }))
+        });
+      }
+      
+      return res.json({ canManage: false, role: currentUser.role, managedDepartments: [] });
+    } catch (error) {
+      console.error("Error checking password management permissions:", error);
+      res.status(500).json({ message: "Failed to check permissions" });
     }
   });
 

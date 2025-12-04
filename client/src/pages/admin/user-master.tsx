@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { 
-  Loader2, Search, Plus, Pencil, Trash2, CheckCircle, XCircle, AlertTriangle, ArrowRightLeft
+  Loader2, Search, Plus, Pencil, Trash2, CheckCircle, XCircle, AlertTriangle, ArrowRightLeft, KeyRound
 } from "lucide-react";
 import { format } from "date-fns";
 import type { User, UserRole, Department } from "@shared/schema";
@@ -72,6 +72,10 @@ export default function UserMaster() {
   const [reassignToUserId, setReassignToUserId] = useState<string>("");
   const [userAssignments, setUserAssignments] = useState<UserAssignments | null>(null);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [passwordResetDialogOpen, setPasswordResetDialogOpen] = useState(false);
+  const [passwordResetTarget, setPasswordResetTarget] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [sendEmailNotification, setSendEmailNotification] = useState(true);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -199,6 +203,51 @@ export default function UserMaster() {
       toast({ title: "Error", description: error.message || "Failed to reassign items", variant: "destructive" });
     },
   });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, newPassword, sendEmail }: { userId: string; newPassword: string; sendEmail: boolean }) => {
+      const response = await apiRequest("POST", `/api/users/${userId}/reset-password`, { newPassword, sendEmail });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Password Reset", 
+        description: data.message || "Password has been reset successfully",
+      });
+      setPasswordResetDialogOpen(false);
+      setPasswordResetTarget(null);
+      setNewPassword("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reset password", variant: "destructive" });
+    },
+  });
+
+  const handlePasswordResetClick = (user: User) => {
+    setPasswordResetTarget(user);
+    setNewPassword("");
+    setSendEmailNotification(true);
+    setPasswordResetDialogOpen(true);
+  };
+
+  const handlePasswordReset = () => {
+    if (passwordResetTarget && newPassword.length >= 8) {
+      resetPasswordMutation.mutate({
+        userId: passwordResetTarget.id,
+        newPassword,
+        sendEmail: sendEmailNotification,
+      });
+    }
+  };
+
+  const generateRandomPassword = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
+    let password = "";
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPassword(password);
+  };
 
   // Function to check user assignments before delete
   const handleDeleteClick = async (user: User) => {
@@ -426,12 +475,23 @@ export default function UserMaster() {
                       {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePasswordResetClick(user)}
+                          disabled={user.email === SUPER_ADMIN_EMAIL && currentUser?.email !== SUPER_ADMIN_EMAIL}
+                          title="Reset Password"
+                          data-testid={`button-reset-password-${user.id}`}
+                        >
+                          <KeyRound className="h-4 w-4 text-amber-500" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => { setEditingUser(user); setUserDialogOpen(true); }}
                           disabled={user.email === SUPER_ADMIN_EMAIL && currentUser?.email !== SUPER_ADMIN_EMAIL}
+                          title="Edit User"
                           data-testid={`button-edit-user-${user.id}`}
                         >
                           <Pencil className="h-4 w-4" />
@@ -441,6 +501,7 @@ export default function UserMaster() {
                           size="icon"
                           onClick={() => handleDeleteClick(user)}
                           disabled={user.email === SUPER_ADMIN_EMAIL || loadingAssignments}
+                          title="Delete User"
                           data-testid={`button-delete-user-${user.id}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -710,6 +771,88 @@ export default function UserMaster() {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : null}
               Reassign & Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={passwordResetDialogOpen} onOpenChange={setPasswordResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset password for {passwordResetTarget?.firstName} {passwordResetTarget?.lastName} ({passwordResetTarget?.email})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>New Password *</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password (min 8 characters)"
+                  data-testid="input-new-password"
+                />
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={generateRandomPassword}
+                  data-testid="button-generate-password"
+                >
+                  Generate
+                </Button>
+              </div>
+              {newPassword && newPassword.length < 8 && (
+                <p className="text-sm text-destructive">Password must be at least 8 characters</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="send-email" className="text-sm">
+                Send password to user via email
+              </Label>
+              <Switch
+                id="send-email"
+                checked={sendEmailNotification}
+                onCheckedChange={setSendEmailNotification}
+                data-testid="switch-send-email"
+              />
+            </div>
+
+            {!sendEmailNotification && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Make sure to share the password with the user manually.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPasswordResetDialogOpen(false);
+                setPasswordResetTarget(null);
+                setNewPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePasswordReset}
+              disabled={newPassword.length < 8 || resetPasswordMutation.isPending}
+              data-testid="button-confirm-reset-password"
+            >
+              {resetPasswordMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <KeyRound className="h-4 w-4 mr-2" />
+              )}
+              Reset Password
             </Button>
           </DialogFooter>
         </DialogContent>

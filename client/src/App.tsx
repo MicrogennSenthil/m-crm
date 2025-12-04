@@ -20,6 +20,7 @@ import Implementations from "@/pages/implementations";
 import ImplementationDashboard from "@/pages/implementation-dashboard";
 import Support from "@/pages/support";
 import SupportDashboard from "@/pages/support-dashboard";
+import DepartmentUsers from "@/pages/department-users";
 import Reports from "@/pages/reports";
 import SalesReports from "@/pages/reports-sales";
 import ImplementationReports from "@/pages/reports-implementation";
@@ -102,6 +103,7 @@ function AuthenticatedLayout() {
               <Route path="/admin/smtp-config" component={SmtpConfig} />
               <Route path="/admin/point-categories" component={PointCategories} />
               <Route path="/admin/database-control" component={DatabaseControl} />
+              <Route path="/department-users" component={DepartmentUsers} />
               <Route component={NotFound} />
             </Switch>
           </main>
