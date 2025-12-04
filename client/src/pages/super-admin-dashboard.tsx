@@ -7,17 +7,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, RadarChart, PolarGrid, 
+  PolarAngleAxis, PolarRadiusAxis, Radar
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Users, Target, Briefcase, HeadphonesIcon,
   AlertTriangle, Calendar, ChevronRight, ChevronLeft, Trophy, Award,
-  DollarSign, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown
+  DollarSign, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown,
+  BarChart3, TableIcon, Percent, Activity
 } from "lucide-react";
 
 const COLORS = ['#1a2b6d', '#f5a623', '#4ade80', '#f87171', '#60a5fa', '#a78bfa'];
+const CHART_COLORS = {
+  primary: '#1a2b6d',
+  accent: '#f5a623',
+  success: '#4ade80',
+  danger: '#f87171',
+  info: '#60a5fa',
+  purple: '#a78bfa'
+};
+
+type ViewMode = 'graphical' | 'statistics';
 
 interface OverviewData {
   sales: {
@@ -94,6 +107,39 @@ function formatCurrency(amount: number): string {
   return `₹${amount}`;
 }
 
+function formatNumber(num: number): string {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+}
+
+function ViewModeToggle({ viewMode, onViewModeChange }: { viewMode: ViewMode; onViewModeChange: (mode: ViewMode) => void }) {
+  return (
+    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+      <Button
+        variant={viewMode === 'graphical' ? 'default' : 'ghost'}
+        size="sm"
+        onClick={() => onViewModeChange('graphical')}
+        className="gap-2"
+        data-testid="btn-view-graphical"
+      >
+        <BarChart3 className="h-4 w-4" />
+        Graphical
+      </Button>
+      <Button
+        variant={viewMode === 'statistics' ? 'default' : 'ghost'}
+        size="sm"
+        onClick={() => onViewModeChange('statistics')}
+        className="gap-2"
+        data-testid="btn-view-statistics"
+      >
+        <TableIcon className="h-4 w-4" />
+        Statistics
+      </Button>
+    </div>
+  );
+}
+
 function StatCard({ 
   title, 
   icon: Icon, 
@@ -116,62 +162,111 @@ function StatCard({
   );
 }
 
-function OverviewTab({ data }: { data: OverviewData }) {
+function OverviewTabGraphical({ data }: { data: OverviewData }) {
+  const salesChartData = [
+    { name: 'Today', newLeads: data.sales.today.newLeads, won: data.sales.today.dealsWon, lost: data.sales.today.dealsLost },
+    { name: 'Week', newLeads: data.sales.week.newLeads, won: data.sales.week.dealsWon, lost: data.sales.week.dealsLost },
+    { name: 'Month', newLeads: data.sales.month.newLeads, won: data.sales.month.dealsWon, lost: data.sales.month.dealsLost },
+    { name: 'Year', newLeads: data.sales.year.newLeads, won: data.sales.year.dealsWon, lost: data.sales.year.dealsLost },
+  ];
+
+  const implementationChartData = [
+    { name: 'Today', started: data.implementation.today.started, completed: data.implementation.today.completed },
+    { name: 'Week', started: data.implementation.week.started, completed: data.implementation.week.completed },
+    { name: 'Month', started: data.implementation.month.started, completed: data.implementation.month.completed },
+    { name: 'Year', started: data.implementation.year.started, completed: data.implementation.year.completed },
+  ];
+
+  const supportChartData = [
+    { name: 'Today', opened: data.support.today.opened, closed: data.support.today.closed },
+    { name: 'Week', opened: data.support.week.opened, closed: data.support.week.closed },
+    { name: 'Month', opened: data.support.month.opened, closed: data.support.month.closed },
+    { name: 'Year', opened: data.support.year.opened, closed: data.support.year.closed },
+  ];
+
+  const salesPieData = [
+    { name: 'Active', value: data.sales.total.activeLeads, color: CHART_COLORS.info },
+    { name: 'Negotiation', value: data.sales.total.negotiation, color: CHART_COLORS.accent },
+    { name: 'Won (Month)', value: data.sales.month.dealsWon, color: CHART_COLORS.success },
+    { name: 'Lost (Month)', value: data.sales.month.dealsLost, color: CHART_COLORS.danger },
+  ];
+
+  const implPieData = [
+    { name: 'In Progress', value: data.implementation.total.inProgress, color: CHART_COLORS.info },
+    { name: 'Training', value: data.implementation.total.training, color: CHART_COLORS.accent },
+    { name: 'Completed', value: data.implementation.total.completed, color: CHART_COLORS.success },
+    { name: 'Overdue', value: data.implementation.total.overdue, color: CHART_COLORS.danger },
+  ];
+
+  const supportPieData = [
+    { name: 'Open', value: data.support.total.open, color: CHART_COLORS.info },
+    { name: 'In Progress', value: data.support.total.inProgress, color: CHART_COLORS.accent },
+    { name: 'Escalated', value: data.support.total.escalated, color: CHART_COLORS.purple },
+    { name: 'Critical', value: data.support.total.critical, color: CHART_COLORS.danger },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Sales Section */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Target className="h-5 w-5 text-amber-500" />
           <h3 className="text-lg font-semibold">Sales</h3>
           <Badge variant="outline" className="ml-auto">{data.sales.total.activeLeads} Active Leads</Badge>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="New Leads" icon={TrendingUp} iconColor="text-blue-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.today.newLeads}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.week.newLeads}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.month.newLeads}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.year.newLeads}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
-          <StatCard title="Deals Won" icon={CheckCircle} iconColor="text-green-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.sales.today.dealsWon}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.sales.week.dealsWon}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.sales.month.dealsWon}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.sales.year.dealsWon}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-            <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
-              Value: {formatCurrency(data.sales.month.dealsWonValue)} this month
-            </div>
-          </StatCard>
-          <StatCard title="Deals Lost" icon={XCircle} iconColor="text-red-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg text-red-600">{data.sales.today.dealsLost}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-red-600">{data.sales.week.dealsLost}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-red-600">{data.sales.month.dealsLost}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-red-600">{data.sales.year.dealsLost}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-            <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
-              Lost Value: {formatCurrency(data.sales.month.dealsLostValue)} this month
-            </div>
-          </StatCard>
-          <StatCard title="Follow-ups" icon={Calendar} iconColor="text-purple-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.today.followups}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.week.followups}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.month.followups}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.sales.year.followups}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Sales Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={salesChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="newLeads" name="New Leads" fill={CHART_COLORS.info} />
+                  <Bar dataKey="won" name="Won" fill={CHART_COLORS.success} />
+                  <Bar dataKey="lost" name="Lost" fill={CHART_COLORS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Lead Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={salesPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {salesPieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       <Separator />
 
       {/* Implementation Section */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Briefcase className="h-5 w-5 text-blue-500" />
           <h3 className="text-lg font-semibold">Implementation</h3>
@@ -180,38 +275,58 @@ function OverviewTab({ data }: { data: OverviewData }) {
             <Badge variant="destructive">{data.implementation.total.overdue} Overdue</Badge>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Projects Started" icon={ArrowUp} iconColor="text-blue-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg">{data.implementation.today.started}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.implementation.week.started}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.implementation.month.started}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.implementation.year.started}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
-          <StatCard title="Projects Completed" icon={CheckCircle} iconColor="text-green-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.implementation.today.completed}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.implementation.week.completed}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.implementation.month.completed}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.implementation.year.completed}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
-          <StatCard title="Training Phase" icon={Users} iconColor="text-amber-500">
-            <div className="text-2xl font-bold text-amber-600">{data.implementation.total.training}</div>
-            <div className="text-xs text-muted-foreground mt-1">Projects in training phase</div>
-          </StatCard>
-          <StatCard title="Overdue Projects" icon={AlertTriangle} iconColor="text-red-500">
-            <div className="text-2xl font-bold text-red-600">{data.implementation.total.overdue}</div>
-            <div className="text-xs text-muted-foreground mt-1">Past target go-live date</div>
-          </StatCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Implementation Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={implementationChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Area type="monotone" dataKey="started" name="Started" stroke={CHART_COLORS.info} fill={CHART_COLORS.info} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="completed" name="Completed" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Project Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={implPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {implPieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       <Separator />
 
       {/* Support Section */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
           <HeadphonesIcon className="h-5 w-5 text-green-500" />
           <h3 className="text-lg font-semibold">Support</h3>
@@ -219,42 +334,332 @@ function OverviewTab({ data }: { data: OverviewData }) {
           {data.support.total.critical > 0 && (
             <Badge variant="destructive">{data.support.total.critical} Critical</Badge>
           )}
-          {data.support.total.overdue > 0 && (
-            <Badge variant="outline" className="border-amber-500 text-amber-600">{data.support.total.overdue} Overdue</Badge>
-          )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Tickets Opened" icon={TrendingUp} iconColor="text-blue-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg">{data.support.today.opened}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.support.week.opened}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.support.month.opened}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg">{data.support.year.opened}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
-          <StatCard title="Tickets Closed" icon={CheckCircle} iconColor="text-green-500">
-            <div className="grid grid-cols-4 gap-1 text-sm">
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.support.today.closed}</div><div className="text-muted-foreground text-xs">Today</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.support.week.closed}</div><div className="text-muted-foreground text-xs">Week</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.support.month.closed}</div><div className="text-muted-foreground text-xs">Month</div></div>
-              <div className="text-center"><div className="font-bold text-lg text-green-600">{data.support.year.closed}</div><div className="text-muted-foreground text-xs">Year</div></div>
-            </div>
-          </StatCard>
-          <StatCard title="Escalated" icon={ArrowUp} iconColor="text-amber-500">
-            <div className="text-2xl font-bold text-amber-600">{data.support.total.escalated}</div>
-            <div className="text-xs text-muted-foreground mt-1">Requiring escalation</div>
-          </StatCard>
-          <StatCard title="Overdue Tickets" icon={Clock} iconColor="text-red-500">
-            <div className="text-2xl font-bold text-red-600">{data.support.total.overdue}</div>
-            <div className="text-xs text-muted-foreground mt-1">Past due date</div>
-          </StatCard>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Ticket Flow</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={supportChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="opened" name="Opened" stroke={CHART_COLORS.info} strokeWidth={2} />
+                  <Line type="monotone" dataKey="closed" name="Closed" stroke={CHART_COLORS.success} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Ticket Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={supportPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {supportPieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
   );
 }
 
-function SalesDrilldown() {
+function OverviewTabStatistics({ data }: { data: OverviewData }) {
+  const calculateChange = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous * 100).toFixed(1);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Sales Statistics */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Target className="h-5 w-5 text-amber-500" />
+          <h3 className="text-lg font-semibold">Sales Statistics</h3>
+          <Badge variant="outline" className="ml-auto">Total: {data.sales.total.leads} Leads</Badge>
+        </div>
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Metric</TableHead>
+                  <TableHead className="text-right">Today</TableHead>
+                  <TableHead className="text-right">This Week</TableHead>
+                  <TableHead className="text-right">This Month</TableHead>
+                  <TableHead className="text-right">This Year</TableHead>
+                  <TableHead className="text-right">W/W Change</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">New Leads</TableCell>
+                  <TableCell className="text-right">{data.sales.today.newLeads}</TableCell>
+                  <TableCell className="text-right">{data.sales.week.newLeads}</TableCell>
+                  <TableCell className="text-right">{data.sales.month.newLeads}</TableCell>
+                  <TableCell className="text-right">{data.sales.year.newLeads}</TableCell>
+                  <TableCell className="text-right">
+                    <span className={Number(calculateChange(data.sales.week.newLeads, data.sales.today.newLeads * 7)) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      {calculateChange(data.sales.week.newLeads, data.sales.today.newLeads * 7)}%
+                    </span>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Follow-ups</TableCell>
+                  <TableCell className="text-right">{data.sales.today.followups}</TableCell>
+                  <TableCell className="text-right">{data.sales.week.followups}</TableCell>
+                  <TableCell className="text-right">{data.sales.month.followups}</TableCell>
+                  <TableCell className="text-right">{data.sales.year.followups}</TableCell>
+                  <TableCell className="text-right">-</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-green-600">Deals Won</TableCell>
+                  <TableCell className="text-right text-green-600">{data.sales.today.dealsWon}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.sales.week.dealsWon}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.sales.month.dealsWon}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.sales.year.dealsWon}</TableCell>
+                  <TableCell className="text-right text-green-600">
+                    {formatCurrency(data.sales.month.dealsWonValue)}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-red-600">Deals Lost</TableCell>
+                  <TableCell className="text-right text-red-600">{data.sales.today.dealsLost}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.sales.week.dealsLost}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.sales.month.dealsLost}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.sales.year.dealsLost}</TableCell>
+                  <TableCell className="text-right text-red-600">
+                    {formatCurrency(data.sales.month.dealsLostValue)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        
+        {/* Sales KPIs */}
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-blue-600">{data.sales.total.activeLeads}</div>
+              <div className="text-sm text-muted-foreground">Active Pipeline</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-amber-600">{data.sales.total.negotiation}</div>
+              <div className="text-sm text-muted-foreground">In Negotiation</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-green-600">
+                {data.sales.year.dealsWon > 0 ? 
+                  ((data.sales.year.dealsWon / (data.sales.year.dealsWon + data.sales.year.dealsLost)) * 100).toFixed(0) : 0}%
+              </div>
+              <div className="text-sm text-muted-foreground">Win Rate (YTD)</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-purple-50 dark:bg-purple-950/20 border-purple-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-purple-600">{formatCurrency(data.sales.year.dealsWonValue)}</div>
+              <div className="text-sm text-muted-foreground">Revenue (YTD)</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Implementation Statistics */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Briefcase className="h-5 w-5 text-blue-500" />
+          <h3 className="text-lg font-semibold">Implementation Statistics</h3>
+          <Badge variant="outline" className="ml-auto">Total: {data.implementation.total.projects} Projects</Badge>
+        </div>
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Metric</TableHead>
+                  <TableHead className="text-right">Today</TableHead>
+                  <TableHead className="text-right">This Week</TableHead>
+                  <TableHead className="text-right">This Month</TableHead>
+                  <TableHead className="text-right">This Year</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Projects Started</TableCell>
+                  <TableCell className="text-right">{data.implementation.today.started}</TableCell>
+                  <TableCell className="text-right">{data.implementation.week.started}</TableCell>
+                  <TableCell className="text-right">{data.implementation.month.started}</TableCell>
+                  <TableCell className="text-right">{data.implementation.year.started}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-green-600">Projects Completed</TableCell>
+                  <TableCell className="text-right text-green-600">{data.implementation.today.completed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.implementation.week.completed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.implementation.month.completed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.implementation.year.completed}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        
+        {/* Implementation KPIs */}
+        <div className="grid grid-cols-5 gap-4">
+          <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-blue-600">{data.implementation.total.inProgress}</div>
+              <div className="text-sm text-muted-foreground">In Progress</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-amber-600">{data.implementation.total.training}</div>
+              <div className="text-sm text-muted-foreground">Training Phase</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-green-600">{data.implementation.total.completed}</div>
+              <div className="text-sm text-muted-foreground">Completed</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-red-50 dark:bg-red-950/20 border-red-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-red-600">{data.implementation.total.overdue}</div>
+              <div className="text-sm text-muted-foreground">Overdue</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-purple-50 dark:bg-purple-950/20 border-purple-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-3xl font-bold text-purple-600">
+                {data.implementation.total.projects > 0 ? 
+                  ((data.implementation.total.completed / data.implementation.total.projects) * 100).toFixed(0) : 0}%
+              </div>
+              <div className="text-sm text-muted-foreground">Completion Rate</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Support Statistics */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <HeadphonesIcon className="h-5 w-5 text-green-500" />
+          <h3 className="text-lg font-semibold">Support Statistics</h3>
+          <Badge variant="outline" className="ml-auto">Total: {data.support.total.tickets} Tickets</Badge>
+        </div>
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Metric</TableHead>
+                  <TableHead className="text-right">Today</TableHead>
+                  <TableHead className="text-right">This Week</TableHead>
+                  <TableHead className="text-right">This Month</TableHead>
+                  <TableHead className="text-right">This Year</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Tickets Opened</TableCell>
+                  <TableCell className="text-right">{data.support.today.opened}</TableCell>
+                  <TableCell className="text-right">{data.support.week.opened}</TableCell>
+                  <TableCell className="text-right">{data.support.month.opened}</TableCell>
+                  <TableCell className="text-right">{data.support.year.opened}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-green-600">Tickets Closed</TableCell>
+                  <TableCell className="text-right text-green-600">{data.support.today.closed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.support.week.closed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.support.month.closed}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.support.year.closed}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        
+        {/* Support KPIs */}
+        <div className="grid grid-cols-6 gap-4">
+          <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-blue-600">{data.support.total.open}</div>
+              <div className="text-xs text-muted-foreground">Open</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-amber-600">{data.support.total.inProgress}</div>
+              <div className="text-xs text-muted-foreground">In Progress</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-orange-50 dark:bg-orange-950/20 border-orange-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{data.support.total.escalated}</div>
+              <div className="text-xs text-muted-foreground">Escalated</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-red-50 dark:bg-red-950/20 border-red-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-red-600">{data.support.total.critical}</div>
+              <div className="text-xs text-muted-foreground">Critical</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-rose-50 dark:bg-rose-950/20 border-rose-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-rose-600">{data.support.total.overdue}</div>
+              <div className="text-xs text-muted-foreground">Overdue</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {data.support.year.opened > 0 ? 
+                  ((data.support.year.closed / data.support.year.opened) * 100).toFixed(0) : 0}%
+              </div>
+              <div className="text-xs text-muted-foreground">Resolution Rate</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SalesDrilldown({ viewMode }: { viewMode: ViewMode }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState<number | null>(null);
   const [week, setWeek] = useState<number | null>(null);
@@ -347,64 +752,106 @@ function SalesDrilldown() {
         </div>
       )}
       
-      {/* Chart */}
-      {data?.buckets && data.buckets.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Sales Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={data.buckets}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="newLeads" name="New Leads" fill="#60a5fa" />
-                <Bar dataKey="dealsWon" name="Won" fill="#4ade80" />
-                <Bar dataKey="dealsLost" name="Lost" fill="#f87171" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* Graphical View */}
+      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Sales Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="newLeads" name="New Leads" fill={CHART_COLORS.info} />
+                  <Bar dataKey="dealsWon" name="Won" fill={CHART_COLORS.success} />
+                  <Bar dataKey="dealsLost" name="Lost" fill={CHART_COLORS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Revenue Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis tickFormatter={(value) => formatCurrency(value)} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Legend />
+                  <Area type="monotone" dataKey="dealsWonValue" name="Won Value" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="dealsLostValue" name="Lost Value" stroke={CHART_COLORS.danger} fill={CHART_COLORS.danger} fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
       )}
       
-      {/* Data Table */}
-      {data?.buckets && data.buckets.length > 0 && !week && (
+      {/* Statistics View - Data Table */}
+      {viewMode === 'statistics' && data?.buckets && data.buckets.length > 0 && !week && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Breakdown</CardTitle>
+            <CardTitle className="text-base">Detailed Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Period</th>
-                    <th className="text-right py-2">New Leads</th>
-                    <th className="text-right py-2">Won</th>
-                    <th className="text-right py-2">Won Value</th>
-                    <th className="text-right py-2">Lost</th>
-                    <th className="text-right py-2">Lost Value</th>
-                    <th className="text-right py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.buckets.map((bucket) => (
-                    <tr key={bucket.period} className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => handleDrillDown(bucket.period, bucket.weekNumber)}>
-                      <td className="py-2 font-medium">{bucket.label}</td>
-                      <td className="text-right py-2">{bucket.newLeads}</td>
-                      <td className="text-right py-2 text-green-600">{bucket.dealsWon}</td>
-                      <td className="text-right py-2 text-green-600">{formatCurrency(bucket.dealsWonValue)}</td>
-                      <td className="text-right py-2 text-red-600">{bucket.dealsLost}</td>
-                      <td className="text-right py-2 text-red-600">{formatCurrency(bucket.dealsLostValue)}</td>
-                      <td className="text-right py-2"><ChevronRight className="h-4 w-4 text-muted-foreground" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">New Leads</TableHead>
+                  <TableHead className="text-right">Lead Value</TableHead>
+                  <TableHead className="text-right">Won</TableHead>
+                  <TableHead className="text-right">Won Value</TableHead>
+                  <TableHead className="text-right">Lost</TableHead>
+                  <TableHead className="text-right">Lost Value</TableHead>
+                  <TableHead className="text-right">Win Rate</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.buckets.map((bucket) => {
+                  const total = bucket.dealsWon + bucket.dealsLost;
+                  const winRate = total > 0 ? ((bucket.dealsWon / total) * 100).toFixed(0) : '-';
+                  return (
+                    <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period, bucket.weekNumber)}>
+                      <TableCell className="font-medium">{bucket.label}</TableCell>
+                      <TableCell className="text-right">{bucket.newLeads}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatCurrency(bucket.newLeadsValue)}</TableCell>
+                      <TableCell className="text-right text-green-600">{bucket.dealsWon}</TableCell>
+                      <TableCell className="text-right text-green-600">{formatCurrency(bucket.dealsWonValue)}</TableCell>
+                      <TableCell className="text-right text-red-600">{bucket.dealsLost}</TableCell>
+                      <TableCell className="text-right text-red-600">{formatCurrency(bucket.dealsLostValue)}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={Number(winRate) >= 50 ? 'default' : 'outline'}>
+                          {winRate}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* Totals Row */}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right">{data.buckets.reduce((sum, b) => sum + b.newLeads, 0)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(data.buckets.reduce((sum, b) => sum + b.newLeadsValue, 0))}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.buckets.reduce((sum, b) => sum + b.dealsWon, 0)}</TableCell>
+                  <TableCell className="text-right text-green-600">{formatCurrency(data.buckets.reduce((sum, b) => sum + b.dealsWonValue, 0))}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.buckets.reduce((sum, b) => sum + b.dealsLost, 0)}</TableCell>
+                  <TableCell className="text-right text-red-600">{formatCurrency(data.buckets.reduce((sum, b) => sum + b.dealsLostValue, 0))}</TableCell>
+                  <TableCell className="text-right">-</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
@@ -441,7 +888,7 @@ function SalesDrilldown() {
   );
 }
 
-function ImplementationDrilldown() {
+function ImplementationDrilldown({ viewMode }: { viewMode: ViewMode }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState<number | null>(null);
   
@@ -499,23 +946,97 @@ function ImplementationDrilldown() {
         </div>
       )}
       
-      {/* Chart */}
-      {data?.buckets && data.buckets.length > 0 && (
+      {/* Graphical View */}
+      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Implementation Trend</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="started" name="Started" fill={CHART_COLORS.info} />
+                  <Bar dataKey="completed" name="Completed" fill={CHART_COLORS.success} />
+                  <Bar dataKey="overdue" name="Overdue" fill={CHART_COLORS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Completion Rate</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(value: number, name: string) => name === 'Rate' ? `${value}%` : value} />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey={(d: ImplementationBucket) => d.started > 0 ? ((d.completed / d.started) * 100).toFixed(0) : 0} 
+                    name="Rate" 
+                    stroke={CHART_COLORS.accent} 
+                    strokeWidth={2} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Statistics View - Data Table */}
+      {viewMode === 'statistics' && data?.buckets && data.buckets.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Implementation Trend</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">Detailed Breakdown</CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={data.buckets}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="started" name="Started" fill="#60a5fa" />
-                <Bar dataKey="completed" name="Completed" fill="#4ade80" />
-                <Bar dataKey="overdue" name="Overdue" fill="#f87171" />
-              </BarChart>
-            </ResponsiveContainer>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Started</TableHead>
+                  <TableHead className="text-right">Completed</TableHead>
+                  <TableHead className="text-right">Overdue</TableHead>
+                  <TableHead className="text-right">Completion Rate</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.buckets.map((bucket) => {
+                  const rate = bucket.started > 0 ? ((bucket.completed / bucket.started) * 100).toFixed(0) : '-';
+                  return (
+                    <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period)}>
+                      <TableCell className="font-medium">{bucket.label}</TableCell>
+                      <TableCell className="text-right text-blue-600">{bucket.started}</TableCell>
+                      <TableCell className="text-right text-green-600">{bucket.completed}</TableCell>
+                      <TableCell className="text-right text-red-600">{bucket.overdue}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={Number(rate) >= 80 ? 'default' : Number(rate) >= 50 ? 'outline' : 'destructive'}>
+                          {rate}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* Totals Row */}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right text-blue-600">{data.buckets.reduce((sum, b) => sum + b.started, 0)}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.buckets.reduce((sum, b) => sum + b.completed, 0)}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.buckets.reduce((sum, b) => sum + b.overdue, 0)}</TableCell>
+                  <TableCell className="text-right">-</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
@@ -553,7 +1074,7 @@ function ImplementationDrilldown() {
   );
 }
 
-function SupportDrilldown() {
+function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState<number | null>(null);
   
@@ -612,23 +1133,95 @@ function SupportDrilldown() {
         </div>
       )}
       
-      {/* Chart */}
-      {data?.buckets && data.buckets.length > 0 && (
+      {/* Graphical View */}
+      {viewMode === 'graphical' && data?.buckets && data.buckets.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Support Trend</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="opened" name="Opened" fill={CHART_COLORS.info} />
+                  <Bar dataKey="closed" name="Closed" fill={CHART_COLORS.success} />
+                  <Bar dataKey="critical" name="Critical" fill={CHART_COLORS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Resolution Rate</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={data.buckets}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 'auto']} />
+                  <Tooltip />
+                  <Legend />
+                  <Area type="monotone" dataKey="opened" name="Opened" stroke={CHART_COLORS.info} fill={CHART_COLORS.info} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="closed" name="Closed" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Statistics View - Data Table */}
+      {viewMode === 'statistics' && data?.buckets && data.buckets.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Support Trend</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">Detailed Breakdown</CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={data.buckets}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="opened" name="Opened" fill="#60a5fa" />
-                <Bar dataKey="closed" name="Closed" fill="#4ade80" />
-                <Bar dataKey="critical" name="Critical" fill="#f87171" />
-              </BarChart>
-            </ResponsiveContainer>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Opened</TableHead>
+                  <TableHead className="text-right">Closed</TableHead>
+                  <TableHead className="text-right">Critical</TableHead>
+                  <TableHead className="text-right">Overdue</TableHead>
+                  <TableHead className="text-right">Resolution Rate</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.buckets.map((bucket) => {
+                  const rate = bucket.opened > 0 ? ((bucket.closed / bucket.opened) * 100).toFixed(0) : '-';
+                  return (
+                    <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period)}>
+                      <TableCell className="font-medium">{bucket.label}</TableCell>
+                      <TableCell className="text-right text-blue-600">{bucket.opened}</TableCell>
+                      <TableCell className="text-right text-green-600">{bucket.closed}</TableCell>
+                      <TableCell className="text-right text-red-600">{bucket.critical}</TableCell>
+                      <TableCell className="text-right text-amber-600">{bucket.overdue}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={Number(rate) >= 80 ? 'default' : Number(rate) >= 50 ? 'outline' : 'destructive'}>
+                          {rate}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right"><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
+                    </TableRow>
+                  );
+                })}
+                {/* Totals Row */}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right text-blue-600">{data.buckets.reduce((sum, b) => sum + b.opened, 0)}</TableCell>
+                  <TableCell className="text-right text-green-600">{data.buckets.reduce((sum, b) => sum + b.closed, 0)}</TableCell>
+                  <TableCell className="text-right text-red-600">{data.buckets.reduce((sum, b) => sum + b.critical, 0)}</TableCell>
+                  <TableCell className="text-right text-amber-600">{data.buckets.reduce((sum, b) => sum + b.overdue, 0)}</TableCell>
+                  <TableCell className="text-right">-</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
@@ -666,7 +1259,7 @@ function SupportDrilldown() {
   );
 }
 
-function PerformanceTab() {
+function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState('month');
   
   const { data, isLoading } = useQuery<{ topPerformers: PerformanceUser[]; byDepartment: any; allUsers: PerformanceUser[] }>({
@@ -679,6 +1272,13 @@ function PerformanceTab() {
     if (index === 2) return 'text-amber-700';
     return 'text-muted-foreground';
   };
+
+  const radarData = data?.topPerformers?.slice(0, 5).map(user => ({
+    name: user.name.split(' ')[0],
+    sales: user.scores.sales,
+    implementation: user.scores.implementation,
+    support: user.scores.support,
+  })) || [];
   
   return (
     <div className="space-y-4">
@@ -698,7 +1298,119 @@ function PerformanceTab() {
         </Select>
       </div>
       
-      {/* Top Performers */}
+      {/* Graphical View */}
+      {viewMode === 'graphical' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Top Performers Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                Top Performers Score
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={data?.topPerformers?.slice(0, 5) || []} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="scores.sales" name="Sales" fill={CHART_COLORS.accent} stackId="a" />
+                  <Bar dataKey="scores.implementation" name="Implementation" fill={CHART_COLORS.info} stackId="a" />
+                  <Bar dataKey="scores.support" name="Support" fill={CHART_COLORS.success} stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Performance Distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Department Contribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Sales', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.sales, 0) || 0, color: CHART_COLORS.accent },
+                      { name: 'Implementation', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.implementation, 0) || 0, color: CHART_COLORS.info },
+                      { name: 'Support', value: data?.topPerformers?.reduce((sum, u) => sum + u.scores.support, 0) || 0, color: CHART_COLORS.success },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    <Cell fill={CHART_COLORS.accent} />
+                    <Cell fill={CHART_COLORS.info} />
+                    <Cell fill={CHART_COLORS.success} />
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Statistics View */}
+      {viewMode === 'statistics' && data?.allUsers && data.allUsers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Detailed Performance Metrics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Rank</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead className="text-right">Leads</TableHead>
+                  <TableHead className="text-right">Won</TableHead>
+                  <TableHead className="text-right">Win Rate</TableHead>
+                  <TableHead className="text-right">Projects</TableHead>
+                  <TableHead className="text-right">Tickets</TableHead>
+                  <TableHead className="text-right">Total Score</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.allUsers.map((user, i) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <span className={`font-bold ${getMedalColor(i)}`}>#{i + 1}</span>
+                    </TableCell>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{user.department}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{user.metrics.sales.leadsGenerated}</TableCell>
+                    <TableCell className="text-right text-green-600">{user.metrics.sales.dealsWon}</TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={user.metrics.sales.winRate >= 50 ? 'default' : 'outline'}>
+                        {user.metrics.sales.winRate.toFixed(0)}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-blue-600">{user.metrics.implementation.projectsCompleted}</TableCell>
+                    <TableCell className="text-right text-purple-600">{user.metrics.support.ticketsClosed}</TableCell>
+                    <TableCell className="text-right">
+                      <span className="font-bold text-primary">{user.scores.total}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Top Performers Card (Always shown) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -813,6 +1525,8 @@ function PerformanceTab() {
 }
 
 export default function SuperAdminDashboard() {
+  const [viewMode, setViewMode] = useState<ViewMode>('graphical');
+  
   const { data: overviewData, isLoading } = useQuery<OverviewData>({
     queryKey: ['/api/admin/dashboard/overview'],
   });
@@ -820,15 +1534,18 @@ export default function SuperAdminDashboard() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
           <p className="text-muted-foreground">Complete overview of Sales, Implementation & Support</p>
         </div>
-        <Badge variant="outline" className="text-primary border-primary">
-          <Calendar className="h-3 w-3 mr-1" />
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </Badge>
+        <div className="flex items-center gap-4">
+          <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+          <Badge variant="outline" className="text-primary border-primary">
+            <Calendar className="h-3 w-3 mr-1" />
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </Badge>
+        </div>
       </div>
       
       {/* Main Tabs */}
@@ -847,26 +1564,30 @@ export default function SuperAdminDashboard() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : overviewData ? (
-            <OverviewTab data={overviewData} />
+            viewMode === 'graphical' ? (
+              <OverviewTabGraphical data={overviewData} />
+            ) : (
+              <OverviewTabStatistics data={overviewData} />
+            )
           ) : (
             <div className="text-center text-muted-foreground py-8">No data available</div>
           )}
         </TabsContent>
         
         <TabsContent value="sales">
-          <SalesDrilldown />
+          <SalesDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="implementation">
-          <ImplementationDrilldown />
+          <ImplementationDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="support">
-          <SupportDrilldown />
+          <SupportDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="performance">
-          <PerformanceTab />
+          <PerformanceTab viewMode={viewMode} />
         </TabsContent>
       </Tabs>
     </div>

@@ -6640,7 +6640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getLeads({}),
         storage.getProjects({}),
         storage.getTickets({}),
-        storage.getFollowUps(),
+        storage.getAllFollowUps(),
         storage.getUsers(),
       ]);
       
@@ -6795,7 +6795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const [allLeads, allFollowUps, allUsers] = await Promise.all([
         storage.getLeads({}),
-        storage.getFollowUps(),
+        storage.getAllFollowUps(),
         storage.getUsers(),
       ]);
       
@@ -7258,7 +7258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getLeads({}),
         storage.getProjects({}),
         storage.getTickets({}),
-        storage.getFollowUps(),
+        storage.getAllFollowUps(),
         storage.getDepartments(),
       ]);
       
