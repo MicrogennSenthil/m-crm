@@ -3587,6 +3587,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Support Dashboard API
+  app.get("/api/dashboard/support", isAuthenticated, async (req, res) => {
+    try {
+      const allTickets = await storage.getTickets({});
+      const users = await storage.getUsers();
+      
+      // Calculate stats
+      const totalTickets = allTickets.length;
+      const assignedCount = allTickets.filter(t => t.assignedEngineerId).length;
+      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId).length;
+      const inProcessCount = allTickets.filter(t => t.status === 'in_progress').length;
+      const completedCount = allTickets.filter(t => t.status === 'closed').length;
+      const reopenedCount = allTickets.filter(t => t.status === 'reopened' || t.reopenedFromTicketId).length;
+      const openCount = allTickets.filter(t => t.status === 'open').length;
+      const pendingCustomerCount = allTickets.filter(t => t.status === 'pending_customer').length;
+      const escalatedCount = allTickets.filter(t => t.status === 'escalated' || (t.escalationLevel && t.escalationLevel > 1)).length;
+      
+      // Calculate reassigned tickets - those where assignment changed (check activity log or estimate)
+      // For now, we can count tickets that have been updated and have an assignment
+      const reassignedCount = allTickets.filter(t => 
+        t.assignedEngineerId && t.updatedAt && t.createdAt && 
+        new Date(t.updatedAt).getTime() > new Date(t.createdAt).getTime() + 60000
+      ).length;
+      
+      // More than 30 min processing - tickets in_progress for more than 30 minutes
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const longProcessingCount = allTickets.filter(t => 
+        t.status === 'in_progress' && 
+        t.updatedAt && new Date(t.updatedAt) < thirtyMinAgo
+      ).length;
+      
+      // Add user info to tickets for display
+      const ticketsWithAssignee = allTickets.map(ticket => {
+        const assignee = users.find(u => u.id === ticket.assignedEngineerId);
+        return {
+          ...ticket,
+          assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email : null,
+        };
+      });
+      
+      res.json({
+        stats: {
+          totalTickets,
+          assignedCount,
+          unassignedCount,
+          openCount,
+          inProcessCount,
+          completedCount,
+          pendingCustomerCount,
+          escalatedCount,
+          reassignedCount,
+          reopenedCount,
+          longProcessingCount,
+        },
+        tickets: ticketsWithAssignee,
+      });
+    } catch (error) {
+      console.error("Error fetching support dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch support dashboard" });
+    }
+  });
+
   // Ticket routes
   app.get("/api/tickets", isAuthenticated, async (req, res) => {
     try {

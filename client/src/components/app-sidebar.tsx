@@ -138,6 +138,14 @@ const menuGroups = [
         bgColor: "bg-orange-500/10",
         roles: ["support", "admin"],
       },
+      {
+        title: "Support Dashboard",
+        url: "/support-dashboard",
+        icon: ClipboardCheck,
+        color: "text-red-500",
+        bgColor: "bg-red-500/10",
+        roles: ["support", "admin"],
+      },
     ],
   },
   {

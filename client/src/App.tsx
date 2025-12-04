@@ -19,6 +19,7 @@ import Sales from "@/pages/sales";
 import Implementations from "@/pages/implementations";
 import ImplementationDashboard from "@/pages/implementation-dashboard";
 import Support from "@/pages/support";
+import SupportDashboard from "@/pages/support-dashboard";
 import Reports from "@/pages/reports";
 import SalesReports from "@/pages/reports-sales";
 import ImplementationReports from "@/pages/reports-implementation";
@@ -84,6 +85,7 @@ function AuthenticatedLayout() {
               <Route path="/implementations" component={Implementations} />
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />
               <Route path="/support" component={Support} />
+              <Route path="/support-dashboard" component={SupportDashboard} />
               <Route path="/reports" component={Reports} />
               <Route path="/reports/sales" component={SalesReports} />
               <Route path="/reports/implementation" component={ImplementationReports} />
