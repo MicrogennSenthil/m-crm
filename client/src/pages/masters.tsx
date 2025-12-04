@@ -773,10 +773,10 @@ function DepartmentsTab() {
       dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getManagerName = (managerId: string | null) => {
+  const getHeadName = (managerId: string | null) => {
     if (!managerId) return "-";
-    const manager = users.find(u => u.id === managerId);
-    return manager ? `${manager.firstName || ""} ${manager.lastName || ""}`.trim() || manager.email : "-";
+    const head = users.find(u => u.id === managerId);
+    return head ? `${head.firstName || ""} ${head.lastName || ""}`.trim() || head.email : "-";
   };
 
   return (
@@ -836,7 +836,7 @@ function DepartmentsTab() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead className="hidden sm:table-cell">Description</TableHead>
-                  <TableHead className="hidden md:table-cell">Manager</TableHead>
+                  <TableHead className="hidden md:table-cell">Department Head</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -849,7 +849,7 @@ function DepartmentsTab() {
                       {dept.description || "-"}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {getManagerName(dept.managerId)}
+                      {getHeadName(dept.managerId)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={dept.isActive ? "default" : "secondary"}>
@@ -983,16 +983,16 @@ function DepartmentForm({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="managerId">Department Manager</Label>
+          <Label htmlFor="managerId">Department Head</Label>
           <Select
             value={formData.managerId || "_none"}
             onValueChange={(value) => setFormData({ ...formData, managerId: value === "_none" ? "" : value })}
           >
-            <SelectTrigger data-testid="select-department-manager">
-              <SelectValue placeholder="Select a manager" />
+            <SelectTrigger data-testid="select-department-head">
+              <SelectValue placeholder="Select department head" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="_none">No Manager</SelectItem>
+              <SelectItem value="_none">No Head Assigned</SelectItem>
               {users.filter(u => u.isActive).map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.firstName} {user.lastName} ({user.email})
