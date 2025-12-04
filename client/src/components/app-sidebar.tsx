@@ -33,6 +33,7 @@ import {
   Mail,
   ServerCog,
   Star,
+  Gauge,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -566,18 +567,18 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
               {/* Administration Group */}
               {user?.role === "admin" && (
                 <Collapsible 
-                  defaultOpen={location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive} 
+                  defaultOpen={location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive} 
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
-                        isActive={location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive}
+                        isActive={location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive}
                         data-testid="nav-group-admin"
                         className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                       >
-                        <div className={`flex items-center justify-center rounded-lg p-1.5 ${(location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "bg-red-500/10" : ""}`}>
-                          <Cog className={`h-4 w-4 text-red-500 ${(location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "" : "opacity-70"}`} />
+                        <div className={`flex items-center justify-center rounded-lg p-1.5 ${(location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "bg-red-500/10" : ""}`}>
+                          <Cog className={`h-4 w-4 text-red-500 ${(location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive) ? "" : "opacity-70"}`} />
                         </div>
                         {!isCollapsed && <span>Administration</span>}
                         {!isCollapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />}
@@ -585,6 +586,20 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === "/admin/dashboard"}
+                            data-testid="nav-super-admin-dashboard"
+                          >
+                            <Link href="/admin/dashboard">
+                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/admin/dashboard" ? "bg-amber-500/10" : ""}`}>
+                                <Gauge className={`h-3.5 w-3.5 text-amber-500 ${location === "/admin/dashboard" ? "" : "opacity-70"}`} />
+                              </div>
+                              <span>Super Dashboard</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton
                             asChild

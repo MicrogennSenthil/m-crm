@@ -45,6 +45,7 @@ import KnowledgeBaseSearch from "@/pages/knowledge-base-search";
 import SmtpConfig from "@/pages/admin/smtp-config";
 import PointCategories from "@/pages/admin/point-categories";
 import DatabaseControl from "@/pages/admin/database-control";
+import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -105,6 +106,7 @@ function AuthenticatedLayout() {
               <Route path="/admin/smtp-config" component={SmtpConfig} />
               <Route path="/admin/point-categories" component={PointCategories} />
               <Route path="/admin/database-control" component={DatabaseControl} />
+              <Route path="/admin/dashboard" component={SuperAdminDashboard} />
               <Route path="/department-users" component={DepartmentUsers} />
               <Route component={NotFound} />
             </Switch>
