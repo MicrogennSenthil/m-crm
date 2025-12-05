@@ -2092,7 +2092,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leads", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertLeadSchema.parse(req.body);
+      let leadData = { ...req.body };
+      
+      // Auto-assignment if not specified - use configurable assignment settings
+      if (!leadData.salesExecutiveId) {
+        const nextUser = await storage.getNextAssignableUser("leads");
+        if (nextUser) {
+          leadData.salesExecutiveId = nextUser.id;
+          await storage.updateLastAssignedUser("leads", nextUser.id);
+        }
+      }
+      
+      const validatedData = insertLeadSchema.parse(leadData);
       const newLead = await storage.createLead(validatedData);
       
       // Log activity
@@ -4389,23 +4400,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertTicketSchema.parse(req.body);
       
-      // Round-robin assignment if not specified
+      // Auto-assignment if not specified - use configurable assignment settings
       if (!validatedData.assignedEngineerId) {
-        // Get users with roles marked as support-assignable
-        const supportEngineers = await storage.getSupportAssignableUsers();
-        if (supportEngineers.length > 0) {
-          // Get last assigned engineer and assign to next one
-          const recentTickets = await storage.getTickets({});
-          const assignedTickets = recentTickets.filter((t) => t.assignedEngineerId);
-          
-          if (assignedTickets.length > 0) {
-            const lastAssignedId = assignedTickets[0].assignedEngineerId;
-            const lastIndex = supportEngineers.findIndex((e) => e.id === lastAssignedId);
-            const nextIndex = (lastIndex + 1) % supportEngineers.length;
-            validatedData.assignedEngineerId = supportEngineers[nextIndex].id;
-          } else {
-            validatedData.assignedEngineerId = supportEngineers[0].id;
-          }
+        const nextUser = await storage.getNextAssignableUser("tickets");
+        if (nextUser) {
+          validatedData.assignedEngineerId = nextUser.id;
+          // Update last assigned user for round-robin tracking
+          await storage.updateLastAssignedUser("tickets", nextUser.id);
         }
       }
       
@@ -5067,13 +5068,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       
+      // Auto-assignment if not specified - use configurable assignment settings
+      let assignedTo = req.body.assignedTo;
+      if (!assignedTo) {
+        const nextUser = await storage.getNextAssignableUser("tasks");
+        if (nextUser) {
+          assignedTo = nextUser.id;
+          await storage.updateLastAssignedUser("tasks", nextUser.id);
+        }
+      }
+      
       // Parse dates properly and set assignedAt if task is assigned
       const taskData = {
         ...req.body,
         createdBy: userId,
+        assignedTo,
         reminderDate: req.body.reminderDate ? new Date(req.body.reminderDate) : undefined,
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
-        assignedAt: req.body.assignedTo ? new Date() : undefined,
+        assignedAt: assignedTo ? new Date() : undefined,
       };
       
       const validatedData = insertTaskSchema.parse(taskData);
@@ -6132,6 +6144,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting SMTP config:", error);
       res.status(500).json({ message: "Failed to delete SMTP configuration" });
+    }
+  });
+
+  // =============================================
+  // ASSIGNMENT SETTINGS ROUTES
+  // =============================================
+
+  // Get all assignment settings (Admin only)
+  app.get("/api/assignment-settings", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const settings = await storage.getAssignmentSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting assignment settings:", error);
+      res.status(500).json({ message: "Failed to get assignment settings" });
+    }
+  });
+
+  // Get assignment setting for a specific module (Admin only)
+  app.get("/api/assignment-settings/:module", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { module } = req.params;
+      const setting = await storage.getAssignmentSetting(module);
+      if (!setting) {
+        // Return default settings if none exist
+        return res.json({
+          module,
+          assignmentMethod: "manual",
+          isEnabled: false,
+          assignableRoles: [],
+        });
+      }
+      res.json(setting);
+    } catch (error) {
+      console.error("Error getting assignment setting:", error);
+      res.status(500).json({ message: "Failed to get assignment setting" });
+    }
+  });
+
+  // Update assignment setting (Admin only)
+  app.put("/api/assignment-settings/:module", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { module } = req.params;
+      const userId = req.user?.id;
+      
+      // Validate module
+      if (!["tickets", "tasks", "leads"].includes(module)) {
+        return res.status(400).json({ message: "Invalid module. Must be 'tickets', 'tasks', or 'leads'" });
+      }
+      
+      const { assignmentMethod, isEnabled, departmentId, assignableRoles } = req.body;
+      
+      const setting = await storage.upsertAssignmentSetting({
+        module,
+        assignmentMethod: assignmentMethod || "manual",
+        isEnabled: isEnabled ?? true,
+        departmentId: departmentId || null,
+        assignableRoles: assignableRoles || [],
+      });
+      
+      await storage.logActivity({
+        entityType: "assignment_settings",
+        entityId: module,
+        action: "updated",
+        description: `Updated assignment settings for ${module}: method=${assignmentMethod}, enabled=${isEnabled}`,
+        userId,
+      });
+      
+      res.json(setting);
+    } catch (error) {
+      console.error("Error updating assignment setting:", error);
+      res.status(500).json({ message: "Failed to update assignment setting" });
+    }
+  });
+
+  // Initialize default assignment settings (Admin only)
+  app.post("/api/assignment-settings/initialize", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const modules = ["tickets", "tasks", "leads"];
+      const results = [];
+      
+      for (const module of modules) {
+        const existing = await storage.getAssignmentSetting(module);
+        if (!existing) {
+          const setting = await storage.upsertAssignmentSetting({
+            module,
+            assignmentMethod: module === "tickets" ? "round_robin" : "manual",
+            isEnabled: module === "tickets",
+            assignableRoles: module === "tickets" ? ["support"] : [],
+          });
+          results.push(setting);
+        } else {
+          results.push(existing);
+        }
+      }
+      
+      await storage.logActivity({
+        entityType: "assignment_settings",
+        entityId: "all",
+        action: "initialized",
+        description: "Initialized default assignment settings",
+        userId,
+      });
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error initializing assignment settings:", error);
+      res.status(500).json({ message: "Failed to initialize assignment settings" });
     }
   });
 

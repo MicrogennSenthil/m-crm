@@ -44,6 +44,7 @@ import KnowledgeBaseAdmin from "@/pages/knowledge-base-admin";
 import KnowledgeBaseSearch from "@/pages/knowledge-base-search";
 import SmtpConfig from "@/pages/admin/smtp-config";
 import PointCategories from "@/pages/admin/point-categories";
+import AssignmentSettings from "@/pages/admin/assignment-settings";
 import DatabaseControl from "@/pages/admin/database-control";
 import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 
@@ -105,6 +106,7 @@ function AuthenticatedLayout() {
               <Route path="/admin/knowledge-base" component={KnowledgeBaseAdmin} />
               <Route path="/admin/smtp-config" component={SmtpConfig} />
               <Route path="/admin/point-categories" component={PointCategories} />
+              <Route path="/admin/assignment-settings" component={AssignmentSettings} />
               <Route path="/admin/database-control" component={DatabaseControl} />
               <Route path="/admin/dashboard" component={SuperAdminDashboard} />
               <Route path="/department-users" component={DepartmentUsers} />

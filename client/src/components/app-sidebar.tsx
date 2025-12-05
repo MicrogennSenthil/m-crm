@@ -34,6 +34,7 @@ import {
   ServerCog,
   Star,
   Gauge,
+  RefreshCw,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -284,6 +285,13 @@ const systemSettingsSubItems = [
     bgColor: "bg-yellow-500/10",
   },
   {
+    title: "Assignment Settings",
+    url: "/admin/assignment-settings",
+    icon: RefreshCw,
+    color: "text-teal-500",
+    bgColor: "bg-teal-500/10",
+  },
+  {
     title: "Database Control",
     url: "/admin/database-control",
     icon: Database,
@@ -349,7 +357,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const isUserManagementActive = location.startsWith("/admin/user");
   
   // Check if any system settings sub-item is active
-  const isSystemSettingsActive = location === "/admin/smtp-config" || location === "/admin/point-categories" || location === "/admin/database-control";
+  const isSystemSettingsActive = location === "/admin/smtp-config" || location === "/admin/point-categories" || location === "/admin/assignment-settings" || location === "/admin/database-control";
 
   // Check if a group has any visible items and if any item is active
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {

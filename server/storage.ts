@@ -128,6 +128,9 @@ import {
   type InsertUserPointLedger,
   type UserPointBalance,
   type InsertUserPointBalance,
+  assignmentSettings,
+  type AssignmentSetting,
+  type InsertAssignmentSetting,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull } from "drizzle-orm";
@@ -434,6 +437,13 @@ export interface IStorage {
   getUserPointBalances(): Promise<UserPointBalance[]>;
   updateUserPointBalance(userId: string, points: number, moduleType: string): Promise<UserPointBalance>;
   initializeUserPointBalance(userId: string): Promise<UserPointBalance>;
+
+  // Assignment Settings operations
+  getAssignmentSettings(): Promise<AssignmentSetting[]>;
+  getAssignmentSetting(module: string): Promise<AssignmentSetting | undefined>;
+  upsertAssignmentSetting(setting: InsertAssignmentSetting): Promise<AssignmentSetting>;
+  updateLastAssignedUser(module: string, userId: string): Promise<void>;
+  getNextAssignableUser(module: string): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2922,6 +2932,85 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return created;
+  }
+
+  // Assignment Settings operations
+  async getAssignmentSettings(): Promise<AssignmentSetting[]> {
+    return await db.select().from(assignmentSettings).orderBy(assignmentSettings.module);
+  }
+
+  async getAssignmentSetting(module: string): Promise<AssignmentSetting | undefined> {
+    const [setting] = await db.select().from(assignmentSettings)
+      .where(eq(assignmentSettings.module, module));
+    return setting;
+  }
+
+  async upsertAssignmentSetting(setting: InsertAssignmentSetting): Promise<AssignmentSetting> {
+    const [upserted] = await db.insert(assignmentSettings)
+      .values(setting)
+      .onConflictDoUpdate({
+        target: assignmentSettings.module,
+        set: {
+          ...setting,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upserted;
+  }
+
+  async updateLastAssignedUser(module: string, userId: string): Promise<void> {
+    await db.update(assignmentSettings)
+      .set({ lastAssignedUserId: userId, updatedAt: new Date() })
+      .where(eq(assignmentSettings.module, module));
+  }
+
+  async getNextAssignableUser(module: string): Promise<User | undefined> {
+    const setting = await this.getAssignmentSetting(module);
+    
+    // Return undefined if settings don't exist, disabled, or method is manual/none
+    if (!setting || 
+        !setting.isEnabled || 
+        setting.assignmentMethod === 'manual' || 
+        setting.assignmentMethod === 'none') {
+      return undefined;
+    }
+
+    // Get users with assignable roles
+    let assignableUsers: User[] = [];
+    
+    if (setting.assignableRoles && setting.assignableRoles.length > 0) {
+      // Get users with matching roles
+      const allUsers = await this.getUsers();
+      assignableUsers = allUsers.filter(u => 
+        u.isActive !== false && 
+        setting.assignableRoles!.includes(u.role)
+      );
+    } else {
+      // Fall back to support assignable users for tickets, or all active users
+      if (module === 'tickets') {
+        assignableUsers = await this.getSupportAssignableUsers();
+      } else {
+        const allUsers = await this.getUsers();
+        assignableUsers = allUsers.filter(u => u.isActive !== false);
+      }
+    }
+
+    if (assignableUsers.length === 0) {
+      return undefined;
+    }
+
+    if (setting.assignmentMethod === 'round_robin') {
+      // Round-robin: get next user after last assigned
+      if (setting.lastAssignedUserId) {
+        const lastIndex = assignableUsers.findIndex(u => u.id === setting.lastAssignedUserId);
+        const nextIndex = (lastIndex + 1) % assignableUsers.length;
+        return assignableUsers[nextIndex];
+      }
+      return assignableUsers[0];
+    }
+
+    return undefined;
   }
 }
 
