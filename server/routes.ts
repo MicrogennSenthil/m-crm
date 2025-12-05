@@ -5136,6 +5136,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTaskSchema.parse(taskData);
       const newTask = await storage.createTask(validatedData);
       
+      // Save attachments if provided
+      if (req.body.attachments && Array.isArray(req.body.attachments)) {
+        for (const attachment of req.body.attachments) {
+          try {
+            await storage.createAttachment({
+              entityType: "task",
+              entityId: newTask.id,
+              fileName: attachment.name || attachment.fileName || "Unnamed",
+              fileType: attachment.mimeType || "application/octet-stream",
+              fileSize: attachment.size || 0,
+              objectPath: attachment.url || attachment.objectPath,
+              uploadedBy: userId,
+            });
+          } catch (attachmentError) {
+            console.error("Error saving attachment:", attachmentError);
+          }
+        }
+      }
+      
       // Award points if task is assigned
       if (newTask.assignedTo) {
         await handleAssignment({
