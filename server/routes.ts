@@ -1049,6 +1049,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
+      // Check for duplicate email if email is being updated
+      if (req.body.email) {
+        const existingUser = await storage.getUserByEmail(req.body.email);
+        if (existingUser && existingUser.id !== req.params.id) {
+          return res.status(400).json({ message: "A user with this email already exists" });
+        }
+      }
+      
       const updated = await storage.updateUser(req.params.id, req.body);
       
       await storage.logActivity({
@@ -1060,8 +1068,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating user:", error);
+      // Check for unique constraint violation
+      if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        return res.status(400).json({ message: "A user with this email already exists" });
+      }
       res.status(400).json({ message: "Failed to update user" });
     }
   });
