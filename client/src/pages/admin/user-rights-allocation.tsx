@@ -36,6 +36,8 @@ type Permission = {
   canDelete: boolean;
 };
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function UserRightsAllocation() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
@@ -43,14 +45,17 @@ export default function UserRightsAllocation() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+
   const { data: roles = [], isLoading: rolesLoading } = useQuery<UserRole[]>({
     queryKey: ["/api/user-roles"],
-    enabled: currentUser?.role === "admin",
+    enabled: isAdmin,
   });
 
   const { data: systemModules = [], isLoading: modulesLoading } = useQuery<SystemModule[]>({
     queryKey: ["/api/system-modules"],
-    enabled: currentUser?.role === "admin",
+    enabled: isAdmin,
   });
 
   const { data: roleRights = [], isLoading: rightsLoading, refetch: refetchRights } = useQuery<UserRoleRight[]>({
@@ -62,7 +67,7 @@ export default function UserRightsAllocation() {
       if (!res.ok) throw new Error("Failed to fetch role rights");
       return res.json();
     },
-    enabled: !!selectedRoleId && currentUser?.role === "admin",
+    enabled: !!selectedRoleId && isAdmin,
   });
 
   // Seed default modules if none exist
@@ -153,7 +158,7 @@ export default function UserRightsAllocation() {
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId);
 
-  if (currentUser?.role !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="w-full max-w-md">

@@ -40,11 +40,16 @@ const smtpFormSchema = z.object({
 
 type SmtpFormValues = z.infer<typeof smtpFormSchema>;
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function SmtpConfigPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [testEmail, setTestEmail] = useState("");
+
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = user?.role === "admin" || isSuperAdmin;
 
   const form = useForm<SmtpFormValues>({
     resolver: zodResolver(smtpFormSchema),
@@ -173,7 +178,7 @@ export default function SmtpConfigPage() {
     testMutation.mutate(testEmail);
   };
 
-  if (!user || user.role !== "admin") {
+  if (!user || !isAdmin) {
     return (
       <div className="p-6">
         <Alert variant="destructive">

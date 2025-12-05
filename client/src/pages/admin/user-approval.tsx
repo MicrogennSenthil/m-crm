@@ -47,6 +47,9 @@ export default function UserApproval() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users/all", { includeInactive: true }],
     queryFn: async () => {
@@ -54,7 +57,7 @@ export default function UserApproval() {
       if (!response.ok) throw new Error("Failed to fetch users");
       return response.json();
     },
-    enabled: currentUser?.role === "admin",
+    enabled: isAdmin,
   });
 
   const approveUserMutation = useMutation({
@@ -144,7 +147,7 @@ export default function UserApproval() {
     return (first + last).toUpperCase() || user.email?.[0]?.toUpperCase() || "U";
   };
 
-  if (currentUser?.role !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="w-full max-w-md">

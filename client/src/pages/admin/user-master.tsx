@@ -77,6 +77,9 @@ export default function UserMaster() {
   const [newPassword, setNewPassword] = useState("");
   const [sendEmailNotification, setSendEmailNotification] = useState(true);
 
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+
   const [formData, setFormData] = useState({
     email: "",
     firstName: "",
@@ -93,7 +96,7 @@ export default function UserMaster() {
       if (!response.ok) throw new Error("Failed to fetch users");
       return response.json();
     },
-    enabled: currentUser?.role === "admin",
+    enabled: isAdmin,
   });
 
   const { data: roles = [] } = useQuery<UserRole[]>({
@@ -365,7 +368,7 @@ export default function UserMaster() {
     return dept?.name || "-";
   };
 
-  if (currentUser?.role !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="w-full max-w-md">

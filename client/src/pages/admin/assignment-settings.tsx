@@ -91,25 +91,30 @@ const assignmentMethods = [
   },
 ];
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function AssignmentSettingsPage() {
   const { user } = useAuth();
+  
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = user?.role === "admin" || isSuperAdmin;
   const { toast } = useToast();
   const [localSettings, setLocalSettings] = useState<Record<string, Partial<AssignmentSetting>>>({});
   const [hasChanges, setHasChanges] = useState<Record<string, boolean>>({});
 
   const { data: settings = [], isLoading } = useQuery<AssignmentSetting[]>({
     queryKey: ["/api/assignment-settings"],
-    enabled: user?.role === "admin",
+    enabled: isAdmin,
   });
 
   const { data: userRoles = [] } = useQuery<UserRole[]>({
     queryKey: ["/api/user-roles"],
-    enabled: user?.role === "admin",
+    enabled: isAdmin,
   });
 
   const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ["/api/departments"],
-    enabled: user?.role === "admin",
+    enabled: isAdmin,
   });
 
   // Initialize local settings from server data
@@ -190,7 +195,7 @@ export default function AssignmentSettingsPage() {
     };
   };
 
-  if (user?.role !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="container mx-auto py-8">
         <Card>

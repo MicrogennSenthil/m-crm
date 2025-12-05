@@ -104,6 +104,8 @@ const moduleTypes = [
   { value: "project", label: "Project", icon: Briefcase },
 ];
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function PointCategoriesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -115,6 +117,9 @@ export default function PointCategoriesPage() {
   const [selectedCategory, setSelectedCategory] = useState<PointCategory | null>(null);
   const [deleteCategory, setDeleteCategory] = useState<PointCategory | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = user?.role === "admin" || isSuperAdmin;
 
   const form = useForm<PointCategoryFormData>({
     resolver: zodResolver(pointCategorySchema),
@@ -309,7 +314,7 @@ export default function PointCategoriesPage() {
     return <Icon className="h-4 w-4" />;
   };
 
-  if (!user || user.role !== "admin") {
+  if (!user || !isAdmin) {
     return (
       <div className="p-6">
         <Alert variant="destructive">

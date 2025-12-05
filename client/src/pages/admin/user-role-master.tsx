@@ -42,6 +42,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function UserRoleMaster() {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
@@ -50,6 +52,9 @@ export default function UserRoleMaster() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<UserRole | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserRole | null>(null);
+
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -60,7 +65,7 @@ export default function UserRoleMaster() {
 
   const { data: roles = [], isLoading } = useQuery<UserRole[]>({
     queryKey: ["/api/user-roles"],
-    enabled: currentUser?.role === "admin",
+    enabled: isAdmin,
   });
 
   useEffect(() => {
@@ -151,7 +156,7 @@ export default function UserRoleMaster() {
     );
   });
 
-  if (currentUser?.role !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="w-full max-w-md">
