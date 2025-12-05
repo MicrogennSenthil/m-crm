@@ -5064,9 +5064,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, assignedTo, createdBy, view } = req.query;
       
       // Role-based access control for view=all
-      const isAdmin = user?.role === 'admin';
+      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = user?.role === 'admin' || isSuperAdmin;
       
-      // Only admins can request view=all (all tasks)
+      // Only admins/super admins can request view=all (all tasks)
       if (view === 'all' && !isAdmin) {
         return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
       }
@@ -5379,11 +5380,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
+      const { view } = req.query;
       
-      // Super admin (senthil@microgenn.com) sees all tasks
-      const isSuperAdmin = user?.email === 'senthil@microgenn.com';
+      // Admin/Super admin can view all tasks
+      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = user?.role === 'admin' || isSuperAdmin;
       
-      const todayTasks = await storage.getTodayTasks(userId, isSuperAdmin);
+      // Only admins/super admins can request view=all
+      if (view === 'all' && !isAdmin) {
+        return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
+      }
+      
+      const includeAll = isAdmin && view === 'all';
+      
+      const todayTasks = await storage.getTodayTasks(userId, includeAll);
       res.json(todayTasks);
     } catch (error) {
       console.error("Error fetching today's tasks:", error);

@@ -257,17 +257,23 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   }
 };
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export const isAdmin: RequestHandler = async (req: any, res, next) => {
   const user = req.user as any;
   
   // Check if user has admin role from claims (set by isAuthenticated middleware)
   const role = user?.claims?.metadata?.role;
+  const email = user?.claims?.email;
   
-  if (!role) {
-    return res.status(403).json({ message: "Access denied. Admin privileges required." });
+  // Super admin check by email - always has admin access
+  const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
+  
+  if (isSuperAdmin) {
+    return next();
   }
   
-  if (role !== "admin") {
+  if (!role || role !== "admin") {
     return res.status(403).json({ message: "Access denied. Admin privileges required." });
   }
   

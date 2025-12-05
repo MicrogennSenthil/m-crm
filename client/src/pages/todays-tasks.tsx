@@ -67,11 +67,14 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   urgent: { label: "Urgent", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
 };
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function TodaysTasksPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [viewFilter, setViewFilter] = useState<string>("own"); // own, all (admin only)
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
 
   // Get current user
@@ -79,11 +82,21 @@ export default function TodaysTasksPage() {
     queryKey: ["/api/auth/user"],
   });
 
-  const isSuperAdmin = currentUser?.email === 'senthil@microgenn.com';
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
 
-  // Fetch today's tasks
+  // Fetch today's tasks based on view filter
   const { data: tasks = [], isLoading, refetch } = useQuery<TaskWithDetails[]>({
-    queryKey: ["/api/tasks/today"],
+    queryKey: ["/api/tasks/today", { view: viewFilter }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (isAdmin && viewFilter === "all") params.set("view", "all");
+      const url = `/api/tasks/today${params.toString() ? `?${params.toString()}` : ""}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      return res.json();
+    },
+    enabled: !!currentUser,
   });
 
   // Filter tasks
@@ -358,6 +371,19 @@ export default function TodaysTasksPage() {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
+            {/* Admin/Super Admin can toggle between Own and All tasks */}
+            {isAdmin && (
+              <Select value={viewFilter} onValueChange={setViewFilter}>
+                <SelectTrigger className="w-[140px]" data-testid="select-view-filter">
+                  <Users className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="View" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="own">My Tasks</SelectItem>
+                  <SelectItem value="all">All Tasks</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -66,11 +66,13 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   urgent: { label: "Urgent", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
 };
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
 export default function TasksPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<string>("my"); // my, assigned, created, all (admin only)
+  const [viewFilter, setViewFilter] = useState<string>("own"); // own, all (admin only)
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
@@ -80,19 +82,21 @@ export default function TasksPage() {
     queryKey: ["/api/auth/user"],
   });
 
-  const isAdmin = currentUser?.role === "admin";
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
 
-  // Fetch tasks based on view mode
+  // Fetch tasks based on view filter (own vs all for admins)
   const { data: tasks = [], isLoading } = useQuery<TaskWithDetails[]>({
-    queryKey: ["/api/tasks", { view: viewMode }],
+    queryKey: ["/api/tasks", { view: viewFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (viewMode === "all") params.set("view", "all");
+      if (isAdmin && viewFilter === "all") params.set("view", "all");
       const url = `/api/tasks${params.toString() ? `?${params.toString()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tasks");
       return res.json();
     },
+    enabled: !!currentUser,
   });
 
   // Delete task mutation
@@ -123,7 +127,7 @@ export default function TasksPage() {
     },
   });
 
-  // Filter tasks
+  // Filter tasks (server handles own/all filtering, client handles search and status)
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = 
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,14 +137,7 @@ export default function TasksPage() {
     
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
     
-    let matchesView = true;
-    if (viewMode === "assigned" && task.assignedTo !== currentUser?.id) {
-      matchesView = false;
-    } else if (viewMode === "created" && task.createdBy !== currentUser?.id) {
-      matchesView = false;
-    }
-    
-    return matchesSearch && matchesStatus && matchesView;
+    return matchesSearch && matchesStatus;
   });
 
   // Group tasks by status for kanban-like view
@@ -342,18 +339,19 @@ export default function TasksPage() {
             </SelectContent>
           </Select>
           
-          <Select value={viewMode} onValueChange={setViewMode}>
-            <SelectTrigger className="w-[150px]" data-testid="select-view-mode">
-              <UserIcon className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="View" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="my">My Tasks</SelectItem>
-              <SelectItem value="assigned">Assigned to Me</SelectItem>
-              <SelectItem value="created">Created by Me</SelectItem>
-              {isAdmin && <SelectItem value="all">All Tasks</SelectItem>}
-            </SelectContent>
-          </Select>
+          {/* Admin/Super Admin can toggle between Own and All tasks */}
+          {isAdmin && (
+            <Select value={viewFilter} onValueChange={setViewFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="select-view-filter">
+                <Users className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="View" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="own">My Tasks</SelectItem>
+                <SelectItem value="all">All Tasks</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 

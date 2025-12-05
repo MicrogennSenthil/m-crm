@@ -339,8 +339,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
   };
 
+  // Super admin email - must be declared before use
+  const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = user?.role === "admin" || isSuperAdmin;
+
   // Check if user has access to reports (admin or super admin)
-  const canViewReports = user?.role === "admin" || isSuperAdmin;
+  const canViewReports = isAdmin;
   
   // Check if any reports sub-item is active
   const isReportsActive = location.startsWith("/reports");
@@ -350,10 +355,6 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   
   // Check if any system settings sub-item is active
   const isSystemSettingsActive = location === "/admin/smtp-config" || location === "/admin/point-categories" || location === "/admin/assignment-settings" || location === "/admin/database-control";
-
-  // Super admin email
-  const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
-  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
   // Check if a group has any visible items and if any item is active
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
