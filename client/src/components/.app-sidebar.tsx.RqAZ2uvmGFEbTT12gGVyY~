@@ -366,15 +366,13 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   // Check if a group has any visible items and if any item is active
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
     const visibleItems = items.filter((item) => {
-      if (!user) return false;
+      if (!user?.role) return true;
       if (isSuperAdmin) return true;
       if (user.role === "admin") return true;
-      if (!user.role) return false;
       
-      const userRole = user.role.toLowerCase();
+      const userRole = user.role?.toLowerCase() || "";
       
       if (item.roles.includes(user.role)) return true;
-      if (item.roles.some(role => role.toLowerCase() === userRole)) return true;
       
       if (item.url === "/sales-dashboard") {
         return userRole.includes("sales") && userRole.includes("head");

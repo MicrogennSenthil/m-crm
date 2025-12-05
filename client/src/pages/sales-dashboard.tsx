@@ -411,6 +411,19 @@ function FollowUpsTable({
   );
 }
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
+const ALLOWED_ROLES = ["saleshead", "sales_head", "admin"];
+
+function hasAccess(user: any): boolean {
+  if (!user) return false;
+  if (user.email === SUPER_ADMIN_EMAIL) return true;
+  if (user.role === "admin") return true;
+  const userRole = user.role?.toLowerCase() || "";
+  return ALLOWED_ROLES.includes(userRole) || 
+         userRole.includes("sales") && userRole.includes("head");
+}
+
 export default function SalesDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -420,6 +433,22 @@ export default function SalesDashboard() {
   const [selectedLead, setSelectedLead] = useState<LeadWithSalesExec | null>(null);
   const [newComment, setNewComment] = useState("");
   const [activeTab, setActiveTab] = useState<'leads' | 'followups'>('leads');
+
+  if (!hasAccess(user)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <XCircle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          You don't have permission to access the Sales Dashboard. 
+          This page is only available to Sales Heads, Admins, and Super Admins.
+        </p>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   const { data: dashboardData, isLoading } = useQuery<SalesDashboardData>({
     queryKey: ["/api/dashboard/sales"],

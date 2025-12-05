@@ -74,6 +74,19 @@ interface ReportData {
   generatedAt: string;
 }
 
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+
+const ALLOWED_ROLES = ["implementationhead", "implementation_head", "admin"];
+
+function hasAccess(user: any): boolean {
+  if (!user) return false;
+  if (user.email === SUPER_ADMIN_EMAIL) return true;
+  if (user.role === "admin") return true;
+  const userRole = user.role?.toLowerCase() || "";
+  return ALLOWED_ROLES.includes(userRole) || 
+         userRole.includes("implementation") && userRole.includes("head");
+}
+
 export default function ImplementationDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -84,6 +97,22 @@ export default function ImplementationDashboard() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailName, setEmailName] = useState("");
+
+  if (!hasAccess(user)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <AlertTriangle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          You don't have permission to access the Implementation Dashboard. 
+          This page is only available to Implementation Heads, Admins, and Super Admins.
+        </p>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   const { data: dashboardData, isLoading } = useQuery<ImplementationDashboardData>({
     queryKey: ["/api/dashboard/implementation"],
