@@ -5028,13 +5028,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const includeAll = isAdmin && view === 'all';
       
+      // Debug logging
+      console.log(`[Tasks] Fetching tasks for user ${userId}, view=${view || 'default'}, includeAll=${includeAll}`);
+      
       const taskList = await storage.getTasks({
         userId: !includeAll ? userId : undefined,
-        status: status as string,
-        assignedTo: assignedTo as string,
-        createdBy: createdBy as string,
+        status: status as string || undefined,
+        assignedTo: assignedTo as string || undefined,
+        createdBy: createdBy as string || undefined,
         includeAll,
       });
+      
+      console.log(`[Tasks] Found ${taskList.length} tasks for user ${userId}`);
       
       res.json(taskList);
     } catch (error) {
