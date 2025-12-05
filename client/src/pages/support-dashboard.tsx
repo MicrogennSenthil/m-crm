@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { AttachmentsList } from "@/components/attachments-list";
 import type { Ticket as TicketType, TicketComment, User } from "@shared/schema";
 
 interface TicketWithAssignee extends TicketType {
@@ -502,6 +503,17 @@ export default function SupportDashboard() {
                 {selectedTicket?.issueDescription}
               </p>
             </div>
+
+            {/* Attachments Section */}
+            {selectedTicket && (
+              <div className="mb-4 p-3 border rounded-lg">
+                <AttachmentsList
+                  entityType="ticket"
+                  entityId={selectedTicket.id}
+                  title="Attachments"
+                />
+              </div>
+            )}
 
             <Separator className="my-2" />
 
