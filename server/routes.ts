@@ -759,12 +759,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User routes
+  // User routes - for dropdowns/selection, only return active users
   app.get("/api/users", isAuthenticated, async (req, res) => {
     try {
-      const { role } = req.query;
+      const { role, includeInactive } = req.query;
       if (role) {
-        const userList = await storage.getUsersByRole(role as string);
+        let userList = await storage.getUsersByRole(role as string);
+        // Filter out inactive users unless explicitly requested (for admin views)
+        if (includeInactive !== 'true') {
+          userList = userList.filter(u => u.isActive !== false);
+        }
         return res.json(userList);
       }
       res.json([]);
@@ -775,9 +779,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get users who can be assigned to support tickets (based on role's isSupportAssignable flag)
+  // Only returns active users for assignment purposes
   app.get("/api/users/support-assignable", isAuthenticated, async (req, res) => {
     try {
-      const supportUsers = await storage.getSupportAssignableUsers();
+      let supportUsers = await storage.getSupportAssignableUsers();
+      // Filter out inactive users - they should not be assignable
+      supportUsers = supportUsers.filter(u => u.isActive !== false);
       res.json(supportUsers);
     } catch (error) {
       console.error("Error fetching support assignable users:", error);
@@ -995,9 +1002,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User Management routes (Admin-only CRUD for users)
+  // Returns all users - use includeInactive=true for admin views, defaults to active only for dropdowns
   app.get("/api/users/all", isAuthenticated, async (req, res) => {
     try {
-      const usersList = await storage.getUsers();
+      const { includeInactive } = req.query;
+      let usersList = await storage.getUsers();
+      // Filter out inactive users unless explicitly requested (for admin views)
+      if (includeInactive !== 'true') {
+        usersList = usersList.filter(u => u.isActive !== false);
+      }
       res.json(usersList);
     } catch (error) {
       console.error("Error fetching all users:", error);
@@ -5453,10 +5466,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all users for task assignment/mentions
+  // Get all users for task assignment/mentions - only return active users for selection
   app.get("/api/users/all", isAuthenticated, async (req, res) => {
     try {
-      const userList = await storage.getUsers();
+      const { includeInactive } = req.query;
+      let userList = await storage.getUsers();
+      // Filter out inactive users unless explicitly requested
+      if (includeInactive !== 'true') {
+        userList = userList.filter(u => u.isActive !== false);
+      }
       res.json(userList);
     } catch (error) {
       console.error("Error fetching all users:", error);

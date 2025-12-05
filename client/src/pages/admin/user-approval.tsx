@@ -48,7 +48,12 @@ export default function UserApproval() {
   const [rejectReason, setRejectReason] = useState("");
 
   const { data: users = [], isLoading } = useQuery<User[]>({
-    queryKey: ["/api/users/all"],
+    queryKey: ["/api/users/all", { includeInactive: true }],
+    queryFn: async () => {
+      const response = await fetch("/api/users/all?includeInactive=true");
+      if (!response.ok) throw new Error("Failed to fetch users");
+      return response.json();
+    },
     enabled: currentUser?.role === "admin",
   });
 

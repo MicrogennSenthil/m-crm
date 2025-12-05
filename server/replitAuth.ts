@@ -196,6 +196,13 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     const userId = (req.session as any).userId;
     const user = await storage.getUser(userId);
     if (user) {
+      // Check if user is active
+      if (!user.isActive) {
+        // Clear session for inactive user
+        (req.session as any).isLocalAuth = false;
+        (req.session as any).userId = null;
+        return res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
+      }
       req.user = {
         claims: {
           sub: userId,
@@ -218,6 +225,11 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
 
   const now = Math.floor(Date.now() / 1000);
   if (now <= user.expires_at) {
+    // Check if user is active in database
+    const dbUser = await storage.getUser(user.claims?.sub);
+    if (dbUser && !dbUser.isActive) {
+      return res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
+    }
     return next();
   }
 
@@ -231,6 +243,13 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     const config = await getOidcConfig();
     const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
     updateUserSession(user, tokenResponse);
+    
+    // Check if user is active after refresh
+    const dbUser = await storage.getUser(user.claims?.sub);
+    if (dbUser && !dbUser.isActive) {
+      return res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
+    }
+    
     return next();
   } catch (error) {
     res.status(401).json({ message: "Unauthorized" });

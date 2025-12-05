@@ -1295,7 +1295,12 @@ function UsersTab() {
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
   const { data: usersList = [], isLoading } = useQuery<User[]>({
-    queryKey: ["/api/users/all"],
+    queryKey: ["/api/users/all", { includeInactive: true }],
+    queryFn: async () => {
+      const response = await fetch("/api/users/all?includeInactive=true");
+      if (!response.ok) throw new Error("Failed to fetch users");
+      return response.json();
+    },
   });
 
   const { data: rolesList = [] } = useQuery<UserRole[]>({
