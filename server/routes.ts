@@ -5136,22 +5136,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTaskSchema.parse(taskData);
       const newTask = await storage.createTask(validatedData);
       
-      // Save attachments if provided
-      if (req.body.attachments && Array.isArray(req.body.attachments)) {
-        for (const attachment of req.body.attachments) {
+      // Save attachments if provided - with proper validation
+      const attachments = req.body.attachments;
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        const attachmentErrors: string[] = [];
+        
+        for (const attachment of attachments) {
           try {
-            await storage.createAttachment({
-              entityType: "task",
+            // Validate required fields before saving
+            const objectPath = attachment.url || attachment.objectPath;
+            if (!objectPath) {
+              attachmentErrors.push(`Attachment ${attachment.name || 'unknown'} missing objectPath`);
+              continue;
+            }
+            
+            const attachmentData = {
+              entityType: "task" as const,
               entityId: newTask.id,
               fileName: attachment.name || attachment.fileName || "Unnamed",
-              fileType: attachment.mimeType || "application/octet-stream",
+              fileType: attachment.mimeType || attachment.type || "application/octet-stream",
               fileSize: attachment.size || 0,
-              objectPath: attachment.url || attachment.objectPath,
+              objectPath,
               uploadedBy: userId,
-            });
+            };
+            
+            await storage.createAttachment(attachmentData);
           } catch (attachmentError) {
             console.error("Error saving attachment:", attachmentError);
+            attachmentErrors.push(`Failed to save ${attachment.name || 'unknown'}`);
           }
+        }
+        
+        if (attachmentErrors.length > 0) {
+          console.warn(`Task ${newTask.id} created with ${attachmentErrors.length} attachment errors:`, attachmentErrors);
         }
       }
       
