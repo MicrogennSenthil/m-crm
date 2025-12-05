@@ -437,8 +437,8 @@ export default function SupportDashboard() {
       </Card>
 
       <Dialog open={!!selectedTicket} onOpenChange={() => setSelectedTicket(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <div className="flex items-center gap-2">
               <Button 
                 variant="ghost" 
@@ -461,65 +461,66 @@ export default function SupportDashboard() {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg mb-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{selectedTicket?.customerName}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{selectedTicket?.customerEmail}</span>
-              </div>
-              {selectedTicket?.customerPhone && (
+          <ScrollArea className="flex-1 pr-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{selectedTicket.customerPhone}</span>
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{selectedTicket?.customerName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{selectedTicket?.customerEmail}</span>
+                </div>
+                {selectedTicket?.customerPhone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{selectedTicket.customerPhone}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">
+                    {selectedTicket?.assigneeName || 'Unassigned'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                  <Badge className={PRIORITY_CONFIG[selectedTicket?.priority || 'medium']?.color}>
+                    {PRIORITY_CONFIG[selectedTicket?.priority || 'medium']?.label}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">
+                    {selectedTicket?.createdAt ? format(new Date(selectedTicket.createdAt), "MMM d, yyyy h:mm a") : "-"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Issue Description</Label>
+                <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted/30 rounded-lg">
+                  {selectedTicket?.issueDescription}
+                </p>
+              </div>
+
+              {/* Attachments Section */}
+              {selectedTicket && (
+                <div className="p-3 border rounded-lg">
+                  <AttachmentsList
+                    entityType="ticket"
+                    entityId={selectedTicket.id}
+                    title="Attachments"
+                  />
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">
-                  {selectedTicket?.assigneeName || 'Unassigned'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                <Badge className={PRIORITY_CONFIG[selectedTicket?.priority || 'medium']?.color}>
-                  {PRIORITY_CONFIG[selectedTicket?.priority || 'medium']?.label}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">
-                  {selectedTicket?.createdAt ? format(new Date(selectedTicket.createdAt), "MMM d, yyyy h:mm a") : "-"}
-                </span>
-              </div>
-            </div>
 
-            <div className="mb-4">
-              <Label className="text-sm font-medium">Issue Description</Label>
-              <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted/30 rounded-lg">
-                {selectedTicket?.issueDescription}
-              </p>
-            </div>
+              <Separator />
 
-            {/* Attachments Section */}
-            {selectedTicket && (
-              <div className="mb-4 p-3 border rounded-lg">
-                <AttachmentsList
-                  entityType="ticket"
-                  entityId={selectedTicket.id}
-                  title="Attachments"
-                />
-              </div>
-            )}
-
-            <Separator className="my-2" />
-
-            <div className="flex-1 flex flex-col min-h-0">
-              <Label className="text-sm font-medium mb-2">Comments & Updates</Label>
-              <ScrollArea className="flex-1 border rounded-lg p-3 mb-4 max-h-48">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Comments & Updates</Label>
+                <div className="border rounded-lg p-3 mb-4 max-h-64 overflow-y-auto">
                 {commentsLoading ? (
                   <div className="space-y-3">
                     {Array(3).fill(0).map((_, i) => (
@@ -558,27 +559,28 @@ export default function SupportDashboard() {
                     ))}
                   </div>
                 )}
-              </ScrollArea>
+                </div>
 
-              <div className="flex gap-2">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  className="flex-1 min-h-[60px] resize-none"
-                  data-testid="input-ticket-comment"
-                />
-                <Button
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim() || addCommentMutation.isPending}
-                  className="self-end"
-                  data-testid="button-add-comment"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Textarea
+                    placeholder="Add a comment..."
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    className="flex-1 min-h-[60px] resize-none"
+                    data-testid="input-ticket-comment"
+                  />
+                  <Button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || addCommentMutation.isPending}
+                    className="self-end"
+                    data-testid="button-add-comment"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>
