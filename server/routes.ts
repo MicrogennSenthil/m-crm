@@ -5245,6 +5245,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTaskCommentSchema.parse(commentData);
       const newComment = await storage.createTaskComment(validatedData);
       
+      // Get the user who created the comment to return enriched data
+      const user = await storage.getUser(userId);
+      
       // Log activity
       await storage.logActivity({
         entityType: "task",
@@ -5254,7 +5257,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
       });
       
-      res.json(newComment);
+      // Return enriched comment with user data so UI displays immediately
+      res.json({ ...newComment, user });
     } catch (error) {
       console.error("Error creating task comment:", error);
       res.status(500).json({ message: "Failed to create task comment" });
@@ -5536,7 +5540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         uploadURL, 
         objectPath,
-        attachmentUrl: objectPath,
+        attachmentUrl: `/objects/${objectPath}`,
         type,
         originalFileName,
         mimeType,

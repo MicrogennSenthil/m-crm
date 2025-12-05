@@ -167,18 +167,55 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     },
   });
 
-  // Add comment mutation
+  // Add comment mutation with optimistic update
   const addCommentMutation = useMutation({
     mutationFn: async (content: string) => {
-      await apiRequest("POST", `/api/tasks/${task.id}/comments`, { content });
+      const response = await apiRequest("POST", `/api/tasks/${task.id}/comments`, { content });
+      return response as CommentWithUser;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks", task.id, "comments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+    onMutate: async (content: string) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["/api/tasks", task.id, "comments"] });
+      
+      // Snapshot the previous value
+      const previousComments = queryClient.getQueryData<CommentWithUser[]>(["/api/tasks", task.id, "comments"]);
+      
+      // Optimistically update to the new value
+      const optimisticComment: CommentWithUser = {
+        id: `temp-${Date.now()}`,
+        taskId: task.id,
+        userId: currentUser?.id || "",
+        content,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: currentUser,
+      };
+      
+      queryClient.setQueryData<CommentWithUser[]>(["/api/tasks", task.id, "comments"], (old) => 
+        old ? [optimisticComment, ...old] : [optimisticComment]
+      );
+      
       setNewComment("");
+      
+      return { previousComments };
+    },
+    onSuccess: (newComment) => {
+      // Replace optimistic comment with actual comment from server
+      queryClient.setQueryData<CommentWithUser[]>(["/api/tasks", task.id, "comments"], (old) => {
+        if (!old) return [newComment];
+        // Remove temp comment and add real one
+        const filtered = old.filter(c => !c.id.startsWith('temp-'));
+        return [newComment, ...filtered];
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       toast({ title: "Comment added" });
     },
-    onError: () => {
+    onError: (err, content, context) => {
+      // Rollback on error
+      if (context?.previousComments) {
+        queryClient.setQueryData(["/api/tasks", task.id, "comments"], context.previousComments);
+      }
+      setNewComment(content);
       toast({ title: "Failed to add comment", variant: "destructive" });
     },
   });
