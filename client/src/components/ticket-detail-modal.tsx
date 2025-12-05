@@ -294,6 +294,15 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
               <p className="text-sm whitespace-pre-wrap">{ticket.issueDescription}</p>
             </div>
 
+            {/* Attachments - Prominent Position */}
+            <div className="p-4 border rounded-md">
+              <AttachmentsList
+                entityType="ticket"
+                entityId={ticket.id}
+                title="Attachments"
+              />
+            </div>
+
             {/* Conversation Thread */}
             <div>
               <h3 className="font-semibold mb-3">Conversation</h3>
@@ -465,13 +474,6 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                 </div>
               </div>
             )}
-
-            {/* Ticket Attachments */}
-            <AttachmentsList
-              entityType="ticket"
-              entityId={ticket.id}
-              title="Attachments"
-            />
 
             {/* Actions */}
             {ticket.status !== "closed" ? (
