@@ -1154,3 +1154,30 @@ export const insertUserPointBalanceSchema = createInsertSchema(userPointBalances
 
 export type InsertUserPointBalance = z.infer<typeof insertUserPointBalanceSchema>;
 export type UserPointBalance = typeof userPointBalances.$inferSelect;
+
+// ============================================
+// Assignment Settings
+// ============================================
+
+// Assignment Settings - configures how items are assigned per module
+export const assignmentSettings = pgTable("assignment_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  module: varchar("module", { length: 20 }).notNull().unique(), // tickets, tasks, leads
+  assignmentMethod: varchar("assignment_method", { length: 20 }).notNull().default("manual"), // manual, round_robin, load_balanced
+  isEnabled: boolean("is_enabled").default(true), // Whether auto-assignment is enabled
+  departmentId: varchar("department_id").references(() => departments.id), // Optional: restrict to specific department
+  assignableRoles: text("assignable_roles").array(), // Roles that can be assigned (e.g., ['support', 'engineer'])
+  lastAssignedUserId: varchar("last_assigned_user_id"), // Track last assigned user for round-robin
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssignmentSettingSchema = createInsertSchema(assignmentSettings).omit({
+  id: true,
+  lastAssignedUserId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAssignmentSetting = z.infer<typeof insertAssignmentSettingSchema>;
+export type AssignmentSetting = typeof assignmentSettings.$inferSelect;
