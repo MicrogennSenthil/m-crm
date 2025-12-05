@@ -23,7 +23,6 @@ import {
   Users,
   Shield,
   Key,
-  KeyRound,
   UserCheck,
   Home,
   Briefcase,
@@ -259,13 +258,6 @@ const userManagementSubItems = [
     color: "text-cyan-500",
     bgColor: "bg-cyan-500/10",
   },
-  {
-    title: "Reset Password",
-    url: "/department-users",
-    icon: KeyRound,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10",
-  },
 ];
 
 // System Settings sub-menu items
@@ -347,8 +339,8 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     scrollContainerRef.current?.scrollBy({ top: 100, behavior: 'smooth' });
   };
 
-  // Check if user has access to reports (admin only)
-  const canViewReports = user?.role === "admin";
+  // Check if user has access to reports (admin or super admin)
+  const canViewReports = user?.role === "admin" || isSuperAdmin;
   
   // Check if any reports sub-item is active
   const isReportsActive = location.startsWith("/reports");
@@ -597,7 +589,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
               )}
 
               {/* Administration Group */}
-              {user?.role === "admin" && (
+              {(user?.role === "admin" || isSuperAdmin) && (
                 <Collapsible 
                   defaultOpen={location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive} 
                   className="group/collapsible"
