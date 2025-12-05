@@ -1765,16 +1765,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/system-modules/seed", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const defaultModules = [
+        // Main Dashboard
         { name: "dashboard", displayName: "Dashboard", description: "Main dashboard and analytics", icon: "LayoutDashboard", sortOrder: 1 },
+        
+        // Sales Module
         { name: "leads", displayName: "Sales / Leads", description: "Lead management and sales pipeline", icon: "Target", sortOrder: 2 },
-        { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 3 },
-        { name: "projects", displayName: "Implementation", description: "Project implementation tracking", icon: "FolderKanban", sortOrder: 4 },
-        { name: "tickets", displayName: "Support Tickets", description: "Customer support ticket management", icon: "Ticket", sortOrder: 5 },
-        { name: "tasks", displayName: "Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 6 },
-        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 7 },
-        { name: "reports", displayName: "Reports", description: "Reports and analytics", icon: "BarChart3", sortOrder: 8 },
-        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 9 },
-        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 10 },
+        { name: "sales_dashboard", displayName: "Sales Dashboard", description: "Sales analytics and performance dashboard", icon: "TrendingUp", sortOrder: 3 },
+        { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 4 },
+        
+        // Implementation Module
+        { name: "projects", displayName: "Implementation", description: "Project implementation tracking", icon: "FolderKanban", sortOrder: 5 },
+        { name: "work_tracking", displayName: "Work Tracking", description: "Daily work log and tracking", icon: "Clock", sortOrder: 6 },
+        
+        // Support Module
+        { name: "tickets", displayName: "Support Tickets", description: "Customer support ticket management", icon: "Ticket", sortOrder: 7 },
+        { name: "support_dashboard", displayName: "Support Dashboard", description: "Support analytics and metrics", icon: "Headphones", sortOrder: 8 },
+        
+        // Knowledge Base
+        { name: "knowledge_base", displayName: "Knowledge Base", description: "Documentation and knowledge articles", icon: "BookOpen", sortOrder: 9 },
+        { name: "knowledge_base_admin", displayName: "Knowledge Base Admin", description: "Manage knowledge base documents", icon: "FileEdit", sortOrder: 10 },
+        
+        // Tasks Module
+        { name: "tasks", displayName: "All Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 11 },
+        { name: "today_tasks", displayName: "Today's Tasks", description: "Daily task list and reminders", icon: "CalendarCheck", sortOrder: 12 },
+        
+        // Customers
+        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 13 },
+        
+        // Reports
+        { name: "reports", displayName: "Reports", description: "Reports and analytics overview", icon: "BarChart3", sortOrder: 14 },
+        { name: "sales_reports", displayName: "Sales Reports", description: "Sales performance reports", icon: "PieChart", sortOrder: 15 },
+        { name: "implementation_reports", displayName: "Implementation Reports", description: "Project implementation reports", icon: "ClipboardList", sortOrder: 16 },
+        { name: "support_reports", displayName: "Support Reports", description: "Support ticket reports", icon: "FileBarChart", sortOrder: 17 },
+        
+        // User Management
+        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 18 },
+        { name: "user_master", displayName: "User Master", description: "Create and manage users", icon: "UserPlus", sortOrder: 19 },
+        { name: "user_roles", displayName: "User Roles", description: "Define and manage user roles", icon: "Shield", sortOrder: 20 },
+        { name: "user_rights", displayName: "User Rights Allocation", description: "Configure module permissions per role", icon: "Key", sortOrder: 21 },
+        { name: "user_approval", displayName: "User Approval", description: "Approve or reject new user registrations", icon: "UserCheck", sortOrder: 22 },
+        
+        // System Settings
+        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 23 },
+        { name: "smtp_config", displayName: "SMTP Configuration", description: "Email server settings", icon: "Mail", sortOrder: 24 },
+        { name: "point_categories", displayName: "Point Categories", description: "Configure gamification points", icon: "Award", sortOrder: 25 },
+        { name: "assignment_settings", displayName: "Assignment Settings", description: "Configure assignment methods", icon: "GitBranch", sortOrder: 26 },
+        { name: "database_control", displayName: "Database Control", description: "Database management tools", icon: "Database", sortOrder: 27 },
+        
+        // Admin Dashboard
+        { name: "admin_dashboard", displayName: "Admin Dashboard", description: "Administration overview", icon: "Gauge", sortOrder: 28 },
+        
+        // Masters
+        { name: "masters", displayName: "Masters", description: "Master data management", icon: "Table", sortOrder: 29 },
+        { name: "customer_master", displayName: "Customer Master", description: "Customer data management", icon: "Building2", sortOrder: 30 },
+        { name: "departments", displayName: "Departments", description: "Department management", icon: "Layers", sortOrder: 31 },
       ];
       
       const existingModules = await storage.getSystemModules();

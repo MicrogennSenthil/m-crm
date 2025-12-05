@@ -182,16 +182,15 @@ export default function UserRightsAllocation() {
           <p className="text-muted-foreground">Configure module permissions for each role</p>
         </div>
         <div className="flex gap-2">
-          {systemModules.length === 0 && (
-            <Button 
-              variant="outline" 
-              onClick={() => seedModulesMutation.mutate()}
-              disabled={seedModulesMutation.isPending}
-            >
-              {seedModulesMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Seed Default Modules
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            onClick={() => seedModulesMutation.mutate()}
+            disabled={seedModulesMutation.isPending}
+            data-testid="button-seed-modules"
+          >
+            {seedModulesMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {systemModules.length === 0 ? "Seed Default Modules" : "Add New Modules"}
+          </Button>
           <Button 
             onClick={handleSave}
             disabled={!hasChanges || updatePermissionMutation.isPending || !selectedRoleId}
