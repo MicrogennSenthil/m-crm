@@ -1062,6 +1062,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
+      console.log("[User Update] ID:", req.params.id, "Data:", JSON.stringify(req.body));
+      
       // Check for duplicate email if email is being updated
       if (req.body.email) {
         const existingUser = await storage.getUserByEmail(req.body.email);
@@ -1071,6 +1073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updated = await storage.updateUser(req.params.id, req.body);
+      console.log("[User Update] Result role:", updated.role);
       
       await storage.logActivity({
         entityType: "user",
