@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Hand,
   Save,
+  Scale,
 } from "lucide-react";
 import type { AssignmentSetting, UserRole, Department } from "@shared/schema";
 
