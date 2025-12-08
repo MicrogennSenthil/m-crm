@@ -204,11 +204,27 @@ export default function DevelopmentTasks() {
   }) || [];
 
   const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string) => {
+    if (!isAdmin && !canEdit("development_tasks")) {
+      toast({ title: "Permission Denied", description: "You don't have permission to update tasks", variant: "destructive" });
+      return;
+    }
     updateTaskMutation.mutate({ id: task.id, data: { status: newStatus } });
   };
 
   const onSubmitTask = (data: CreateTaskFormData) => {
+    if (!isAdmin && !canCreate("development_tasks")) {
+      toast({ title: "Permission Denied", description: "You don't have permission to create tasks", variant: "destructive" });
+      return;
+    }
     createTaskMutation.mutate(data);
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (!isAdmin && !canDelete("development_tasks")) {
+      toast({ title: "Permission Denied", description: "You don't have permission to delete tasks", variant: "destructive" });
+      return;
+    }
+    deleteTaskMutation.mutate(taskId);
   };
 
   if (isLoading) {
@@ -513,7 +529,7 @@ export default function DevelopmentTasks() {
                     variant="destructive" 
                     onClick={() => {
                       if (confirm("Are you sure you want to delete this task?")) {
-                        deleteTaskMutation.mutate(selectedTask.id);
+                        handleDeleteTask(selectedTask.id);
                       }
                     }}
                     data-testid="button-delete-task"
