@@ -526,7 +526,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof isActive === "boolean") {
         updates.isActive = isActive;
       }
-      if (role && ["admin", "sales_executive", "engineer", "support"].includes(role)) {
+      // Allow any role - roles are now managed in user_roles table
+      if (role) {
         updates.role = role;
       }
       if (firstName !== undefined) {
