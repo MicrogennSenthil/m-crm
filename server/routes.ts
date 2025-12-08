@@ -7870,6 +7870,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =============================================
+  // DEVELOPMENT TASK ROUTES
+  // =============================================
+
+  // Get development dashboard metrics
+  app.get("/api/development/dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const role = req.user?.role;
+      
+      // Admins can see all metrics, others only their own
+      const assignedTo = (role === 'admin' || role === 'superadmin') ? undefined : userId;
+      const metrics = await storage.getDevelopmentDashboardMetrics(assignedTo);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching development dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch development dashboard metrics" });
+    }
+  });
+
+  // Get all development tasks with filtering
+  app.get("/api/development/tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const { status, sourceType, priority, isOverdue } = req.query;
+      const userId = req.user?.id;
+      const role = req.user?.role;
+      
+      const filters: any = {};
+      if (status) filters.status = status;
+      if (sourceType) filters.sourceType = sourceType;
+      if (priority) filters.priority = priority;
+      if (isOverdue) filters.isOverdue = isOverdue === 'true';
+      
+      // Non-admins can only see their own tasks
+      if (role !== 'admin' && role !== 'superadmin') {
+        filters.assignedTo = userId;
+      }
+      
+      const tasks = await storage.getDevelopmentTasks(filters);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching development tasks:", error);
+      res.status(500).json({ message: "Failed to fetch development tasks" });
+    }
+  });
+
+  // Get single development task
+  app.get("/api/development/tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const task = await storage.getDevelopmentTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error fetching development task:", error);
+      res.status(500).json({ message: "Failed to fetch development task" });
+    }
+  });
+
+  // Create development task (from Implementation, Support, or Tasks)
+  app.post("/api/development/tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      
+      const taskData = {
+        ...req.body,
+        assignedBy: userId,
+        status: 'pending',
+        isOverdue: false,
+        penaltyApplied: false,
+      };
+      
+      const task = await storage.createDevelopmentTask(taskData);
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId,
+        entityType: 'development_task',
+        entityId: task.id,
+        action: 'created',
+        details: `Created development task ${task.taskNumber} from ${task.sourceType}`,
+      });
+      
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating development task:", error);
+      res.status(500).json({ message: "Failed to create development task" });
+    }
+  });
+
+  // Update development task
+  app.patch("/api/development/tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      
+      const existingTask = await storage.getDevelopmentTask(id);
+      if (!existingTask) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Track status change for completion handling
+      const previousStatus = existingTask.status;
+      const newStatus = req.body.status;
+      
+      const updated = await storage.updateDevelopmentTask(id, {
+        ...req.body,
+        completedAt: newStatus === 'completed' ? new Date() : existingTask.completedAt,
+      });
+      
+      // If task is being completed, handle points
+      if (newStatus === 'completed' && previousStatus !== 'completed') {
+        if (updated.assignedTo) {
+          await handleCompletion('development', updated.id, updated.assignedTo);
+        }
+        
+        // Log activity
+        await storage.createActivityLog({
+          userId,
+          entityType: 'development_task',
+          entityId: id,
+          action: 'completed',
+          details: `Completed development task ${updated.taskNumber}`,
+        });
+      } else {
+        await storage.createActivityLog({
+          userId,
+          entityType: 'development_task',
+          entityId: id,
+          action: 'updated',
+          details: `Updated development task ${updated.taskNumber}`,
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating development task:", error);
+      res.status(500).json({ message: "Failed to update development task" });
+    }
+  });
+
+  // Delete development task (admin only)
+  app.delete("/api/development/tasks/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      
+      const task = await storage.getDevelopmentTask(id);
+      if (!task) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      await storage.deleteDevelopmentTask(id);
+      
+      await storage.createActivityLog({
+        userId,
+        entityType: 'development_task',
+        entityId: id,
+        action: 'deleted',
+        details: `Deleted development task ${task.taskNumber}`,
+      });
+      
+      res.json({ message: "Development task deleted" });
+    } catch (error) {
+      console.error("Error deleting development task:", error);
+      res.status(500).json({ message: "Failed to delete development task" });
+    }
+  });
+
+  // Get development task comments
+  app.get("/api/development/tasks/:id/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const comments = await storage.getDevelopmentTaskComments(req.params.id);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching development task comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // Add comment to development task
+  app.post("/api/development/tasks/:id/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      
+      const comment = await storage.createDevelopmentTaskComment({
+        developmentTaskId: id,
+        userId,
+        content: req.body.content,
+      });
+      
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Error adding development task comment:", error);
+      res.status(500).json({ message: "Failed to add comment" });
+    }
+  });
+
+  // Check and apply overdue penalties (can be called by admin or scheduled job)
+  app.post("/api/development/check-overdue", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const penaltyCount = await storage.checkAndApplyOverduePenalties();
+      res.json({ message: `Applied penalties to ${penaltyCount} overdue tasks` });
+    } catch (error) {
+      console.error("Error checking overdue tasks:", error);
+      res.status(500).json({ message: "Failed to check overdue tasks" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
