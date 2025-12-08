@@ -522,11 +522,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User> {
+    console.log("[Storage.updateUser] ID:", id, "Incoming data:", JSON.stringify(data));
+    console.log("[Storage.updateUser] Role in data:", data.role);
+    
+    const updateData = { ...data, updatedAt: new Date() };
+    console.log("[Storage.updateUser] Update data:", JSON.stringify(updateData));
+    
     const [updated] = await db
       .update(users)
-      .set({ ...data, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(users.id, id))
       .returning();
+    
+    console.log("[Storage.updateUser] Result:", JSON.stringify(updated));
+    console.log("[Storage.updateUser] Result role:", updated.role);
     return updated;
   }
 
