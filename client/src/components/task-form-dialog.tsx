@@ -58,7 +58,7 @@ const taskFormSchema = z.object({
   description: z.string().optional(),
   status: z.enum(["pending", "followup", "completed", "get_information"]),
   priority: z.enum(["low", "medium", "high", "urgent"]),
-  assignedTo: z.string().optional(),
+  assignedTo: z.string().min(1, "Assignee is required"),
   mentionedUsers: z.array(z.string()).optional(),
   reminderDate: z.date().optional().nullable(),
   dueDate: z.date().optional().nullable(),
@@ -162,7 +162,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       description: "",
       status: "pending",
       priority: "medium",
-      assignedTo: undefined,
+      assignedTo: "",
       mentionedUsers: [],
       reminderDate: null,
       dueDate: null,
@@ -278,7 +278,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         description: "",
         status: "pending",
         priority: "medium",
-        assignedTo: undefined,
+        assignedTo: "",
         mentionedUsers: [],
         reminderDate: null,
         dueDate: null,
@@ -1017,18 +1017,17 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
               name="assignedTo"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Assign To</FormLabel>
+                  <FormLabel>Assign To <span className="text-destructive">*</span></FormLabel>
                   <Select 
-                    onValueChange={(value) => field.onChange(value === "_unassigned" ? undefined : value)} 
-                    value={field.value || "_unassigned"}
+                    onValueChange={field.onChange} 
+                    value={field.value || ""}
                   >
                     <FormControl>
                       <SelectTrigger data-testid="select-task-assignee">
-                        <SelectValue placeholder="Select team member" />
+                        <SelectValue placeholder="Select team member (required)" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="_unassigned">Unassigned</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           <div className="flex items-center gap-2">
