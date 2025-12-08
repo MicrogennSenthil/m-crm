@@ -7946,12 +7946,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.createDevelopmentTask(taskData);
       
       // Log activity
-      await storage.createActivityLog({
+      await storage.logActivity({
         userId,
         entityType: 'development_task',
         entityId: task.id,
         action: 'created',
-        details: `Created development task ${task.taskNumber} from ${task.sourceType}`,
+        description: `Created development task ${task.taskNumber} from ${task.sourceType}`,
       });
       
       res.status(201).json(task);
@@ -7981,27 +7981,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: newStatus === 'completed' ? new Date() : existingTask.completedAt,
       });
       
-      // If task is being completed, handle points
+      // If task is being completed, log activity
       if (newStatus === 'completed' && previousStatus !== 'completed') {
-        if (updated.assignedTo) {
-          await handleCompletion('development', updated.id, updated.assignedTo);
-        }
-        
         // Log activity
-        await storage.createActivityLog({
+        await storage.logActivity({
           userId,
           entityType: 'development_task',
           entityId: id,
           action: 'completed',
-          details: `Completed development task ${updated.taskNumber}`,
+          description: `Completed development task ${updated.taskNumber}`,
         });
       } else {
-        await storage.createActivityLog({
+        await storage.logActivity({
           userId,
           entityType: 'development_task',
           entityId: id,
           action: 'updated',
-          details: `Updated development task ${updated.taskNumber}`,
+          description: `Updated development task ${updated.taskNumber}`,
         });
       }
       
@@ -8025,12 +8021,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteDevelopmentTask(id);
       
-      await storage.createActivityLog({
+      await storage.logActivity({
         userId,
         entityType: 'development_task',
         entityId: id,
         action: 'deleted',
-        details: `Deleted development task ${task.taskNumber}`,
+        description: `Deleted development task ${task.taskNumber}`,
       });
       
       res.json({ message: "Development task deleted" });
