@@ -186,7 +186,7 @@ const menuGroups = [
   },
 ];
 
-// Tasks sub-menu items (visible to all authenticated users)
+// Tasks sub-menu items - with module permissions
 const tasksSubItems = [
   {
     title: "All Tasks",
@@ -194,6 +194,7 @@ const tasksSubItems = [
     icon: ListTodo,
     color: "text-purple-500",
     bgColor: "bg-purple-500/10",
+    module: "tasks",
   },
   {
     title: "Today's Task",
@@ -201,10 +202,11 @@ const tasksSubItems = [
     icon: ClipboardCheck,
     color: "text-violet-500",
     bgColor: "bg-violet-500/10",
+    module: "today_tasks",
   },
 ];
 
-// Reports sub-menu items
+// Reports sub-menu items - with module permissions
 const reportsSubItems = [
   {
     title: "Sales Reports",
@@ -212,6 +214,7 @@ const reportsSubItems = [
     icon: TrendingUp,
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
+    module: "sales_reports",
   },
   {
     title: "Implementation Reports",
@@ -219,6 +222,7 @@ const reportsSubItems = [
     icon: Package,
     color: "text-lime-500",
     bgColor: "bg-lime-500/10",
+    module: "implementation_reports",
   },
   {
     title: "Support Reports",
@@ -226,10 +230,11 @@ const reportsSubItems = [
     icon: TicketCheck,
     color: "text-green-500",
     bgColor: "bg-green-500/10",
+    module: "support_reports",
   },
 ];
 
-// User Management sub-menu items
+// User Management sub-menu items - with module permissions
 const userManagementSubItems = [
   {
     title: "User",
@@ -237,6 +242,7 @@ const userManagementSubItems = [
     icon: Users,
     color: "text-indigo-500",
     bgColor: "bg-indigo-500/10",
+    module: "user_master",
   },
   {
     title: "User Role",
@@ -244,6 +250,7 @@ const userManagementSubItems = [
     icon: Shield,
     color: "text-blue-500",
     bgColor: "bg-blue-500/10",
+    module: "user_roles",
   },
   {
     title: "User Rights Allocation",
@@ -251,6 +258,7 @@ const userManagementSubItems = [
     icon: Key,
     color: "text-sky-500",
     bgColor: "bg-sky-500/10",
+    module: "user_rights",
   },
   {
     title: "User Approval",
@@ -258,10 +266,11 @@ const userManagementSubItems = [
     icon: UserCheck,
     color: "text-cyan-500",
     bgColor: "bg-cyan-500/10",
+    module: "user_approval",
   },
 ];
 
-// System Settings sub-menu items
+// System Settings sub-menu items - with module permissions
 const systemSettingsSubItems = [
   {
     title: "SMTP Configuration",
@@ -269,6 +278,7 @@ const systemSettingsSubItems = [
     icon: Mail,
     color: "text-rose-500",
     bgColor: "bg-rose-500/10",
+    module: "smtp_config",
   },
   {
     title: "Point Categories",
@@ -276,6 +286,7 @@ const systemSettingsSubItems = [
     icon: Star,
     color: "text-yellow-500",
     bgColor: "bg-yellow-500/10",
+    module: "point_categories",
   },
   {
     title: "Assignment Settings",
@@ -283,6 +294,7 @@ const systemSettingsSubItems = [
     icon: RefreshCw,
     color: "text-teal-500",
     bgColor: "bg-teal-500/10",
+    module: "assignment_settings",
   },
   {
     title: "Database Control",
@@ -290,6 +302,7 @@ const systemSettingsSubItems = [
     icon: Database,
     color: "text-red-500",
     bgColor: "bg-red-500/10",
+    module: "database_control",
   },
 ];
 
@@ -344,10 +357,23 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   // Super admin email - must be declared before use
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || permissionsSuperAdmin;
-  const isAdmin = user?.role === "admin" || isSuperAdmin;
 
-  // Check if user has access to reports based on permissions
+  // Check if user has access to reports based on permissions (not hardcoded roles)
   const canViewReports = isSuperAdmin || canView("reports") || canView("sales_reports") || canView("implementation_reports") || canView("support_reports");
+  
+  // Check if user has access to tasks based on permissions
+  const canViewTasks = isSuperAdmin || canView("tasks") || canView("today_tasks");
+  
+  // Check if user has access to administration based on permissions
+  const canViewAdmin = isSuperAdmin || canView("admin_dashboard") || canView("masters") || canView("settings") || 
+    canView("user_master") || canView("user_roles") || canView("user_rights") || canView("user_approval") ||
+    canView("smtp_config") || canView("point_categories") || canView("assignment_settings") || canView("database_control");
+  
+  // Check if user has access to user management section
+  const canViewUserManagement = isSuperAdmin || canView("user_master") || canView("user_roles") || canView("user_rights") || canView("user_approval");
+  
+  // Check if user has access to system settings section
+  const canViewSystemSettings = isSuperAdmin || canView("smtp_config") || canView("point_categories") || canView("assignment_settings") || canView("database_control");
   
   // Check if any reports sub-item is active
   const isReportsActive = location.startsWith("/reports");
@@ -372,6 +398,15 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     });
     const hasActiveItem = visibleItems.some((item) => location === item.url);
     return { visibleItems, hasActiveItem, hasItems: visibleItems.length > 0 };
+  };
+  
+  // Helper to filter sub-items based on permissions
+  const getVisibleSubItems = <T extends { module?: string }>(items: T[]): T[] => {
+    return items.filter(item => {
+      if (isSuperAdmin) return true;
+      if (item.module && canView(item.module)) return true;
+      return false;
+    });
   };
 
   const handlePin = () => {
@@ -556,7 +591,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {reportsSubItems.map((subItem) => (
+                        {getVisibleSubItems(reportsSubItems).map((subItem) => (
                           <SidebarMenuSubItem key={subItem.title}>
                             <SidebarMenuSubButton
                               asChild
@@ -578,8 +613,8 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                 </Collapsible>
               )}
 
-              {/* Administration Group */}
-              {(user?.role === "admin" || isSuperAdmin) && (
+              {/* Administration Group - permission based */}
+              {canViewAdmin && (
                 <Collapsible 
                   defaultOpen={location === "/admin/dashboard" || location === "/masters" || location === "/settings" || isUserManagementActive || isSystemSettingsActive} 
                   className="group/collapsible"
@@ -600,68 +635,78 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={location === "/admin/dashboard"}
-                            data-testid="nav-super-admin-dashboard"
-                          >
-                            <Link href="/admin/dashboard">
-                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/admin/dashboard" ? "bg-amber-500/10" : ""}`}>
-                                <Gauge className={`h-3.5 w-3.5 text-amber-500 ${location === "/admin/dashboard" ? "" : "opacity-70"}`} />
-                              </div>
-                              <span>Super Dashboard</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={location === "/masters"}
-                            data-testid="nav-masters"
-                          >
-                            <Link href="/masters">
-                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/masters" ? "bg-pink-500/10" : ""}`}>
-                                <Database className={`h-3.5 w-3.5 text-pink-500 ${location === "/masters" ? "" : "opacity-70"}`} />
-                              </div>
-                              <span>Masters</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={location === "/settings"}
-                            data-testid="nav-settings"
-                          >
-                            <Link href="/settings">
-                              <div className={`flex items-center justify-center rounded-md p-1 ${location === "/settings" ? "bg-slate-500/10" : ""}`}>
-                                <Settings className={`h-3.5 w-3.5 text-slate-500 ${location === "/settings" ? "" : "opacity-70"}`} />
-                              </div>
-                              <span>Settings</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
+                        {/* Super Dashboard - permission based */}
+                        {(isSuperAdmin || canView("admin_dashboard")) && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === "/admin/dashboard"}
+                              data-testid="nav-super-admin-dashboard"
+                            >
+                              <Link href="/admin/dashboard">
+                                <div className={`flex items-center justify-center rounded-md p-1 ${location === "/admin/dashboard" ? "bg-amber-500/10" : ""}`}>
+                                  <Gauge className={`h-3.5 w-3.5 text-amber-500 ${location === "/admin/dashboard" ? "" : "opacity-70"}`} />
+                                </div>
+                                <span>Super Dashboard</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                        {/* Masters - permission based */}
+                        {(isSuperAdmin || canView("masters")) && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === "/masters"}
+                              data-testid="nav-masters"
+                            >
+                              <Link href="/masters">
+                                <div className={`flex items-center justify-center rounded-md p-1 ${location === "/masters" ? "bg-pink-500/10" : ""}`}>
+                                  <Database className={`h-3.5 w-3.5 text-pink-500 ${location === "/masters" ? "" : "opacity-70"}`} />
+                                </div>
+                                <span>Masters</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                        {/* Settings - permission based */}
+                        {(isSuperAdmin || canView("settings")) && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === "/settings"}
+                              data-testid="nav-settings"
+                            >
+                              <Link href="/settings">
+                                <div className={`flex items-center justify-center rounded-md p-1 ${location === "/settings" ? "bg-slate-500/10" : ""}`}>
+                                  <Settings className={`h-3.5 w-3.5 text-slate-500 ${location === "/settings" ? "" : "opacity-70"}`} />
+                                </div>
+                                <span>Settings</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
                         
-                        {/* User Management nested collapsible */}
-                        <Collapsible defaultOpen={isUserManagementActive} className="group/usermgmt">
-                          <SidebarMenuSubItem>
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuSubButton
-                                isActive={isUserManagementActive}
-                                data-testid="nav-user-management"
-                                className="cursor-pointer whitespace-nowrap"
-                              >
-                                <div className={`flex items-center justify-center rounded-md p-1 ${isUserManagementActive ? "bg-indigo-500/10" : ""}`}>
-                                  <UserCog className={`h-3.5 w-3.5 shrink-0 text-indigo-500 ${isUserManagementActive ? "" : "opacity-70"}`} />
-                                </div>
-                                <span className="truncate">User Management</span>
-                                <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
-                              </SidebarMenuSubButton>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="pl-4 space-y-0.5 mt-1">
-                                {userManagementSubItems.map((subItem) => (
+                        {/* User Management nested collapsible - permission based */}
+                        {canViewUserManagement && (
+                          <Collapsible defaultOpen={isUserManagementActive} className="group/usermgmt">
+                            <SidebarMenuSubItem>
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuSubButton
+                                  isActive={isUserManagementActive}
+                                  data-testid="nav-user-management"
+                                  className="cursor-pointer whitespace-nowrap"
+                                >
+                                  <div className={`flex items-center justify-center rounded-md p-1 ${isUserManagementActive ? "bg-indigo-500/10" : ""}`}>
+                                    <UserCog className={`h-3.5 w-3.5 shrink-0 text-indigo-500 ${isUserManagementActive ? "" : "opacity-70"}`} />
+                                  </div>
+                                  <span className="truncate">User Management</span>
+                                  <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/usermgmt:rotate-90" />
+                                </SidebarMenuSubButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="pl-4 space-y-0.5 mt-1">
+                                  {getVisibleSubItems(userManagementSubItems).map((subItem) => (
                                   <Tooltip key={subItem.title}>
                                     <TooltipTrigger asChild>
                                       <SidebarMenuSubButton
@@ -685,66 +730,69 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
                                 ))}
                               </div>
                             </CollapsibleContent>
-                          </SidebarMenuSubItem>
-                        </Collapsible>
+                            </SidebarMenuSubItem>
+                          </Collapsible>
+                        )}
 
-                        {/* System Settings nested collapsible */}
-                        <Collapsible defaultOpen={isSystemSettingsActive} className="group/syssettings">
-                          <SidebarMenuSubItem>
-                            <CollapsibleTrigger asChild>
-                              <SidebarMenuSubButton
-                                isActive={isSystemSettingsActive}
-                                data-testid="nav-system-settings"
-                                className="cursor-pointer whitespace-nowrap"
-                              >
-                                <div className={`flex items-center justify-center rounded-md p-1 ${isSystemSettingsActive ? "bg-rose-500/10" : ""}`}>
-                                  <ServerCog className={`h-3.5 w-3.5 shrink-0 text-rose-500 ${isSystemSettingsActive ? "" : "opacity-70"}`} />
+                        {/* System Settings nested collapsible - permission based */}
+                        {canViewSystemSettings && (
+                          <Collapsible defaultOpen={isSystemSettingsActive} className="group/syssettings">
+                            <SidebarMenuSubItem>
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuSubButton
+                                  isActive={isSystemSettingsActive}
+                                  data-testid="nav-system-settings"
+                                  className="cursor-pointer whitespace-nowrap"
+                                >
+                                  <div className={`flex items-center justify-center rounded-md p-1 ${isSystemSettingsActive ? "bg-rose-500/10" : ""}`}>
+                                    <ServerCog className={`h-3.5 w-3.5 shrink-0 text-rose-500 ${isSystemSettingsActive ? "" : "opacity-70"}`} />
+                                  </div>
+                                  <span className="truncate">System Settings</span>
+                                  <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/syssettings:rotate-90" />
+                                </SidebarMenuSubButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="pl-4 space-y-0.5 mt-1">
+                                  {getVisibleSubItems(systemSettingsSubItems).map((subItem) => (
+                                    <Tooltip key={subItem.title}>
+                                      <TooltipTrigger asChild>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={location === subItem.url}
+                                          data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
+                                          className="text-xs whitespace-nowrap"
+                                        >
+                                          <Link href={subItem.url}>
+                                            <div className={`flex items-center justify-center rounded-md p-0.5 ${location === subItem.url ? subItem.bgColor : ""}`}>
+                                              <subItem.icon className={`h-3 w-3 shrink-0 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
+                                            </div>
+                                            <span className="truncate">{subItem.title}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right" className="text-xs">
+                                        {subItem.title}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ))}
                                 </div>
-                                <span className="truncate">System Settings</span>
-                                <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform group-data-[state=open]/syssettings:rotate-90" />
-                              </SidebarMenuSubButton>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="pl-4 space-y-0.5 mt-1">
-                                {systemSettingsSubItems.map((subItem) => (
-                                  <Tooltip key={subItem.title}>
-                                    <TooltipTrigger asChild>
-                                      <SidebarMenuSubButton
-                                        asChild
-                                        isActive={location === subItem.url}
-                                        data-testid={`nav-${subItem.title.toLowerCase().replace(/\s+/g, "-")}`}
-                                        className="text-xs whitespace-nowrap"
-                                      >
-                                        <Link href={subItem.url}>
-                                          <div className={`flex items-center justify-center rounded-md p-0.5 ${location === subItem.url ? subItem.bgColor : ""}`}>
-                                            <subItem.icon className={`h-3 w-3 shrink-0 ${subItem.color} ${location === subItem.url ? "" : "opacity-70"}`} />
-                                          </div>
-                                          <span className="truncate">{subItem.title}</span>
-                                        </Link>
-                                      </SidebarMenuSubButton>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="text-xs">
-                                      {subItem.title}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ))}
-                              </div>
-                            </CollapsibleContent>
-                          </SidebarMenuSubItem>
-                        </Collapsible>
+                              </CollapsibleContent>
+                            </SidebarMenuSubItem>
+                          </Collapsible>
+                        )}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
               )}
 
-              {/* Settings for non-admin users */}
-              {user?.role !== "admin" && (
+              {/* Settings for users without admin access - permission based */}
+              {!canViewAdmin && (isSuperAdmin || canView("settings")) && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
                     isActive={location === "/settings"}
-                    data-testid="nav-settings"
+                    data-testid="nav-settings-standalone"
                     className={isCollapsed ? "flex flex-col items-center justify-center h-12 px-0" : ""}
                   >
                     <Link href="/settings">
