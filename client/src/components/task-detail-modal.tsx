@@ -63,7 +63,9 @@ import {
   X,
   Camera,
   Type,
+  Code2,
 } from "lucide-react";
+import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 
 type TaskWithDetails = Task & {
   creator?: User;
@@ -118,6 +120,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [followupsOpen, setFollowupsOpen] = useState(true);
+  const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
   
   // Refs for recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -414,6 +417,15 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAssignDevDialog(true)}
+                data-testid="button-assign-to-development"
+              >
+                <Code2 className="h-4 w-4 mr-2" />
+                Assign to Dev
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -938,6 +950,17 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
             </Button>
           </div>
         </div>
+
+        {/* Assign to Development Dialog */}
+        <AssignToDevelopmentDialog
+          open={showAssignDevDialog}
+          onClose={() => setShowAssignDevDialog(false)}
+          sourceType="task"
+          sourceId={task.id}
+          sourceTitle={task.title}
+          sourceReference={task.taskNumber}
+          sourceDescription={task.description || undefined}
+        />
       </DialogContent>
     </Dialog>
   );

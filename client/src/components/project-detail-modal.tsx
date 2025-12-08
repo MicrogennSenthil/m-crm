@@ -20,8 +20,9 @@ import { format } from "date-fns";
 import { 
   Calendar, Clock, User, Building2, CheckCircle2, AlertCircle, 
   GraduationCap, ClipboardCheck, Send, Plus, Trash2, Settings,
-  Camera, Video, FileText, Image, Loader2, CalendarIcon
+  Camera, Video, FileText, Image, Loader2, CalendarIcon, Code2
 } from "lucide-react";
+import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { DatePickerCompact } from "@/components/ui/date-picker";
 import type { Project, ProjectModule, Module, TrainingRecord, User as UserType, TrainingSession, ProjectHandoff, Lead, Customer, ProjectProgressEntry } from "@shared/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -305,6 +306,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
   const [trainingDatePickerOpen, setTrainingDatePickerOpen] = useState(false);
   const [trainingDateTime, setTrainingDateTime] = useState<Date | undefined>(undefined);
   const [trainingTime, setTrainingTime] = useState("09:00");
+  const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
   const [newSession, setNewSession] = useState({
     moduleId: "",
     recipientName: "",
@@ -559,9 +561,20 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                 </p>
               )}
             </div>
-            <Badge variant="secondary" className="capitalize">
-              {project.status.replace(/_/g, " ")}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAssignDevDialog(true)}
+                data-testid="button-assign-to-development"
+              >
+                <Code2 className="h-4 w-4 mr-2" />
+                Assign to Dev
+              </Button>
+              <Badge variant="secondary" className="capitalize">
+                {project.status.replace(/_/g, " ")}
+              </Badge>
+            </div>
           </div>
         </DialogHeader>
 
@@ -1401,6 +1414,17 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Assign to Development Dialog */}
+        <AssignToDevelopmentDialog
+          open={showAssignDevDialog}
+          onClose={() => setShowAssignDevDialog(false)}
+          sourceType="implementation"
+          sourceId={project.id}
+          sourceTitle={project.clientName}
+          sourceReference={`PRJ-${project.id.slice(0, 8)}`}
+          sourceDescription={`Implementation project for ${project.clientName}`}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -39,6 +39,13 @@ The CRM includes:
   - **Search Page** (/knowledge-base/search): Natural language search with language filtering and cross-language toggle
   - **Features**: OpenAI text-embedding-3-small (1536 dimensions), 800-1000 token chunks with 200 overlap, 15 supported languages (English, Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Tamil, Telugu, Russian, Italian, Dutch)
   - **Multilingual Support**: Translation group IDs link documents across languages, language-specific embeddings for accurate retrieval, optional cross-language search
+- **Development Module**: Work assignment system for developers with cross-module integration:
+  - **Dashboard** (/development): Aggregated metrics showing task counts by status, priority, and overdue status
+  - **Tasks Page** (/development/tasks): Full CRUD operations with filtering by status, source type, priority, and overdue status
+  - **Cross-Module Integration**: "Assign to Development" button in Implementation projects, Support tickets, and Tasks modals
+  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours tracking, commenting system
+  - **Source Types**: implementation (from projects), support (from tickets), task (from tasks module)
+  - **Shared Component**: AssignToDevelopmentDialog for consistent assignment workflow across modules
 
 ### System Design Choices
 The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.

@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2 } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2 } from "lucide-react";
+import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
 import type { Ticket, TicketComment, User, EscalationHistory } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -43,6 +44,7 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   const [isInternal, setIsInternal] = useState(false);
   const [showReopenDialog, setShowReopenDialog] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
   const { toast } = useToast();
 
   const { data: comments } = useQuery<(TicketComment & { user?: User })[]>({
@@ -481,6 +483,15 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                 <Button
                   variant="outline"
                   className="w-full"
+                  onClick={() => setShowAssignDevDialog(true)}
+                  data-testid="button-assign-to-development"
+                >
+                  <Code2 className="h-4 w-4 mr-2" />
+                  Assign to Development
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
                   onClick={() => escalateTicketMutation.mutate()}
                   disabled={escalateTicketMutation.isPending || (ticket.escalationLevel ?? 1) >= 3}
                   data-testid="button-escalate-ticket"
@@ -514,6 +525,17 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
             )}
           </div>
         </div>
+
+        {/* Assign to Development Dialog */}
+        <AssignToDevelopmentDialog
+          open={showAssignDevDialog}
+          onClose={() => setShowAssignDevDialog(false)}
+          sourceType="support"
+          sourceId={ticket.id}
+          sourceTitle={`[${ticket.ticketNumber}] ${ticket.issueSummary}`}
+          sourceReference={ticket.ticketNumber}
+          sourceDescription={ticket.issueDescription || undefined}
+        />
 
         {/* Reopen Ticket Dialog */}
         <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
