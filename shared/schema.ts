@@ -1181,3 +1181,65 @@ export const insertAssignmentSettingSchema = createInsertSchema(assignmentSettin
 
 export type InsertAssignmentSetting = z.infer<typeof insertAssignmentSettingSchema>;
 export type AssignmentSetting = typeof assignmentSettings.$inferSelect;
+
+// ============================================
+// Development Department Module
+// ============================================
+
+// Development Tasks - Work assignments from Implementation, Support, or Tasks modules
+export const developmentTasks = pgTable("development_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskNumber: text("task_number").notNull().unique(), // DEV-XXXXXX format
+  title: text("title").notNull(),
+  description: text("description"),
+  sourceType: text("source_type").notNull(), // implementation, support, task
+  sourceId: varchar("source_id").notNull(), // project_id, ticket_id, or task_id
+  sourceReference: text("source_reference"), // Human-readable reference (e.g., ticket number, project name)
+  priority: text("priority").notNull().default("medium"), // low, medium, high, critical
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, overdue
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  assignedAt: timestamp("assigned_at"),
+  deadline: timestamp("deadline").notNull(),
+  completedAt: timestamp("completed_at"),
+  isOverdue: boolean("is_overdue").default(false),
+  penaltyApplied: boolean("penalty_applied").default(false),
+  penaltyPoints: integer("penalty_points").default(0),
+  penaltyReason: text("penalty_reason"),
+  notes: text("notes"),
+  attachments: text("attachments").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDevelopmentTaskSchema = createInsertSchema(developmentTasks).omit({
+  id: true,
+  taskNumber: true,
+  isOverdue: true,
+  penaltyApplied: true,
+  penaltyPoints: true,
+  penaltyReason: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDevelopmentTask = z.infer<typeof insertDevelopmentTaskSchema>;
+export type DevelopmentTask = typeof developmentTasks.$inferSelect;
+
+// Development Task Comments - Track progress and communication
+export const developmentTaskComments = pgTable("development_task_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  developmentTaskId: varchar("development_task_id").notNull().references(() => developmentTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  isInternal: boolean("is_internal").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDevelopmentTaskCommentSchema = createInsertSchema(developmentTaskComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDevelopmentTaskComment = z.infer<typeof insertDevelopmentTaskCommentSchema>;
+export type DevelopmentTaskComment = typeof developmentTaskComments.$inferSelect;
