@@ -132,7 +132,7 @@ export default function UserMaster() {
   }, [editingUser]);
 
   const createUserMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async (data: { email: string; firstName: string; lastName: string; role: string; departmentId?: string; isActive: boolean }) => {
       const response = await apiRequest("POST", "/api/users", data);
       return response.json();
     },
@@ -330,14 +330,19 @@ export default function UserMaster() {
       return;
     }
 
-    const submitData = {
+    const submitData: { email: string; firstName: string; lastName: string; role: string; departmentId?: string; isActive: boolean } = {
       email: formData.email,
       firstName: formData.firstName,
       lastName: formData.lastName,
       role: formData.role,
-      departmentId: formData.departmentId || undefined,
       isActive: formData.isActive,
     };
+    
+    if (formData.departmentId) {
+      submitData.departmentId = formData.departmentId;
+    }
+
+    console.log("Submitting user data:", submitData);
 
     if (editingUser) {
       updateUserMutation.mutate({ id: editingUser.id, data: submitData });
