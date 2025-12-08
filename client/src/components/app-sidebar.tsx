@@ -34,6 +34,7 @@ import {
   Star,
   Gauge,
   RefreshCw,
+  Code2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -156,6 +157,31 @@ const menuGroups = [
         color: "text-red-500",
         bgColor: "bg-red-500/10",
         module: "support_dashboard",
+      },
+    ],
+  },
+  {
+    id: "development",
+    label: "Development",
+    icon: Code2,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-500/10",
+    items: [
+      {
+        title: "Dev Dashboard",
+        url: "/development/dashboard",
+        icon: Gauge,
+        color: "text-indigo-500",
+        bgColor: "bg-indigo-500/10",
+        module: "development_dashboard",
+      },
+      {
+        title: "Dev Tasks",
+        url: "/development/tasks",
+        icon: Code2,
+        color: "text-violet-500",
+        bgColor: "bg-violet-500/10",
+        module: "development_tasks",
       },
     ],
   },
