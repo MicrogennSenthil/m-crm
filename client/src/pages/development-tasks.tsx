@@ -10,6 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { 
   Code2, 
   Clock, 
@@ -17,55 +21,24 @@ import {
   AlertTriangle, 
   Search,
   Plus,
-  MessageSquare,
   Calendar,
-  User,
   Play,
-  Pause,
-  Edit,
   Trash2,
-  Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User as UserType } from "@shared/schema";
+import { 
+  type DevelopmentTask as DevelopmentTaskBase, 
+  type User as UserType,
+  insertDevelopmentTaskSchema
+} from "@shared/schema";
 
-interface DevelopmentTask {
-  id: string;
-  taskNumber: string;
-  title: string;
-  description: string | null;
-  sourceType: string;
-  sourceId: string | null;
-  sourceReference: string | null;
-  assignedTo: string | null;
-  assignedBy: string | null;
-  priority: string;
-  status: string;
-  deadline: string;
-  estimatedHours: number | null;
-  actualHours: number | null;
-  isOverdue: boolean;
-  penaltyApplied: boolean;
-  penaltyPoints: number | null;
-  penaltyReason: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+interface DevelopmentTaskWithDetails extends DevelopmentTaskBase {
   assignee?: UserType;
   assignedByUser?: UserType;
-}
-
-interface TaskComment {
-  id: string;
-  developmentTaskId: string;
-  userId: string | null;
-  content: string;
-  createdAt: string;
-  user?: UserType;
 }
 
 const STATUS_CONFIG: Record<string, { color: string; icon: typeof Clock; label: string }> = {
@@ -91,49 +64,72 @@ const SOURCE_CONFIG: Record<string, { color: string; label: string }> = {
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
+const createTaskFormSchema = insertDevelopmentTaskSchema.pick({
+  title: true,
+  description: true,
+  priority: true,
+  deadline: true,
+  assignedTo: true,
+  estimatedHours: true,
+}).extend({
+  title: z.string().min(1, "Title is required"),
+  deadline: z.coerce.date(),
+  estimatedHours: z.coerce.number().nullable().optional(),
+});
+
+type CreateTaskFormData = z.infer<typeof createTaskFormSchema>;
+
 export default function DevelopmentTasks() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { canView, canCreate, canEdit, canDelete } = usePermissions();
+  const { canView, canCreate, canEdit, canDelete, isLoading: permissionsLoading } = usePermissions();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
-  const [selectedTask, setSelectedTask] = useState<DevelopmentTask | null>(null);
+  const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newComment, setNewComment] = useState("");
 
-  const [newTask, setNewTask] = useState({
-    title: "",
-    description: "",
-    sourceType: "manual",
-    priority: "medium",
-    deadline: "",
-    assignedTo: "",
-    estimatedHours: "",
+  const form = useForm<CreateTaskFormData>({
+    resolver: zodResolver(createTaskFormSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      priority: "medium",
+      deadline: undefined,
+      assignedTo: undefined,
+      estimatedHours: undefined,
+    },
   });
 
-  const isAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === "admin";
+  if (permissionsLoading || !user) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
+      </div>
+    );
+  }
+
+  const isAdmin = user.email === SUPER_ADMIN_EMAIL || user.role === "admin";
   const hasAccess = isAdmin || canView("development_tasks");
 
   if (!hasAccess) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
         <AlertTriangle className="h-16 w-16 text-amber-500" />
-        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <h2 className="text-xl font-semibold" data-testid="text-access-denied">Access Denied</h2>
         <p className="text-muted-foreground text-center max-w-md">
           You don't have permission to access Development Tasks.
         </p>
-        <Button variant="outline" onClick={() => window.history.back()}>
+        <Button variant="outline" onClick={() => window.history.back()} data-testid="button-go-back">
           Go Back
         </Button>
       </div>
     );
   }
 
-  const { data: tasks, isLoading } = useQuery<DevelopmentTask[]>({
+  const { data: tasks, isLoading } = useQuery<DevelopmentTaskWithDetails[]>({
     queryKey: ["/api/development/tasks"],
   });
 
@@ -141,28 +137,24 @@ export default function DevelopmentTasks() {
     queryKey: ["/api/users"],
   });
 
-  const { data: comments } = useQuery<TaskComment[]>({
-    queryKey: ["/api/development/tasks", selectedTask?.id, "comments"],
-    enabled: !!selectedTask,
-  });
-
   const createTaskMutation = useMutation({
-    mutationFn: async (taskData: any) => {
-      return await apiRequest("POST", "/api/development/tasks", taskData);
+    mutationFn: async (taskData: CreateTaskFormData) => {
+      const payload = {
+        title: taskData.title,
+        description: taskData.description || null,
+        priority: taskData.priority,
+        deadline: taskData.deadline,
+        sourceType: "manual",
+        estimatedHours: taskData.estimatedHours || null,
+        assignedTo: taskData.assignedTo || null,
+      };
+      return await apiRequest("POST", "/api/development/tasks", payload);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Task created successfully" });
       queryClient.invalidateQueries({ queryKey: ["/api/development/tasks"] });
       setIsCreateDialogOpen(false);
-      setNewTask({
-        title: "",
-        description: "",
-        sourceType: "manual",
-        priority: "medium",
-        deadline: "",
-        assignedTo: "",
-        estimatedHours: "",
-      });
+      form.reset();
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create task", variant: "destructive" });
@@ -179,20 +171,6 @@ export default function DevelopmentTasks() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
-    },
-  });
-
-  const addCommentMutation = useMutation({
-    mutationFn: async ({ taskId, content }: { taskId: string; content: string }) => {
-      return await apiRequest("POST", `/api/development/tasks/${taskId}/comments`, { content });
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Comment added" });
-      queryClient.invalidateQueries({ queryKey: ["/api/development/tasks", selectedTask?.id, "comments"] });
-      setNewComment("");
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to add comment", variant: "destructive" });
     },
   });
 
@@ -220,32 +198,23 @@ export default function DevelopmentTasks() {
     if (activeTab === "in_progress" && task.status !== "in_progress") return false;
     if (activeTab === "completed" && task.status !== "completed") return false;
     if (activeTab === "overdue" && task.status !== "overdue" && !task.isOverdue) return false;
-    if (statusFilter !== "all" && task.status !== statusFilter) return false;
     if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
     if (sourceFilter !== "all" && task.sourceType !== sourceFilter) return false;
     return true;
   }) || [];
 
-  const handleStatusChange = (task: DevelopmentTask, newStatus: string) => {
+  const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string) => {
     updateTaskMutation.mutate({ id: task.id, data: { status: newStatus } });
   };
 
-  const handleCreateTask = () => {
-    if (!newTask.title || !newTask.deadline) {
-      toast({ title: "Error", description: "Title and deadline are required", variant: "destructive" });
-      return;
-    }
-    createTaskMutation.mutate({
-      ...newTask,
-      estimatedHours: newTask.estimatedHours ? parseInt(newTask.estimatedHours) : null,
-      assignedTo: newTask.assignedTo || null,
-    });
+  const onSubmitTask = (data: CreateTaskFormData) => {
+    createTaskMutation.mutate(data);
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
       </div>
     );
   }
@@ -261,14 +230,14 @@ export default function DevelopmentTasks() {
   ) || [];
 
   return (
-    <div className="flex-1 overflow-auto p-6 space-y-6">
+    <div className="flex-1 overflow-auto p-6 space-y-6" data-testid="development-tasks-page">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
             <Code2 className="h-7 w-7 text-indigo-600" />
             Development Tasks
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground" data-testid="text-page-description">
             Manage development work from Implementation, Support, and Tasks
           </p>
         </div>
@@ -281,7 +250,7 @@ export default function DevelopmentTasks() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap" data-testid="tabs-status">
           <TabsTrigger value="all" data-testid="tab-all">
             All ({tasks?.length || 0})
           </TabsTrigger>
@@ -338,14 +307,14 @@ export default function DevelopmentTasks() {
 
         <TabsContent value={activeTab} className="space-y-4">
           {filteredTasks.length === 0 ? (
-            <Card>
+            <Card data-testid="card-no-tasks">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Code2 className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No tasks found</p>
+                <p className="text-muted-foreground" data-testid="text-no-tasks">No tasks found</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3" data-testid="task-list">
               {filteredTasks.map(task => {
                 const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
                 const StatusIcon = statusConfig.icon;
@@ -368,39 +337,39 @@ export default function DevelopmentTasks() {
                           <StatusIcon className={`h-5 w-5 mt-0.5 ${isOverdue && task.status !== "completed" ? "text-red-500" : ""}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs text-muted-foreground">{task.taskNumber}</span>
-                              <Badge variant="outline" className={SOURCE_CONFIG[task.sourceType]?.color || ""}>
+                              <span className="text-xs text-muted-foreground" data-testid={`text-task-number-${task.id}`}>{task.taskNumber}</span>
+                              <Badge variant="outline" className={SOURCE_CONFIG[task.sourceType]?.color || ""} data-testid={`badge-source-${task.id}`}>
                                 {SOURCE_CONFIG[task.sourceType]?.label || task.sourceType}
                               </Badge>
-                              <Badge variant="outline" className={PRIORITY_CONFIG[task.priority]?.color || ""}>
+                              <Badge variant="outline" className={PRIORITY_CONFIG[task.priority]?.color || ""} data-testid={`badge-priority-${task.id}`}>
                                 {PRIORITY_CONFIG[task.priority]?.label || task.priority}
                               </Badge>
                             </div>
-                            <h3 className="font-medium mt-1">{task.title}</h3>
+                            <h3 className="font-medium mt-1" data-testid={`text-task-title-${task.id}`}>{task.title}</h3>
                             {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2" data-testid={`text-task-description-${task.id}`}>
                                 {task.description}
                               </p>
                             )}
                             <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1" data-testid={`text-deadline-${task.id}`}>
                                 <Calendar className="h-3 w-3" />
                                 Due: {format(deadline, "MMM d, yyyy")}
                               </span>
                               {task.sourceReference && (
-                                <span className="flex items-center gap-1">
+                                <span className="flex items-center gap-1" data-testid={`text-reference-${task.id}`}>
                                   Ref: {task.sourceReference}
                                 </span>
                               )}
                               {task.estimatedHours && (
-                                <span>Est: {task.estimatedHours}h</span>
+                                <span data-testid={`text-estimated-${task.id}`}>Est: {task.estimatedHours}h</span>
                               )}
                             </div>
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           {task.assignee && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2" data-testid={`assignee-${task.id}`}>
                               <Avatar className="h-6 w-6">
                                 <AvatarFallback className="text-xs">
                                   {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
@@ -411,11 +380,11 @@ export default function DevelopmentTasks() {
                               </span>
                             </div>
                           )}
-                          <Badge className={statusConfig.color}>
+                          <Badge className={statusConfig.color} data-testid={`badge-status-${task.id}`}>
                             {statusConfig.label}
                           </Badge>
                           {task.penaltyPoints && task.penaltyPoints > 0 && (
-                            <span className="text-xs text-red-500">-{task.penaltyPoints} pts</span>
+                            <span className="text-xs text-red-500" data-testid={`text-penalty-${task.id}`}>-{task.penaltyPoints} pts</span>
                           )}
                         </div>
                       </div>
@@ -429,18 +398,18 @@ export default function DevelopmentTasks() {
       </Tabs>
 
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-task-detail">
           {selectedTask && (
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{selectedTask.taskNumber}</span>
-                  <Badge variant="outline" className={SOURCE_CONFIG[selectedTask.sourceType]?.color || ""}>
+                  <span className="text-sm text-muted-foreground" data-testid="text-detail-task-number">{selectedTask.taskNumber}</span>
+                  <Badge variant="outline" className={SOURCE_CONFIG[selectedTask.sourceType]?.color || ""} data-testid="badge-detail-source">
                     {SOURCE_CONFIG[selectedTask.sourceType]?.label || selectedTask.sourceType}
                   </Badge>
                 </div>
-                <DialogTitle className="text-xl">{selectedTask.title}</DialogTitle>
-                <DialogDescription>
+                <DialogTitle className="text-xl" data-testid="text-detail-title">{selectedTask.title}</DialogTitle>
+                <DialogDescription data-testid="text-detail-description">
                   {selectedTask.description || "No description provided"}
                 </DialogDescription>
               </DialogHeader>
@@ -454,7 +423,7 @@ export default function DevelopmentTasks() {
                       onValueChange={(value) => handleStatusChange(selectedTask, value)}
                       disabled={!(isAdmin || canEdit("development_tasks"))}
                     >
-                      <SelectTrigger data-testid="select-task-status">
+                      <SelectTrigger data-testid="select-detail-status">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -466,20 +435,20 @@ export default function DevelopmentTasks() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Priority</Label>
-                    <Badge variant="outline" className={`${PRIORITY_CONFIG[selectedTask.priority]?.color || ""} w-full justify-center py-2`}>
+                    <Badge variant="outline" className={`${PRIORITY_CONFIG[selectedTask.priority]?.color || ""} w-full justify-center py-2`} data-testid="badge-detail-priority">
                       {PRIORITY_CONFIG[selectedTask.priority]?.label || selectedTask.priority}
                     </Badge>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Deadline</Label>
-                    <p className={`text-sm ${selectedTask.isOverdue ? "text-red-600 font-medium" : ""}`}>
+                    <p className={`text-sm ${selectedTask.isOverdue ? "text-red-600 font-medium" : ""}`} data-testid="text-detail-deadline">
                       {format(new Date(selectedTask.deadline), "MMM d, yyyy HH:mm")}
                     </p>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Assigned To</Label>
                     {selectedTask.assignee ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" data-testid="text-detail-assignee">
                         <Avatar className="h-6 w-6">
                           <AvatarFallback className="text-xs">
                             {selectedTask.assignee.firstName?.[0]}{selectedTask.assignee.lastName?.[0]}
@@ -496,25 +465,25 @@ export default function DevelopmentTasks() {
                   {selectedTask.sourceReference && (
                     <div className="col-span-2">
                       <Label className="text-xs text-muted-foreground">Source Reference</Label>
-                      <p className="text-sm">{selectedTask.sourceReference}</p>
+                      <p className="text-sm" data-testid="text-detail-reference">{selectedTask.sourceReference}</p>
                     </div>
                   )}
                   {selectedTask.estimatedHours && (
                     <div>
                       <Label className="text-xs text-muted-foreground">Estimated Hours</Label>
-                      <p className="text-sm">{selectedTask.estimatedHours}h</p>
+                      <p className="text-sm" data-testid="text-detail-estimated">{selectedTask.estimatedHours}h</p>
                     </div>
                   )}
                   {selectedTask.actualHours && (
                     <div>
                       <Label className="text-xs text-muted-foreground">Actual Hours</Label>
-                      <p className="text-sm">{selectedTask.actualHours}h</p>
+                      <p className="text-sm" data-testid="text-detail-actual">{selectedTask.actualHours}h</p>
                     </div>
                   )}
                 </div>
 
                 {selectedTask.penaltyApplied && selectedTask.penaltyPoints && (
-                  <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 border border-red-200 dark:border-red-800">
+                  <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 border border-red-200 dark:border-red-800" data-testid="alert-penalty">
                     <div className="flex items-center gap-2 text-red-600">
                       <AlertTriangle className="h-4 w-4" />
                       <span className="font-medium">Penalty Applied: -{selectedTask.penaltyPoints} points</span>
@@ -524,71 +493,17 @@ export default function DevelopmentTasks() {
                     )}
                   </div>
                 )}
-
-                <div className="border-t pt-4">
-                  <h4 className="font-medium flex items-center gap-2 mb-3">
-                    <MessageSquare className="h-4 w-4" />
-                    Comments
-                  </h4>
-                  <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {comments?.map(comment => (
-                      <div key={comment.id} className="flex gap-3 p-2 rounded-lg bg-muted/50">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {comment.user?.firstName?.[0]}{comment.user?.lastName?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {comment.user?.firstName} {comment.user?.lastName}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(comment.createdAt), "MMM d, HH:mm")}
-                            </span>
-                          </div>
-                          <p className="text-sm mt-1">{comment.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {(!comments || comments.length === 0) && (
-                      <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <Textarea
-                      placeholder="Add a comment..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="resize-none"
-                      rows={2}
-                      data-testid="textarea-new-comment"
-                    />
-                    <Button 
-                      size="icon"
-                      onClick={() => {
-                        if (newComment.trim()) {
-                          addCommentMutation.mutate({ taskId: selectedTask.id, content: newComment });
-                        }
-                      }}
-                      disabled={!newComment.trim() || addCommentMutation.isPending}
-                      data-testid="button-add-comment"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
               </div>
 
               <DialogFooter className="gap-2 flex-wrap">
                 {selectedTask.status === "pending" && (isAdmin || canEdit("development_tasks")) && (
-                  <Button onClick={() => handleStatusChange(selectedTask, "in_progress")}>
+                  <Button onClick={() => handleStatusChange(selectedTask, "in_progress")} data-testid="button-start-work">
                     <Play className="h-4 w-4 mr-2" />
                     Start Work
                   </Button>
                 )}
                 {selectedTask.status === "in_progress" && (isAdmin || canEdit("development_tasks")) && (
-                  <Button variant="secondary" onClick={() => handleStatusChange(selectedTask, "completed")}>
+                  <Button variant="secondary" onClick={() => handleStatusChange(selectedTask, "completed")} data-testid="button-mark-complete">
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     Mark Complete
                   </Button>
@@ -614,110 +529,135 @@ export default function DevelopmentTasks() {
       </Dialog>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" data-testid="dialog-create-task">
           <DialogHeader>
-            <DialogTitle>Create Development Task</DialogTitle>
+            <DialogTitle data-testid="text-create-title">Create Development Task</DialogTitle>
             <DialogDescription>
               Create a new development task manually
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                value={newTask.title}
-                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                placeholder="Task title"
-                data-testid="input-task-title"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmitTask)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title *</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Task title" data-testid="input-task-title" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={newTask.description}
-                onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                placeholder="Task description"
-                rows={3}
-                data-testid="textarea-task-description"
+              
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} placeholder="Task description" rows={3} data-testid="textarea-task-description" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="priority">Priority</Label>
-                <Select 
-                  value={newTask.priority} 
-                  onValueChange={(value) => setNewTask({ ...newTask, priority: value })}
-                >
-                  <SelectTrigger data-testid="select-new-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="deadline">Deadline *</Label>
-                <Input
-                  id="deadline"
-                  type="datetime-local"
-                  value={newTask.deadline}
-                  onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
-                  data-testid="input-task-deadline"
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="priority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Priority</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-new-priority">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="critical">Critical</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="deadline"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Deadline *</FormLabel>
+                      <FormControl>
+                        <Input type="datetime-local" {...field} data-testid="input-task-deadline" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="assignedTo">Assign To</Label>
-                <Select 
-                  value={newTask.assignedTo} 
-                  onValueChange={(value) => setNewTask({ ...newTask, assignedTo: value })}
-                >
-                  <SelectTrigger data-testid="select-assign-to">
-                    <SelectValue placeholder="Select developer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {developers.map(dev => (
-                      <SelectItem key={dev.id} value={dev.id}>
-                        {dev.firstName} {dev.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="estimatedHours">Estimated Hours</Label>
-                <Input
-                  id="estimatedHours"
-                  type="number"
-                  value={newTask.estimatedHours}
-                  onChange={(e) => setNewTask({ ...newTask, estimatedHours: e.target.value })}
-                  placeholder="Hours"
-                  data-testid="input-estimated-hours"
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="assignedTo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assign To</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-assign-to">
+                            <SelectValue placeholder="Select developer" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {developers.map(dev => (
+                            <SelectItem key={dev.id} value={dev.id}>
+                              {dev.firstName} {dev.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="estimatedHours"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Estimated Hours</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} placeholder="Hours" data-testid="input-estimated-hours" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
-          </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleCreateTask} 
-              disabled={createTaskMutation.isPending}
-              data-testid="button-submit-task"
-            >
-              {createTaskMutation.isPending ? "Creating..." : "Create Task"}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} data-testid="button-cancel-create">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createTaskMutation.isPending} data-testid="button-submit-task">
+                  {createTaskMutation.isPending ? "Creating..." : "Create Task"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
