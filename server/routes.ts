@@ -526,8 +526,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof isActive === "boolean") {
         updates.isActive = isActive;
       }
-      // Allow any role - roles are now managed in user_roles table
+      // Validate role against user_roles master table
       if (role) {
+        const validRoles = await storage.getUserRoles();
+        const roleExists = validRoles.some(r => r.name === role && r.isActive);
+        if (!roleExists) {
+          return res.status(400).json({ message: `Invalid role: "${role}". Role must exist in User Roles master.` });
+        }
         updates.role = role;
       }
       if (firstName !== undefined) {
@@ -1064,16 +1069,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/users/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       console.log("[User Update] ID:", req.params.id, "Data:", JSON.stringify(req.body));
+      const { role, isActive, firstName, lastName, email, departmentId } = req.body;
+      
+      // Get target user
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Protect super admin from role/status changes
+      if (targetUser.email === SUPER_ADMIN_EMAIL) {
+        if (role && role !== "admin") {
+          return res.status(403).json({ message: "Cannot change super admin role" });
+        }
+        if (isActive === false) {
+          return res.status(403).json({ message: "Cannot deactivate super admin account" });
+        }
+      }
       
       // Check for duplicate email if email is being updated
-      if (req.body.email) {
-        const existingUser = await storage.getUserByEmail(req.body.email);
+      if (email && email !== targetUser.email) {
+        const existingUser = await storage.getUserByEmail(email);
         if (existingUser && existingUser.id !== req.params.id) {
           return res.status(400).json({ message: "A user with this email already exists" });
         }
       }
       
-      const updated = await storage.updateUser(req.params.id, req.body);
+      // Build update object with validated fields
+      const updates: any = {};
+      
+      if (typeof isActive === "boolean") {
+        updates.isActive = isActive;
+      }
+      // Validate role against user_roles master table
+      if (role) {
+        const validRoles = await storage.getUserRoles();
+        const roleExists = validRoles.some(r => r.name === role && r.isActive);
+        if (!roleExists) {
+          return res.status(400).json({ message: `Invalid role: "${role}". Role must exist in User Roles master.` });
+        }
+        updates.role = role;
+      }
+      if (firstName !== undefined) {
+        updates.firstName = firstName;
+      }
+      if (lastName !== undefined) {
+        updates.lastName = lastName;
+      }
+      if (email !== undefined) {
+        updates.email = email;
+      }
+      if (departmentId !== undefined) {
+        updates.departmentId = departmentId || null;
+      }
+      
+      const updated = await storage.updateUser(req.params.id, updates);
       console.log("[User Update] Result role:", updated.role);
       
       await storage.logActivity({
