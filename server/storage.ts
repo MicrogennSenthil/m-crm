@@ -131,6 +131,12 @@ import {
   assignmentSettings,
   type AssignmentSetting,
   type InsertAssignmentSetting,
+  developmentTasks,
+  developmentTaskComments,
+  type DevelopmentTask,
+  type InsertDevelopmentTask,
+  type DevelopmentTaskComment,
+  type InsertDevelopmentTaskComment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull } from "drizzle-orm";
@@ -444,6 +450,47 @@ export interface IStorage {
   upsertAssignmentSetting(setting: InsertAssignmentSetting): Promise<AssignmentSetting>;
   updateLastAssignedUser(module: string, userId: string): Promise<void>;
   getNextAssignableUser(module: string): Promise<User | undefined>;
+
+  // Development Task operations
+  getDevelopmentTasks(filters?: { 
+    status?: string; 
+    assignedTo?: string;
+    sourceType?: string;
+    priority?: string;
+    isOverdue?: boolean;
+  }): Promise<(DevelopmentTask & { 
+    assignee?: User; 
+    assignedByUser?: User;
+  })[]>;
+  getDevelopmentTask(id: string): Promise<(DevelopmentTask & { 
+    assignee?: User; 
+    assignedByUser?: User;
+  }) | undefined>;
+  createDevelopmentTask(task: InsertDevelopmentTask): Promise<DevelopmentTask>;
+  updateDevelopmentTask(id: string, data: Partial<InsertDevelopmentTask & { 
+    isOverdue?: boolean; 
+    penaltyApplied?: boolean; 
+    penaltyPoints?: number; 
+    penaltyReason?: string;
+  }>): Promise<DevelopmentTask>;
+  deleteDevelopmentTask(id: string): Promise<void>;
+
+  // Development Task Comment operations
+  getDevelopmentTaskComments(developmentTaskId: string): Promise<(DevelopmentTaskComment & { user?: User })[]>;
+  createDevelopmentTaskComment(comment: InsertDevelopmentTaskComment): Promise<DevelopmentTaskComment>;
+
+  // Development Dashboard metrics
+  getDevelopmentDashboardMetrics(assignedTo?: string): Promise<{
+    totalTasks: number;
+    pendingTasks: number;
+    inProgressTasks: number;
+    completedTasks: number;
+    overdueTasks: number;
+    totalPenaltyPoints: number;
+  }>;
+  
+  // Check and apply penalties for overdue tasks
+  checkAndApplyOverduePenalties(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3020,6 +3067,229 @@ export class DatabaseStorage implements IStorage {
     }
 
     return undefined;
+  }
+
+  // Development Task operations
+  async getDevelopmentTasks(filters?: { 
+    status?: string; 
+    assignedTo?: string;
+    sourceType?: string;
+    priority?: string;
+    isOverdue?: boolean;
+  }): Promise<(DevelopmentTask & { 
+    assignee?: User; 
+    assignedByUser?: User;
+  })[]> {
+    const conditions: any[] = [];
+    
+    if (filters?.status) {
+      conditions.push(eq(developmentTasks.status, filters.status));
+    }
+    if (filters?.assignedTo) {
+      conditions.push(eq(developmentTasks.assignedTo, filters.assignedTo));
+    }
+    if (filters?.sourceType) {
+      conditions.push(eq(developmentTasks.sourceType, filters.sourceType));
+    }
+    if (filters?.priority) {
+      conditions.push(eq(developmentTasks.priority, filters.priority));
+    }
+    if (filters?.isOverdue !== undefined) {
+      conditions.push(eq(developmentTasks.isOverdue, filters.isOverdue));
+    }
+
+    const taskList = await db
+      .select()
+      .from(developmentTasks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(developmentTasks.createdAt));
+
+    // Enrich with user details
+    const enrichedTasks = await Promise.all(
+      taskList.map(async (task) => {
+        const [assignee] = task.assignedTo 
+          ? await db.select().from(users).where(eq(users.id, task.assignedTo))
+          : [undefined];
+        
+        const [assignedByUser] = task.assignedBy 
+          ? await db.select().from(users).where(eq(users.id, task.assignedBy))
+          : [undefined];
+
+        return {
+          ...task,
+          assignee,
+          assignedByUser,
+        };
+      })
+    );
+
+    return enrichedTasks;
+  }
+
+  async getDevelopmentTask(id: string): Promise<(DevelopmentTask & { 
+    assignee?: User; 
+    assignedByUser?: User;
+  }) | undefined> {
+    const [task] = await db.select().from(developmentTasks).where(eq(developmentTasks.id, id));
+    if (!task) return undefined;
+
+    const [assignee] = task.assignedTo 
+      ? await db.select().from(users).where(eq(users.id, task.assignedTo))
+      : [undefined];
+    
+    const [assignedByUser] = task.assignedBy 
+      ? await db.select().from(users).where(eq(users.id, task.assignedBy))
+      : [undefined];
+
+    return {
+      ...task,
+      assignee,
+      assignedByUser,
+    };
+  }
+
+  async createDevelopmentTask(task: InsertDevelopmentTask): Promise<DevelopmentTask> {
+    // Generate task number DEV-XXXXXX
+    const taskCount = await db.select({ count: sql<number>`count(*)` }).from(developmentTasks);
+    const taskNumber = `DEV-${String(Number(taskCount[0].count) + 1).padStart(6, '0')}`;
+    
+    const [newTask] = await db
+      .insert(developmentTasks)
+      .values({ ...task, taskNumber })
+      .returning();
+    return newTask;
+  }
+
+  async updateDevelopmentTask(id: string, data: Partial<InsertDevelopmentTask & { 
+    isOverdue?: boolean; 
+    penaltyApplied?: boolean; 
+    penaltyPoints?: number; 
+    penaltyReason?: string;
+  }>): Promise<DevelopmentTask> {
+    const [updated] = await db
+      .update(developmentTasks)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(developmentTasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDevelopmentTask(id: string): Promise<void> {
+    await db.delete(developmentTasks).where(eq(developmentTasks.id, id));
+  }
+
+  // Development Task Comment operations
+  async getDevelopmentTaskComments(developmentTaskId: string): Promise<(DevelopmentTaskComment & { user?: User })[]> {
+    const comments = await db
+      .select()
+      .from(developmentTaskComments)
+      .where(eq(developmentTaskComments.developmentTaskId, developmentTaskId))
+      .orderBy(desc(developmentTaskComments.createdAt));
+
+    const enrichedComments = await Promise.all(
+      comments.map(async (comment) => {
+        const [user] = comment.userId 
+          ? await db.select().from(users).where(eq(users.id, comment.userId))
+          : [undefined];
+        return { ...comment, user };
+      })
+    );
+
+    return enrichedComments;
+  }
+
+  async createDevelopmentTaskComment(comment: InsertDevelopmentTaskComment): Promise<DevelopmentTaskComment> {
+    const [newComment] = await db
+      .insert(developmentTaskComments)
+      .values(comment)
+      .returning();
+    return newComment;
+  }
+
+  // Development Dashboard metrics
+  async getDevelopmentDashboardMetrics(assignedTo?: string): Promise<{
+    totalTasks: number;
+    pendingTasks: number;
+    inProgressTasks: number;
+    completedTasks: number;
+    overdueTasks: number;
+    totalPenaltyPoints: number;
+  }> {
+    const conditions = assignedTo ? [eq(developmentTasks.assignedTo, assignedTo)] : [];
+    
+    const allTasks = await db
+      .select()
+      .from(developmentTasks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    const totalTasks = allTasks.length;
+    const pendingTasks = allTasks.filter(t => t.status === 'pending').length;
+    const inProgressTasks = allTasks.filter(t => t.status === 'in_progress').length;
+    const completedTasks = allTasks.filter(t => t.status === 'completed').length;
+    const overdueTasks = allTasks.filter(t => t.isOverdue === true).length;
+    const totalPenaltyPoints = allTasks.reduce((sum, t) => sum + (t.penaltyPoints || 0), 0);
+
+    return {
+      totalTasks,
+      pendingTasks,
+      inProgressTasks,
+      completedTasks,
+      overdueTasks,
+      totalPenaltyPoints,
+    };
+  }
+
+  // Check and apply penalties for overdue tasks
+  async checkAndApplyOverduePenalties(): Promise<number> {
+    const now = new Date();
+    
+    // Find tasks that are past deadline and not completed
+    const overdueTasks = await db
+      .select()
+      .from(developmentTasks)
+      .where(
+        and(
+          lte(developmentTasks.deadline, now),
+          or(
+            eq(developmentTasks.status, 'pending'),
+            eq(developmentTasks.status, 'in_progress')
+          ),
+          eq(developmentTasks.isOverdue, false)
+        )
+      );
+
+    let penaltyCount = 0;
+    for (const task of overdueTasks) {
+      // Calculate penalty points (1 point per day overdue, configurable)
+      const deadlineDate = new Date(task.deadline);
+      const daysOverdue = Math.floor((now.getTime() - deadlineDate.getTime()) / (1000 * 60 * 60 * 24));
+      const penaltyPoints = Math.max(1, daysOverdue);
+
+      await this.updateDevelopmentTask(task.id, {
+        isOverdue: true,
+        status: 'overdue',
+        penaltyApplied: true,
+        penaltyPoints,
+        penaltyReason: `Task overdue by ${daysOverdue} day(s)`,
+      });
+
+      // If assigned to someone, deduct from their point balance
+      if (task.assignedTo) {
+        await this.createPointLedgerEntry({
+          userId: task.assignedTo,
+          moduleType: 'development',
+          entityId: task.id,
+          action: 'penalty',
+          points: -penaltyPoints,
+          reason: `Penalty for overdue development task ${task.taskNumber}`,
+        });
+        await this.updateUserPointBalance(task.assignedTo, -penaltyPoints, 'development');
+      }
+
+      penaltyCount++;
+    }
+
+    return penaltyCount;
   }
 }
 
