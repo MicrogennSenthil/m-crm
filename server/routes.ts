@@ -765,6 +765,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current user's permissions based on their role
+  app.get("/api/auth/my-permissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub || (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get user's role from user_roles table
+      const allRoles = await storage.getUserRoles();
+      const userRole = allRoles.find(r => r.name === user.role && r.isActive);
+      
+      if (!userRole) {
+        // If role not found in master, return empty permissions
+        return res.json({ 
+          role: user.role,
+          roleId: null,
+          permissions: [],
+          isSuperAdmin: user.email === SUPER_ADMIN_EMAIL
+        });
+      }
+
+      // Get role rights for this role
+      const roleRights = await storage.getUserRoleRights(userRole.id);
+      
+      // Get all system modules to map module IDs to names
+      const systemModules = await storage.getSystemModules();
+      
+      // Build permissions map with module names
+      const permissions = roleRights.map(right => {
+        const module = systemModules.find(m => m.id === right.module);
+        return {
+          moduleId: right.module,
+          moduleName: module?.name || 'unknown',
+          moduleDisplayName: module?.displayName || 'Unknown',
+          canView: right.canView,
+          canCreate: right.canCreate,
+          canEdit: right.canEdit,
+          canDelete: right.canDelete
+        };
+      });
+
+      res.json({
+        role: user.role,
+        roleId: userRole.id,
+        roleName: userRole.displayName || userRole.name,
+        permissions,
+        isSuperAdmin: user.email === SUPER_ADMIN_EMAIL
+      });
+    } catch (error) {
+      console.error("Error fetching user permissions:", error);
+      res.status(500).json({ message: "Failed to fetch user permissions" });
+    }
+  });
+
   // User routes - for dropdowns/selection, only return active users
   app.get("/api/users", isAuthenticated, async (req, res) => {
     try {

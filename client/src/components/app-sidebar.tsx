@@ -63,8 +63,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
-// Menu groups with collapsible sections and colors
+// Menu groups with collapsible sections and colors - using module names for permissions
 const menuGroups = [
   {
     id: "main",
@@ -79,7 +80,7 @@ const menuGroups = [
         icon: LayoutDashboard,
         color: "text-blue-500",
         bgColor: "bg-blue-500/10",
-        roles: ["sales_executive", "engineer", "support", "admin"],
+        module: "dashboard",
       },
     ],
   },
@@ -96,7 +97,7 @@ const menuGroups = [
         icon: TrendingUp,
         color: "text-green-500",
         bgColor: "bg-green-500/10",
-        roles: ["sales_executive", "admin"],
+        module: "leads",
       },
       {
         title: "Sales Dashboard",
@@ -104,7 +105,7 @@ const menuGroups = [
         icon: BarChart3,
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
-        roles: ["saleshead", "sales_head", "admin"],
+        module: "sales_dashboard",
       },
     ],
   },
@@ -121,7 +122,7 @@ const menuGroups = [
         icon: Wrench,
         color: "text-amber-500",
         bgColor: "bg-amber-500/10",
-        roles: ["engineer", "admin"],
+        module: "projects",
       },
       {
         title: "Work Tracking",
@@ -129,7 +130,7 @@ const menuGroups = [
         icon: ClipboardCheck,
         color: "text-yellow-500",
         bgColor: "bg-yellow-500/10",
-        roles: ["implementationhead", "implementation_head", "admin"],
+        module: "work_tracking",
       },
     ],
   },
@@ -146,7 +147,7 @@ const menuGroups = [
         icon: Headphones,
         color: "text-orange-500",
         bgColor: "bg-orange-500/10",
-        roles: ["support", "admin"],
+        module: "tickets",
       },
       {
         title: "Support Dashboard",
@@ -154,7 +155,7 @@ const menuGroups = [
         icon: ClipboardCheck,
         color: "text-red-500",
         bgColor: "bg-red-500/10",
-        roles: ["supporthead", "support_head", "admin"],
+        module: "support_dashboard",
       },
     ],
   },
@@ -171,7 +172,7 @@ const menuGroups = [
         icon: Search,
         color: "text-cyan-500",
         bgColor: "bg-cyan-500/10",
-        roles: ["sales_executive", "engineer", "support", "admin"],
+        module: "knowledge_base",
       },
       {
         title: "Manage Documents",
@@ -179,7 +180,7 @@ const menuGroups = [
         icon: FileText,
         color: "text-teal-500",
         bgColor: "bg-teal-500/10",
-        roles: ["admin"],
+        module: "knowledge_base_admin",
       },
     ],
   },
@@ -300,6 +301,7 @@ interface AppSidebarProps {
 export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const [location] = useLocation();
   const { user } = useAuth();
+  const { canView, isSuperAdmin: permissionsSuperAdmin, isLoading: permissionsLoading } = usePermissions();
   const { state, toggleSidebar, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   
@@ -341,11 +343,11 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
 
   // Super admin email - must be declared before use
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
-  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || permissionsSuperAdmin;
   const isAdmin = user?.role === "admin" || isSuperAdmin;
 
-  // Check if user has access to reports (admin or super admin)
-  const canViewReports = isAdmin;
+  // Check if user has access to reports based on permissions
+  const canViewReports = isSuperAdmin || canView("reports") || canView("sales_reports") || canView("implementation_reports") || canView("support_reports");
   
   // Check if any reports sub-item is active
   const isReportsActive = location.startsWith("/reports");
@@ -357,27 +359,14 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const isSystemSettingsActive = location === "/admin/smtp-config" || location === "/admin/point-categories" || location === "/admin/assignment-settings" || location === "/admin/database-control";
 
   // Check if a group has any visible items and if any item is active
+  // Uses module-based permissions from the database
   const getGroupVisibility = (groupId: string, items: typeof menuGroups[0]["items"]) => {
     const visibleItems = items.filter((item) => {
       if (!user) return false;
       if (isSuperAdmin) return true;
-      if (user.role === "admin") return true;
-      if (!user.role) return false;
       
-      const userRole = user.role.toLowerCase();
-      
-      if (item.roles.includes(user.role)) return true;
-      if (item.roles.some(role => role.toLowerCase() === userRole)) return true;
-      
-      if (item.url === "/sales-dashboard") {
-        return userRole.includes("sales") && userRole.includes("head");
-      }
-      if (item.url === "/implementation-dashboard") {
-        return userRole.includes("implementation") && userRole.includes("head");
-      }
-      if (item.url === "/support-dashboard") {
-        return userRole.includes("support") && userRole.includes("head");
-      }
+      // Check module permission from database
+      if (item.module && canView(item.module)) return true;
       
       return false;
     });
