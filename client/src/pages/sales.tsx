@@ -94,6 +94,26 @@ export default function Sales() {
     return filteredLeads?.filter((lead) => lead.stage === stageId) || [];
   };
 
+  // Calculate total value for a stage
+  const getStageTotalValue = (stageId: string): number => {
+    const stageLeads = getLeadsByStage(stageId);
+    return stageLeads.reduce((total, lead) => {
+      return total + (lead.confirmedOrderValue || lead.estimatedValue || 0);
+    }, 0);
+  };
+
+  // Format currency compactly (e.g., 1.2L, 50K)
+  const formatCompactCurrency = (value: number): string => {
+    if (value >= 10000000) {
+      return `${(value / 10000000).toFixed(1)}Cr`;
+    } else if (value >= 100000) {
+      return `${(value / 100000).toFixed(1)}L`;
+    } else if (value >= 1000) {
+      return `${(value / 1000).toFixed(0)}K`;
+    }
+    return value.toString();
+  };
+
   const handleDragStart = (e: React.DragEvent, leadId: string) => {
     e.dataTransfer.setData("leadId", leadId);
   };
@@ -183,9 +203,16 @@ export default function Sales() {
               <div className="mb-2 flex items-center gap-1.5">
                 <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
                 <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
-                <Badge variant="secondary" className="ml-auto flex-shrink-0 text-xs">
-                  {stageLeads.length}
-                </Badge>
+                <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                  <Badge variant="secondary" className="text-xs">
+                    {stageLeads.length}
+                  </Badge>
+                  {getStageTotalValue(stage.id) > 0 && (
+                    <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                      ₹{formatCompactCurrency(getStageTotalValue(stage.id))}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="space-y-2 sm:space-y-3">
                 {isLoading ? (
