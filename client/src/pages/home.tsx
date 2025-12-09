@@ -264,10 +264,10 @@ export default function Home() {
     // Support Department Cards
     if (deptType === 'support') {
       return [
-        { title: "My Open Tickets", value: deptStats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/tickets?status=open,in_progress" },
-        { title: "Resolved", value: deptStats?.resolvedTickets || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10", link: "/tickets?status=resolved,closed" },
-        { title: "Critical", value: deptStats?.criticalTickets || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10", link: "/tickets?priority=critical" },
-        { title: "Overdue", value: deptStats?.overdueTickets || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10", link: "/tickets?overdue=true" },
+        { title: "My Open Tickets", value: deptStats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/support?status=open" },
+        { title: "Resolved", value: deptStats?.resolvedTickets || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10", link: "/support?status=resolved" },
+        { title: "Critical", value: deptStats?.criticalTickets || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10", link: "/support?priority=critical" },
+        { title: "Overdue", value: deptStats?.overdueTickets || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10", link: "/support" },
       ];
     }
 
@@ -295,7 +295,7 @@ export default function Home() {
     return [
       { title: "Active Leads", value: stats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10", link: "/leads" },
       { title: "Ongoing Implementations", value: stats?.ongoingProjects || 0, icon: Wrench, color: "text-green-600", bgColor: "bg-green-600/10", link: "/implementation" },
-      { title: "Open Tickets", value: stats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/tickets" },
+      { title: "Open Tickets", value: stats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/support" },
       { title: "This Month's Closures", value: stats?.monthlyClosures || 0, icon: CheckCircle, color: "text-emerald-600", bgColor: "bg-emerald-600/10", link: "/leads?status=won" },
     ];
   };
@@ -518,7 +518,7 @@ export default function Home() {
                         return (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
                       })
                       .slice(0, 6).map((ticket: Ticket) => (
-                      <Link key={ticket.id} href={`/tickets`}>
+                      <Link key={ticket.id} href="/support">
                         <div className="flex gap-2 items-start p-1.5 rounded hover-elevate cursor-pointer" data-testid={`dashboard-ticket-${ticket.id}`}>
                           <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
                             ticket.status === 'open' ? 'text-orange-500' :
@@ -686,13 +686,13 @@ export default function Home() {
               {deptType === 'support' ? (
                 <>
                   <Button variant="outline" size="sm" asChild data-testid="link-open-tickets">
-                    <Link href="/tickets?status=open,in_progress">
+                    <Link href="/support?status=open">
                       <AlertCircle className="h-3.5 w-3.5 mr-1" />
                       Open Tickets
                     </Link>
                   </Button>
                   <Button variant="ghost" size="sm" asChild data-testid="link-all-tickets">
-                    <Link href="/tickets">
+                    <Link href="/support">
                       View All
                       <ExternalLink className="h-3.5 w-3.5 ml-1" />
                     </Link>
