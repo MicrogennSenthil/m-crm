@@ -26,6 +26,7 @@ import Reports from "@/pages/reports";
 import SalesReports from "@/pages/reports-sales";
 import ImplementationReports from "@/pages/reports-implementation";
 import SupportReports from "@/pages/reports-support";
+import DevelopmentReports from "@/pages/reports-development";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
@@ -97,6 +98,7 @@ function AuthenticatedLayout() {
               <Route path="/reports/sales" component={SalesReports} />
               <Route path="/reports/implementation" component={ImplementationReports} />
               <Route path="/reports/support" component={SupportReports} />
+              <Route path="/reports/development" component={DevelopmentReports} />
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
               <Route path="/admin/users" component={UserMaster} />

@@ -258,6 +258,14 @@ const reportsSubItems = [
     bgColor: "bg-green-500/10",
     module: "support_reports",
   },
+  {
+    title: "Development Reports",
+    url: "/reports/development",
+    icon: Code,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-500/10",
+    module: "development_reports",
+  },
 ];
 
 // User Management sub-menu items - with module permissions
