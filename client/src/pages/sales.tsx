@@ -158,6 +158,23 @@ export default function Sales() {
     }, 0);
   };
 
+  // Currency symbol mapping
+  const getCurrencySymbol = (currency: string | null | undefined): string => {
+    const symbols: Record<string, string> = {
+      INR: "₹",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+      AED: "د.إ",
+      SGD: "S$",
+      AUD: "A$",
+      CAD: "C$",
+      JPY: "¥",
+      CNY: "¥",
+    };
+    return symbols[currency || "INR"] || "₹";
+  };
+
   // Format currency compactly (e.g., 1.2L, 50K)
   const formatCompactCurrency = (value: number): string => {
     if (value >= 10000000) {
@@ -372,7 +389,7 @@ export default function Sales() {
                       <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
                         {lead.estimatedValue && (
                           <div className="text-xs sm:text-sm font-medium">
-                            ${lead.estimatedValue.toLocaleString()}
+                            {getCurrencySymbol(lead.currency)}{lead.estimatedValue.toLocaleString()}
                           </div>
                         )}
                         {lead.demoDate && (

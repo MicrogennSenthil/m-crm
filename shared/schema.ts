@@ -174,6 +174,7 @@ export const leads = pgTable("leads", {
   contactEmail: text("contact_email").notNull(),
   contactPhone: text("contact_phone"),
   leadSource: text("lead_source").notNull(), // facebook, linkedin, instagram, referral, website, etc.
+  currency: text("currency").notNull().default("INR"), // INR, USD, EUR, GBP, AED, SGD, etc.
   estimatedValue: integer("estimated_value"), // in currency units
   stage: text("stage").notNull().default("new_lead"), // new_lead, demo_scheduled, quote_sent, negotiation, closed_won, closed_lost
   salesExecutiveId: varchar("sales_executive_id").references(() => users.id),

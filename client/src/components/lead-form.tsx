@@ -46,6 +46,19 @@ const STAGES = [
   { value: "closed_lost", label: "Closed Lost" },
 ];
 
+const CURRENCIES = [
+  { value: "INR", label: "₹ INR (Indian Rupee)", symbol: "₹" },
+  { value: "USD", label: "$ USD (US Dollar)", symbol: "$" },
+  { value: "EUR", label: "€ EUR (Euro)", symbol: "€" },
+  { value: "GBP", label: "£ GBP (British Pound)", symbol: "£" },
+  { value: "AED", label: "د.إ AED (UAE Dirham)", symbol: "د.إ" },
+  { value: "SGD", label: "S$ SGD (Singapore Dollar)", symbol: "S$" },
+  { value: "AUD", label: "A$ AUD (Australian Dollar)", symbol: "A$" },
+  { value: "CAD", label: "C$ CAD (Canadian Dollar)", symbol: "C$" },
+  { value: "JPY", label: "¥ JPY (Japanese Yen)", symbol: "¥" },
+  { value: "CNY", label: "¥ CNY (Chinese Yuan)", symbol: "¥" },
+];
+
 interface LeadFormProps {
   onSuccess?: () => void;
   defaultValues?: InsertLead;
@@ -77,6 +90,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       contactPhone: "",
       leadSource: "website",
       stage: "new_lead",
+      currency: "INR",
       estimatedValue: undefined,
       salesExecutiveId: undefined,
       selectedModules: [],
@@ -297,26 +311,52 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="estimatedValue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Estimated Value ($)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="50000"
-                      {...field}
-                      value={field.value || ""}
-                      onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                      data-testid="input-estimated-value"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-3 gap-2">
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "INR"}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-currency">
+                          <SelectValue placeholder="Currency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CURRENCIES.map((currency) => (
+                          <SelectItem key={currency.value} value={currency.value}>
+                            {currency.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="estimatedValue"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Estimated Value</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="50000"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        data-testid="input-estimated-value"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
