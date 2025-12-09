@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,10 +18,30 @@ import {
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
 import { LeadImportDialog } from "@/components/lead-import-dialog";
-import type { Lead } from "@shared/schema";
+import type { Lead, FollowUp } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+
+interface FollowUpWithLead extends FollowUp {
+  leadCompanyName: string | null;
+  leadContactPerson: string | null;
+  isOverdue?: boolean;
+  daysOverdue?: number;
+}
+
+// Type for the processed followup data from the dashboard API
+interface ProcessedFollowUp {
+  id: string;
+  leadId: string;
+  notes: string | null;
+  followUpDate: string;
+  completed: boolean;
+  leadCompanyName: string | null;
+  leadContactPerson: string | null;
+  isOverdue: boolean;
+  daysOverdue: number;
+}
 
 const STAGES = [
   { id: "new_lead", title: "New Leads", color: "bg-blue-600" },
@@ -40,6 +60,42 @@ export default function Sales() {
 
   const { data: leads, isLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
+  });
+
+  // Fetch today's followups (pending followups with date <= today)
+  const { data: todayFollowups = [], isLoading: followupsLoading } = useQuery<ProcessedFollowUp[]>({
+    queryKey: ["/api/sales-dashboard/stats"],
+    select: (data: any) => {
+      // Extract followups from the dashboard stats and filter for today/overdue
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      if (!data?.followUps) return [];
+      
+      return data.followUps.filter((f: any) => {
+        if (f.completed === true) return false;
+        if (!f.followUpDate) return false;
+        const followUpDate = new Date(f.followUpDate);
+        followUpDate.setHours(0, 0, 0, 0);
+        return followUpDate <= today;
+      }).map((f: any) => {
+        const followUpDate = new Date(f.followUpDate);
+        followUpDate.setHours(0, 0, 0, 0);
+        const daysOverdue = followUpDate < today 
+          ? Math.floor((today.getTime() - followUpDate.getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+        return {
+          ...f,
+          isOverdue: daysOverdue > 0,
+          daysOverdue
+        };
+      }).sort((a: ProcessedFollowUp, b: ProcessedFollowUp) => {
+        // Sort overdue first, then by days overdue
+        if (a.isOverdue && !b.isOverdue) return -1;
+        if (!a.isOverdue && b.isOverdue) return 1;
+        return (b.daysOverdue || 0) - (a.daysOverdue || 0);
+      });
+    }
   });
 
   // Update selectedLead when leads data changes to ensure modal shows fresh data
@@ -190,7 +246,83 @@ export default function Sales() {
       </div>
 
       {/* Kanban Board */}
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 pb-4">
+      <div className="grid grid-cols-6 gap-2 sm:gap-3 pb-4">
+        {/* Today's Followups Column */}
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full flex-shrink-0 bg-red-500" />
+            <h3 className="font-semibold text-xs sm:text-sm truncate">Today's Calls</h3>
+            <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+              <Badge variant="secondary" className="text-xs">
+                {todayFollowups.length}
+              </Badge>
+              {todayFollowups.filter(f => f.isOverdue).length > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  {todayFollowups.filter(f => f.isOverdue).length} overdue
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2 sm:space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+            {followupsLoading ? (
+              Array(3)
+                .fill(0)
+                .map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
+            ) : todayFollowups.length > 0 ? (
+              todayFollowups.map((followup) => {
+                const lead = leads?.find(l => l.id === followup.leadId);
+                return (
+                  <Card
+                    key={followup.id}
+                    className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
+                    onClick={() => lead && setSelectedLead(lead)}
+                    data-testid={`card-followup-${followup.id}`}
+                  >
+                    <CardContent className="p-2 sm:p-3 space-y-1.5">
+                      <div className="flex items-start gap-1.5">
+                        {followup.isOverdue ? (
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <Phone className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-semibold truncate">
+                            {followup.leadCompanyName || 'Unknown'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {followup.leadContactPerson}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
+                        </div>
+                        {followup.isOverdue && followup.daysOverdue > 0 && (
+                          <Badge variant="destructive" className="text-[10px] px-1 h-4">
+                            {followup.daysOverdue}d overdue
+                          </Badge>
+                        )}
+                      </div>
+                      {followup.notes && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
+                  No calls due
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+
+        {/* Lead Stage Columns */}
         {STAGES.map((stage) => {
           const stageLeads = getLeadsByStage(stage.id);
           return (
