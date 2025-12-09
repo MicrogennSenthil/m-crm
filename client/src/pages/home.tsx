@@ -190,9 +190,18 @@ export default function Home() {
   const openTicketsCount = myTickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length;
   const closedTicketsCount = myTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length;
 
-  // Fetch user's tasks for dashboard display (no view param = user's own tasks)
+  // Fetch user's tasks for dashboard display
+  // Super admin gets all tasks (view=all), regular users get their own tasks
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<TaskWithDetails[]>({
-    queryKey: ["/api/tasks"],
+    queryKey: ["/api/tasks", isAdmin ? "all" : "user"],
+    queryFn: async () => {
+      const url = isAdmin ? "/api/tasks?view=all" : "/api/tasks";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tasks");
+      return res.json();
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Mutation to revoke (revert) a completed task back to pending
@@ -348,10 +357,10 @@ export default function Home() {
           </p>
         </div>
         {/* Department Head Team Summary */}
-        {isDepartmentHead && deptDashboard?.memberCount > 0 && (
+        {isDepartmentHead && (deptDashboard?.memberCount ?? 0) > 0 && (
           <div className="flex items-center gap-2 text-sm">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{deptDashboard.memberCount} team members</span>
+            <span className="text-muted-foreground">{deptDashboard?.memberCount} team members</span>
           </div>
         )}
       </div>
@@ -458,7 +467,7 @@ export default function Home() {
                 ) : (
                   <>
                     <ListTodo className="h-4 w-4" />
-                    My Tasks
+                    {isAdmin ? 'All Pending Tasks' : 'My Tasks'}
                   </>
                 )}
               </CardTitle>
@@ -519,7 +528,7 @@ export default function Home() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm truncate ${ticket.status === 'closed' ? 'line-through text-muted-foreground' : ''}`}>
-                              {ticket.ticketNumber}: {ticket.subject}
+                              {ticket.ticketNumber}: {ticket.issueSummary}
                             </p>
                             <div className="flex items-center gap-2">
                               <Badge variant={
