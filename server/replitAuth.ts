@@ -263,8 +263,9 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
   const user = req.user as any;
   
   // Check if user has admin role from claims (set by isAuthenticated middleware)
-  const role = user?.claims?.metadata?.role;
+  const legacyRole = user?.claims?.metadata?.role;
   const email = user?.claims?.email;
+  const userId = user?.claims?.sub;
   
   // Super admin check by email - always has admin access
   const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
@@ -273,9 +274,28 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
     return next();
   }
   
-  if (!role || role !== "admin") {
-    return res.status(403).json({ message: "Access denied. Admin privileges required." });
+  // Check legacy role field first
+  if (legacyRole === "admin") {
+    return next();
   }
   
-  return next();
+  // Check user_role_assignments for admin role
+  if (userId) {
+    try {
+      const assignments = await storage.getUserRoleAssignments(userId);
+      const roleIds = assignments.filter(a => a.isActive).map(a => a.roleId);
+      
+      // Get role details to check if any is an admin role
+      for (const roleId of roleIds) {
+        const role = await storage.getUserRole(roleId);
+        if (role && role.name === 'admin' && role.isActive) {
+          return next();
+        }
+      }
+    } catch (error) {
+      console.error("Error checking user role assignments:", error);
+    }
+  }
+  
+  return res.status(403).json({ message: "Access denied. Admin privileges required." });
 };
