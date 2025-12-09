@@ -10,7 +10,14 @@ import {
   AlertTriangle, 
   ListTodo,
   TrendingDown,
-  ArrowRight
+  ArrowRight,
+  PlayCircle,
+  PauseCircle,
+  Hourglass,
+  Headphones,
+  Wrench,
+  ClipboardCheck,
+  FileText
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +30,15 @@ interface DashboardMetrics {
   completedTasks: number;
   overdueTasks: number;
   totalPenaltyPoints: number;
+  // Enhanced categories
+  yetToWorkTasks: number;
+  onProcessTasks: number;
+  waitingTasks: number;
+  // Source breakdown
+  supportTasks: number;
+  implementationTasks: number;
+  taskModuleTasks: number;
+  manualTasks: number;
 }
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
@@ -179,6 +195,80 @@ export default function DevelopmentDashboard() {
         </Card>
       </div>
 
+      {/* Work Status Categories - Tech Head & Super Admin View */}
+      <Card data-testid="card-work-status">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5 text-indigo-500" />
+            Work Status Categories
+          </CardTitle>
+          <CardDescription>Overview of task status for Tech Head and Super Admin</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-lg bg-gray-100 dark:bg-gray-800 text-center" data-testid="card-yet-to-work">
+              <Hourglass className="h-8 w-8 mx-auto text-gray-500 mb-2" />
+              <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">{metrics?.yetToWorkTasks || 0}</div>
+              <p className="text-sm text-muted-foreground">Yet to Work</p>
+              <p className="text-xs text-muted-foreground mt-1">Unassigned tasks</p>
+            </div>
+            <div className="p-4 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-center" data-testid="card-on-process">
+              <PlayCircle className="h-8 w-8 mx-auto text-blue-500 mb-2" />
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{metrics?.onProcessTasks || 0}</div>
+              <p className="text-sm text-blue-600 dark:text-blue-400">On Process</p>
+              <p className="text-xs text-muted-foreground mt-1">Work in progress</p>
+            </div>
+            <div className="p-4 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-center" data-testid="card-waiting">
+              <PauseCircle className="h-8 w-8 mx-auto text-amber-500 mb-2" />
+              <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{metrics?.waitingTasks || 0}</div>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Pending</p>
+              <p className="text-xs text-muted-foreground mt-1">Assigned, not started</p>
+            </div>
+            <div className="p-4 rounded-lg bg-green-100 dark:bg-green-900/40 text-center" data-testid="card-completed-status">
+              <CheckCircle2 className="h-8 w-8 mx-auto text-green-500 mb-2" />
+              <div className="text-2xl font-bold text-green-700 dark:text-green-300">{metrics?.completedTasks || 0}</div>
+              <p className="text-sm text-green-600 dark:text-green-400">Completed</p>
+              <p className="text-xs text-muted-foreground mt-1">Work finished</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Source Breakdown */}
+      <Card data-testid="card-source-breakdown">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileText className="h-5 w-5 text-violet-500" />
+            Tasks by Source
+          </CardTitle>
+          <CardDescription>Breakdown of development tasks from different modules</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-lg border text-center hover-elevate" data-testid="card-support-tasks">
+              <Headphones className="h-6 w-6 mx-auto text-orange-500 mb-2" />
+              <div className="text-xl font-bold">{metrics?.supportTasks || 0}</div>
+              <p className="text-sm text-muted-foreground">From Support</p>
+            </div>
+            <div className="p-4 rounded-lg border text-center hover-elevate" data-testid="card-implementation-tasks">
+              <Wrench className="h-6 w-6 mx-auto text-amber-500 mb-2" />
+              <div className="text-xl font-bold">{metrics?.implementationTasks || 0}</div>
+              <p className="text-sm text-muted-foreground">From Implementation</p>
+            </div>
+            <div className="p-4 rounded-lg border text-center hover-elevate" data-testid="card-task-module-tasks">
+              <ClipboardCheck className="h-6 w-6 mx-auto text-green-500 mb-2" />
+              <div className="text-xl font-bold">{metrics?.taskModuleTasks || 0}</div>
+              <p className="text-sm text-muted-foreground">From Tasks</p>
+            </div>
+            <div className="p-4 rounded-lg border text-center hover-elevate" data-testid="card-manual-tasks">
+              <ListTodo className="h-6 w-6 mx-auto text-gray-500 mb-2" />
+              <div className="text-xl font-bold">{metrics?.manualTasks || 0}</div>
+              <p className="text-sm text-muted-foreground">Manual</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" data-testid="info-grid">
         <Card data-testid="card-quick-stats">
           <CardHeader>
@@ -192,7 +282,7 @@ export default function DevelopmentDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-gray-100 text-gray-700">
+                  <Badge variant="outline" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                     Pending
                   </Badge>
                 </span>
@@ -203,7 +293,7 @@ export default function DevelopmentDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-blue-100 text-blue-700">
+                  <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                     In Progress
                   </Badge>
                 </span>
@@ -214,7 +304,7 @@ export default function DevelopmentDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-green-100 text-green-700">
+                  <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                     Completed
                   </Badge>
                 </span>
@@ -225,7 +315,7 @@ export default function DevelopmentDashboard() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-red-100 text-red-700">
+                  <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
                     Overdue
                   </Badge>
                 </span>

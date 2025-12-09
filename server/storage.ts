@@ -487,6 +487,15 @@ export interface IStorage {
     completedTasks: number;
     overdueTasks: number;
     totalPenaltyPoints: number;
+    // Enhanced categories
+    yetToWorkTasks: number;  // pending + unassigned
+    onProcessTasks: number;  // in_progress
+    waitingTasks: number;    // pending + assigned
+    // Source breakdown
+    supportTasks: number;
+    implementationTasks: number;
+    taskModuleTasks: number;
+    manualTasks: number;
   }>;
   
   // Check and apply penalties for overdue tasks
@@ -3214,6 +3223,15 @@ export class DatabaseStorage implements IStorage {
     completedTasks: number;
     overdueTasks: number;
     totalPenaltyPoints: number;
+    // Enhanced categories
+    yetToWorkTasks: number;
+    onProcessTasks: number;
+    waitingTasks: number;
+    // Source breakdown
+    supportTasks: number;
+    implementationTasks: number;
+    taskModuleTasks: number;
+    manualTasks: number;
   }> {
     const conditions = assignedTo ? [eq(developmentTasks.assignedTo, assignedTo)] : [];
     
@@ -3228,6 +3246,17 @@ export class DatabaseStorage implements IStorage {
     const completedTasks = allTasks.filter(t => t.status === 'completed').length;
     const overdueTasks = allTasks.filter(t => t.isOverdue === true).length;
     const totalPenaltyPoints = allTasks.reduce((sum, t) => sum + (t.penaltyPoints || 0), 0);
+    
+    // Enhanced categories
+    const yetToWorkTasks = allTasks.filter(t => t.status === 'pending' && !t.assignedTo).length;
+    const onProcessTasks = inProgressTasks; // Same as in_progress
+    const waitingTasks = allTasks.filter(t => t.status === 'pending' && t.assignedTo).length;
+    
+    // Source breakdown
+    const supportTasks = allTasks.filter(t => t.sourceType === 'support').length;
+    const implementationTasks = allTasks.filter(t => t.sourceType === 'implementation').length;
+    const taskModuleTasks = allTasks.filter(t => t.sourceType === 'task').length;
+    const manualTasks = allTasks.filter(t => t.sourceType === 'manual').length;
 
     return {
       totalTasks,
@@ -3236,6 +3265,13 @@ export class DatabaseStorage implements IStorage {
       completedTasks,
       overdueTasks,
       totalPenaltyPoints,
+      yetToWorkTasks,
+      onProcessTasks,
+      waitingTasks,
+      supportTasks,
+      implementationTasks,
+      taskModuleTasks,
+      manualTasks,
     };
   }
 
