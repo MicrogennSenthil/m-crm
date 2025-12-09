@@ -51,10 +51,17 @@ The CRM includes:
 The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.
 
 ### Security Architecture
-- **Authorization Middleware**: All user management routes are protected with `isAdmin` middleware that checks the current user's role on the server-side before allowing any write operations (POST, PATCH, DELETE).
-- **Protected Routes**: Users management, roles, departments, system modules, permissions, and role assignments all require admin privileges for modifications.
+- **Authorization Middleware**: 
+  - `isAdmin` middleware checks both legacy `users.role` field AND `user_role_assignments` table for admin role
+  - `requirePermission(moduleName, action)` middleware enforces module-level permissions (view/create/edit/delete) based on `user_role_rights` table
+  - Super admin (senthil@microgenn.com) bypasses all permission checks
+  - Permission caching: 5-minute TTL with automatic cache invalidation when role assignments or rights are modified
+- **Protected Routes**: 
+  - Leads, Projects, Tickets, Tasks: Now use `requirePermission` middleware for granular access control
+  - Users management, roles, departments require `isAdmin` for modifications
 - **Super Admin**: The super admin is permanently set as `senthil@microgenn.com` with full system access.
 - **Read Access**: Authenticated users can view user management data (for dropdown selections), but cannot modify it without admin role.
+- **Frontend Permission Hook**: `usePermissions` hook at `client/src/hooks/use-permissions.ts` provides `can(module, action)`, `canView`, `canCreate`, `canEdit`, `canDelete` helpers for UI permission gating.
 
 ## External Dependencies
 - **Authentication**: Replit Auth (OpenID Connect)

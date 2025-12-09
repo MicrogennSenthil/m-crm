@@ -299,3 +299,210 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
   
   return res.status(403).json({ message: "Access denied. Admin privileges required." });
 };
+
+// Permission types for module access
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete';
+
+// Cache for user permissions per request to avoid repeated DB calls
+const permissionCache = new Map<string, {
+  permissions: Map<string, { canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>;
+  timestamp: number;
+}>();
+
+// Clear stale cache entries (older than 5 minutes)
+const CACHE_TTL = 5 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  const entries = Array.from(permissionCache.entries());
+  for (const [key, value] of entries) {
+    if (now - value.timestamp > CACHE_TTL) {
+      permissionCache.delete(key);
+    }
+  }
+}, 60 * 1000);
+
+// Helper to check if user is super admin
+export function isSuperAdmin(email: string | undefined): boolean {
+  return email === SUPER_ADMIN_EMAIL;
+}
+
+// Get user permissions with caching
+async function getUserPermissions(userId: string): Promise<Map<string, { canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>> {
+  const cached = permissionCache.get(userId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.permissions;
+  }
+  
+  const effectivePermissions = await storage.getUserEffectivePermissions(userId);
+  const permMap = new Map<string, { canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>();
+  
+  for (const perm of effectivePermissions) {
+    permMap.set(perm.module, {
+      canView: perm.canView,
+      canCreate: perm.canCreate,
+      canEdit: perm.canEdit,
+      canDelete: perm.canDelete,
+    });
+  }
+  
+  permissionCache.set(userId, { permissions: permMap, timestamp: Date.now() });
+  return permMap;
+}
+
+// Clear permission cache for a user (call when permissions are updated)
+export function clearPermissionCache(userId?: string): void {
+  if (userId) {
+    permissionCache.delete(userId);
+  } else {
+    permissionCache.clear();
+  }
+}
+
+// Clear all permission caches (call when role rights are updated)
+export function clearAllPermissionCaches(): void {
+  permissionCache.clear();
+}
+
+// Middleware factory to check module permissions
+export function requirePermission(moduleName: string, action: PermissionAction): RequestHandler {
+  return async (req: any, res, next) => {
+    const user = req.user as any;
+    const email = user?.claims?.email;
+    const userId = user?.claims?.sub;
+    
+    // Super admin bypasses all permission checks
+    if (isSuperAdmin(email)) {
+      return next();
+    }
+    
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const permissions = await getUserPermissions(userId);
+      const modulePerm = permissions.get(moduleName);
+      
+      if (!modulePerm) {
+        // No permissions defined for this module - check if user has admin role
+        const assignments = await storage.getUserRoleAssignments(userId);
+        const roleIds = assignments.filter(a => a.isActive).map(a => a.roleId);
+        
+        for (const roleId of roleIds) {
+          const role = await storage.getUserRole(roleId);
+          if (role && role.name === 'admin' && role.isActive) {
+            return next();
+          }
+        }
+        
+        // Also check legacy role field
+        const legacyRole = user?.claims?.metadata?.role;
+        if (legacyRole === 'admin') {
+          return next();
+        }
+        
+        return res.status(403).json({ 
+          message: `Access denied. No permissions found for module: ${moduleName}` 
+        });
+      }
+      
+      // Check specific action permission
+      let hasPermission = false;
+      switch (action) {
+        case 'view':
+          hasPermission = modulePerm.canView;
+          break;
+        case 'create':
+          hasPermission = modulePerm.canCreate;
+          break;
+        case 'edit':
+          hasPermission = modulePerm.canEdit;
+          break;
+        case 'delete':
+          hasPermission = modulePerm.canDelete;
+          break;
+      }
+      
+      if (!hasPermission) {
+        return res.status(403).json({ 
+          message: `Access denied. You don't have ${action} permission for ${moduleName}` 
+        });
+      }
+      
+      return next();
+    } catch (error) {
+      console.error("Error checking permissions:", error);
+      return res.status(500).json({ message: "Error checking permissions" });
+    }
+  };
+}
+
+// Middleware to check if user has ANY of the specified permissions
+export function requireAnyPermission(permissions: Array<{ module: string; action: PermissionAction }>): RequestHandler {
+  return async (req: any, res, next) => {
+    const user = req.user as any;
+    const email = user?.claims?.email;
+    const userId = user?.claims?.sub;
+    
+    // Super admin bypasses all permission checks
+    if (isSuperAdmin(email)) {
+      return next();
+    }
+    
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const userPermissions = await getUserPermissions(userId);
+      
+      for (const { module: moduleName, action } of permissions) {
+        const modulePerm = userPermissions.get(moduleName);
+        if (modulePerm) {
+          let hasPermission = false;
+          switch (action) {
+            case 'view':
+              hasPermission = modulePerm.canView;
+              break;
+            case 'create':
+              hasPermission = modulePerm.canCreate;
+              break;
+            case 'edit':
+              hasPermission = modulePerm.canEdit;
+              break;
+            case 'delete':
+              hasPermission = modulePerm.canDelete;
+              break;
+          }
+          if (hasPermission) {
+            return next();
+          }
+        }
+      }
+      
+      // Check if user has admin role as fallback
+      const assignments = await storage.getUserRoleAssignments(userId);
+      const roleIds = assignments.filter(a => a.isActive).map(a => a.roleId);
+      
+      for (const roleId of roleIds) {
+        const role = await storage.getUserRole(roleId);
+        if (role && role.name === 'admin' && role.isActive) {
+          return next();
+        }
+      }
+      
+      // Also check legacy role field
+      const legacyRole = user?.claims?.metadata?.role;
+      if (legacyRole === 'admin') {
+        return next();
+      }
+      
+      return res.status(403).json({ 
+        message: "Access denied. You don't have the required permissions." 
+      });
+    } catch (error) {
+      console.error("Error checking permissions:", error);
+      return res.status(500).json({ message: "Error checking permissions" });
+    }
+  };
+}

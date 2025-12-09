@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
@@ -765,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get current user's permissions based on their role
+  // Get current user's permissions based on their role assignments (new system)
   app.get("/api/auth/my-permissions", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub || (req.session as any).userId;
@@ -774,46 +774,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Get user's role from user_roles table
-      const allRoles = await storage.getUserRoles();
-      const userRole = allRoles.find(r => r.name === user.role && r.isActive);
+      const userIsSuperAdmin = isSuperAdmin(user.email || undefined);
       
-      if (!userRole) {
-        // If role not found in master, return empty permissions
-        return res.json({ 
-          role: user.role,
-          roleId: null,
-          permissions: [],
-          isSuperAdmin: user.email === SUPER_ADMIN_EMAIL
-        });
+      // Get effective permissions using the new role assignments system
+      const effectivePermissions = await storage.getUserEffectivePermissions(userId);
+      
+      // Get user's role assignments
+      const roleAssignments = await storage.getUserRoleAssignments(userId);
+      const assignedRoleIds = roleAssignments.filter(a => a.isActive).map(a => a.roleId);
+      
+      // Get role details
+      const assignedRoles = [];
+      for (const roleId of assignedRoleIds) {
+        const role = await storage.getUserRole(roleId);
+        if (role) {
+          assignedRoles.push({
+            id: role.id,
+            name: role.name,
+            displayName: role.displayName
+          });
+        }
       }
-
-      // Get role rights for this role
-      const roleRights = await storage.getUserRoleRights(userRole.id);
       
-      // Get all system modules to map module IDs to names
-      const systemModules = await storage.getSystemModules();
-      
-      // Build permissions map with module names
-      const permissions = roleRights.map(right => {
-        const module = systemModules.find(m => m.id === right.module);
-        return {
-          moduleId: right.module,
-          moduleName: module?.name || 'unknown',
-          moduleDisplayName: module?.displayName || 'Unknown',
-          canView: right.canView,
-          canCreate: right.canCreate,
-          canEdit: right.canEdit,
-          canDelete: right.canDelete
-        };
-      });
+      // Format permissions for frontend
+      const permissions = effectivePermissions.map(perm => ({
+        moduleId: perm.module,
+        moduleName: perm.module,
+        moduleDisplayName: perm.moduleName,
+        canView: perm.canView,
+        canCreate: perm.canCreate,
+        canEdit: perm.canEdit,
+        canDelete: perm.canDelete,
+        source: perm.source
+      }));
 
       res.json({
-        role: user.role,
-        roleId: userRole.id,
-        roleName: userRole.displayName || userRole.name,
+        userId: user.id,
+        email: user.email,
+        legacyRole: user.role, // Keep for backward compatibility
+        assignedRoles,
         permissions,
-        isSuperAdmin: user.email === SUPER_ADMIN_EMAIL
+        isSuperAdmin: userIsSuperAdmin,
+        // Super admin has all permissions
+        hasAdminRole: userIsSuperAdmin || assignedRoles.some(r => r.name === 'admin') || user.role === 'admin'
       });
     } catch (error) {
       console.error("Error fetching user permissions:", error);
@@ -1674,6 +1677,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      // Clear all permission caches since role rights changed
+      clearAllPermissionCaches();
+      
       res.json({ message: "Role permissions updated successfully" });
     } catch (error) {
       console.error("Error updating role permissions:", error);
@@ -2026,6 +2032,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      // Clear permission cache for the affected user
+      clearPermissionCache(validatedData.userId);
+      
       res.json(newAssignment);
     } catch (error) {
       console.error("Error assigning role to user:", error);
@@ -2050,6 +2059,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Role ${role?.displayName} removed from user`,
         userId: req.user.claims.sub,
       });
+      
+      // Clear permission cache for the affected user
+      clearPermissionCache(assignment.userId);
       
       res.json({ message: "Role removed from user successfully" });
     } catch (error) {
@@ -2212,7 +2224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
 
   // Lead routes
-  app.get("/api/leads", isAuthenticated, async (req, res) => {
+  app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
     try {
       const { stage, salesExecutiveId, limit } = req.query;
       let leadsList = await storage.getLeads({
@@ -2231,7 +2243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/leads/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/leads/:id", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
     try {
       const lead = await storage.getLead(req.params.id);
       if (!lead) {
@@ -2244,7 +2256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/leads", isAuthenticated, async (req: any, res) => {
+  app.post("/api/leads", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
     try {
       let leadData = { ...req.body };
       
@@ -2276,7 +2288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/leads/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/leads/:id", isAuthenticated, requirePermission('leads', 'edit'), async (req: any, res) => {
     try {
       let updateData = { ...req.body };
       
@@ -3195,7 +3207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Project routes
-  app.get("/api/projects", isAuthenticated, async (req, res) => {
+  app.get("/api/projects", isAuthenticated, requirePermission('projects', 'view'), async (req, res) => {
     try {
       const { status } = req.query;
       const projectsList = await storage.getProjects({ status: status as string });
@@ -3222,7 +3234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/projects/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/projects/:id", isAuthenticated, requirePermission('projects', 'view'), async (req, res) => {
     try {
       const project = await storage.getProject(req.params.id);
       if (!project) {
@@ -3235,7 +3247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/projects", isAuthenticated, async (req: any, res) => {
+  app.post("/api/projects", isAuthenticated, requirePermission('projects', 'create'), async (req: any, res) => {
     try {
       // Extract selectedModules before validation (it's not part of the project schema)
       const { selectedModules: clientModules, ...projectData } = req.body;
@@ -3289,7 +3301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/projects/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/projects/:id", isAuthenticated, requirePermission('projects', 'edit'), async (req: any, res) => {
     try {
       const updated = await storage.updateProject(req.params.id, req.body);
       
@@ -4569,7 +4581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Ticket routes
-  app.get("/api/tickets", isAuthenticated, async (req, res) => {
+  app.get("/api/tickets", isAuthenticated, requirePermission('tickets', 'view'), async (req, res) => {
     try {
       const { status, priority, limit } = req.query;
       let ticketsList = await storage.getTickets({
@@ -4588,7 +4600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/tickets/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/tickets/:id", isAuthenticated, requirePermission('tickets', 'view'), async (req, res) => {
     try {
       const ticket = await storage.getTicket(req.params.id);
       if (!ticket) {
@@ -4601,7 +4613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tickets", isAuthenticated, async (req: any, res) => {
+  app.post("/api/tickets", isAuthenticated, requirePermission('tickets', 'create'), async (req: any, res) => {
     try {
       const validatedData = insertTicketSchema.parse(req.body);
       
@@ -4644,7 +4656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tickets/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/tickets/:id", isAuthenticated, requirePermission('tickets', 'edit'), async (req: any, res) => {
     try {
       // Get current ticket for comparison
       const currentTicket = await storage.getTicket(req.params.id);
@@ -5218,7 +5230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
 
   // Get all tasks (with filters)
-  app.get("/api/tasks", isAuthenticated, async (req: any, res) => {
+  app.get("/api/tasks", isAuthenticated, requirePermission('tasks', 'view'), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
@@ -5256,7 +5268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single task
-  app.get("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/tasks/:id", isAuthenticated, requirePermission('tasks', 'view'), async (req: any, res) => {
     try {
       const task = await storage.getTask(req.params.id);
       if (!task) {
@@ -5270,7 +5282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create task
-  app.post("/api/tasks", isAuthenticated, async (req: any, res) => {
+  app.post("/api/tasks", isAuthenticated, requirePermission('tasks', 'create'), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       
@@ -5362,7 +5374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update task
-  app.patch("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/tasks/:id", isAuthenticated, requirePermission('tasks', 'edit'), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const task = await storage.getTask(req.params.id);
