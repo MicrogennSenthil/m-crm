@@ -666,8 +666,12 @@ function SalesDrilldown({ viewMode }: { viewMode: ViewMode }) {
   
   const bucket = week ? 'week' : month ? 'month' : 'year';
   
+  const salesQueryParams = new URLSearchParams({ bucket, year: year.toString() });
+  if (month) salesQueryParams.set('month', month.toString());
+  if (week) salesQueryParams.set('week', week.toString());
+  
   const { data, isLoading } = useQuery<{ buckets: SalesBucket[]; items: any[]; lostLeads: any[]; summary: any }>({
-    queryKey: ['/api/admin/dashboard/sales', { bucket, year, month, week }],
+    queryKey: [`/api/admin/dashboard/sales?${salesQueryParams.toString()}`],
   });
   
   const handleDrillDown = (period: string, weekNum?: number) => {
@@ -912,8 +916,11 @@ function ImplementationDrilldown({ viewMode }: { viewMode: ViewMode }) {
   
   const bucket = month ? 'month' : 'year';
   
+  const implQueryParams = new URLSearchParams({ bucket, year: year.toString() });
+  if (month) implQueryParams.set('month', month.toString());
+  
   const { data, isLoading } = useQuery<{ buckets: ImplementationBucket[]; items: any[]; overdueProjects: any[]; summary: any }>({
-    queryKey: ['/api/admin/dashboard/implementation', { bucket, year, month }],
+    queryKey: [`/api/admin/dashboard/implementation?${implQueryParams.toString()}`],
   });
   
   const handleDrillDown = (period: string) => {
@@ -1116,8 +1123,11 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
   
   const bucket = month ? 'month' : 'year';
   
+  const queryParams = new URLSearchParams({ bucket, year: year.toString() });
+  if (month) queryParams.set('month', month.toString());
+  
   const { data, isLoading } = useQuery<{ buckets: SupportBucket[]; items: any[]; overdueTickets: any[]; summary: any }>({
-    queryKey: ['/api/admin/dashboard/support', { bucket, year, month }],
+    queryKey: [`/api/admin/dashboard/support?${queryParams.toString()}`],
   });
   
   const handleDrillDown = (period: string) => {
