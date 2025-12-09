@@ -220,6 +220,29 @@ export default function Home() {
     }
   };
 
+  // Filter pending tasks (not completed) - these should always show
+  const pendingTasks = tasks.filter(t => t.status !== "completed");
+  
+  // Filter recently completed tasks (within last 48 hours)
+  const recentlyCompletedTasks = tasks.filter(t => {
+    if (t.status !== "completed") return false;
+    if (!t.updatedAt) return false;
+    const completedDate = new Date(t.updatedAt);
+    const now = new Date();
+    const hoursDiff = (now.getTime() - completedDate.getTime()) / (1000 * 60 * 60);
+    return hoursDiff <= 48;
+  });
+
+  // Helper to check if user is creator or assignee of a task
+  const getTaskRole = (task: TaskWithDetails): string => {
+    const isCreator = task.createdBy === currentUser?.id;
+    const isAssignee = task.assignedTo === currentUser?.id;
+    if (isCreator && isAssignee) return "You created & completed";
+    if (isCreator) return "Created by you";
+    if (isAssignee) return "Assigned to you";
+    return "";
+  };
+
   const greeting = getISTGreeting();
   const userName = currentUser?.firstName || "User";
 
@@ -336,9 +359,16 @@ export default function Home() {
                 <ListTodo className="h-4 w-4" />
                 My Tasks
               </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                {tasks.filter(t => t.status !== "completed").length} pending
-              </Badge>
+              <div className="flex gap-1">
+                <Badge variant="secondary" className="text-xs">
+                  {pendingTasks.length} pending
+                </Badge>
+                {recentlyCompletedTasks.length > 0 && (
+                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                    {recentlyCompletedTasks.length} done
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               {tasksLoading ? (
@@ -352,83 +382,110 @@ export default function Home() {
                       </div>
                     ))}
                 </div>
-              ) : tasks && tasks.length > 0 ? (
-                <div className="space-y-2" data-testid="dashboard-tasks">
-                  {tasks.slice(0, 6).map((task) => {
-                    const StatusIcon = getTaskStatusIcon(task.status);
-                    const isCompleted = task.status === "completed";
-                    const hasVoiceNote = !!task.voiceNoteUrl;
-                    const hasVideo = task.attachments?.some(a => a.type === "video");
-                    const hasPhoto = task.attachments?.some(a => a.type === "photo");
-                    const hasFile = task.attachments?.some(a => a.type === "file");
-                    const hasAttachments = hasVoiceNote || hasVideo || hasPhoto || hasFile;
-                    const { isOverdue, daysOverdue } = getTaskOverdueInfo(task);
-                    return (
-                      <div 
-                        key={task.id} 
-                        className={`flex gap-2 items-start group p-1.5 rounded ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
-                        data-testid={`dashboard-task-${task.id}`}
-                      >
-                        <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${isOverdue ? 'text-red-500' : getTaskStatusColor(task.status)}`}>
-                          {isOverdue ? <AlertTriangle className="h-4 w-4" /> : <StatusIcon className="h-4 w-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p 
-                            className={`text-sm truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}
+              ) : (pendingTasks.length > 0 || recentlyCompletedTasks.length > 0) ? (
+                <div className="space-y-3" data-testid="dashboard-tasks">
+                  {/* Pending Tasks Section */}
+                  {pendingTasks.length > 0 && (
+                    <div className="space-y-2">
+                      {pendingTasks.slice(0, 5).map((task) => {
+                        const StatusIcon = getTaskStatusIcon(task.status);
+                        const hasVoiceNote = !!task.voiceNoteUrl;
+                        const hasVideo = task.attachments?.some(a => a.type === "video");
+                        const hasPhoto = task.attachments?.some(a => a.type === "photo");
+                        const hasFile = task.attachments?.some(a => a.type === "file");
+                        const hasAttachments = hasVoiceNote || hasVideo || hasPhoto || hasFile;
+                        const { isOverdue, daysOverdue } = getTaskOverdueInfo(task);
+                        const taskRole = getTaskRole(task);
+                        return (
+                          <div 
+                            key={task.id} 
+                            className={`flex gap-2 items-start group p-1.5 rounded ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
+                            data-testid={`dashboard-task-${task.id}`}
                           >
-                            {task.title}
-                          </p>
-                          {isOverdue && (
-                            <p className="text-xs text-red-500 font-medium">
-                              {daysOverdue} day{daysOverdue > 1 ? 's' : ''} overdue
-                            </p>
-                          )}
-                          {hasAttachments && (
-                            <div className="flex gap-1.5 mt-1" data-testid={`task-attachments-${task.id}`}>
-                              {hasVoiceNote && (
-                                <span className="text-blue-500" title="Voice note">
-                                  <Mic className="h-3 w-3" />
-                                </span>
-                              )}
-                              {hasVideo && (
-                                <span className="text-purple-500" title="Video">
-                                  <Video className="h-3 w-3" />
-                                </span>
-                              )}
-                              {hasPhoto && (
-                                <span className="text-green-500" title="Photo">
-                                  <Image className="h-3 w-3" />
-                                </span>
-                              )}
-                              {hasFile && (
-                                <span className="text-orange-500" title="File">
-                                  <Paperclip className="h-3 w-3" />
-                                </span>
+                            <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${isOverdue ? 'text-red-500' : getTaskStatusColor(task.status)}`}>
+                              {isOverdue ? <AlertTriangle className="h-4 w-4" /> : <StatusIcon className="h-4 w-4" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm truncate">{task.title}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {taskRole && (
+                                  <span className="text-[10px] text-muted-foreground">{taskRole}</span>
+                                )}
+                                {isOverdue && (
+                                  <span className="text-[10px] text-red-500 font-medium">
+                                    {daysOverdue} day{daysOverdue > 1 ? 's' : ''} overdue
+                                  </span>
+                                )}
+                              </div>
+                              {hasAttachments && (
+                                <div className="flex gap-1.5 mt-1" data-testid={`task-attachments-${task.id}`}>
+                                  {hasVoiceNote && <span className="text-blue-500" title="Voice note"><Mic className="h-3 w-3" /></span>}
+                                  {hasVideo && <span className="text-purple-500" title="Video"><Video className="h-3 w-3" /></span>}
+                                  {hasPhoto && <span className="text-green-500" title="Photo"><Image className="h-3 w-3" /></span>}
+                                  {hasFile && <span className="text-orange-500" title="File"><Paperclip className="h-3 w-3" /></span>}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
-                        {/* Admin revoke button for completed tasks */}
-                        {isAdmin && isCompleted && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                            onClick={() => revokeTaskMutation.mutate(task.id)}
-                            disabled={revokeTaskMutation.isPending}
-                            title="Revoke completion"
-                            data-testid={`button-revoke-task-${task.id}`}
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                          </Button>
+                          </div>
+                        );
+                      })}
+                      {pendingTasks.length > 5 && (
+                        <p className="text-xs text-muted-foreground text-center">+{pendingTasks.length - 5} more pending</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Recently Completed Section */}
+                  {recentlyCompletedTasks.length > 0 && (
+                    <div className="border-t pt-2 mt-2">
+                      <p className="text-xs font-medium text-green-600 mb-2 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Recently Completed (48h)
+                      </p>
+                      <div className="space-y-1.5">
+                        {recentlyCompletedTasks.slice(0, 3).map((task) => {
+                          const taskRole = getTaskRole(task);
+                          return (
+                            <div 
+                              key={task.id} 
+                              className="flex gap-2 items-start group p-1.5 rounded bg-green-50 dark:bg-green-900/20"
+                              data-testid={`dashboard-completed-task-${task.id}`}
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm truncate line-through text-muted-foreground">{task.title}</p>
+                                <div className="flex items-center gap-2">
+                                  {taskRole && (
+                                    <span className="text-[10px] text-green-600 font-medium">{taskRole}</span>
+                                  )}
+                                  {task.assignee && task.assignedTo !== currentUser?.id && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Completed by {task.assignee.firstName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {isAdmin && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                  onClick={() => revokeTaskMutation.mutate(task.id)}
+                                  disabled={revokeTaskMutation.isPending}
+                                  title="Revoke completion"
+                                  data-testid={`button-revoke-task-${task.id}`}
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {recentlyCompletedTasks.length > 3 && (
+                          <p className="text-xs text-muted-foreground text-center">+{recentlyCompletedTasks.length - 3} more completed</p>
                         )}
                       </div>
-                    );
-                  })}
-                  {tasks.length > 6 && (
-                    <p className="text-xs text-muted-foreground text-center pt-1">
-                      +{tasks.length - 6} more
-                    </p>
+                    </div>
                   )}
                 </div>
               ) : (
