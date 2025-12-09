@@ -106,11 +106,11 @@ export default function Home() {
     queryKey: ["/api/dashboard/activities"],
   });
 
-  const { data: recentLeads, isLoading: leadsLoading } = useQuery<Lead[]>({
+  const { data: recentLeads, isLoading: leadsLoading, isError: leadsError } = useQuery<Lead[]>({
     queryKey: ["/api/leads?limit=5"],
   });
 
-  const { data: activeProjects, isLoading: projectsLoading } = useQuery<Project[]>({
+  const { data: activeProjects, isLoading: projectsLoading, isError: projectsError } = useQuery<Project[]>({
     queryKey: ["/api/projects?status=in_progress"],
   });
 
@@ -119,8 +119,10 @@ export default function Home() {
   });
   
   // Fetch user's assigned tickets for dashboard display
-  const { data: myTickets = [], isLoading: myTicketsLoading } = useQuery<Ticket[]>({
+  const { data: myTickets = [], isLoading: myTicketsLoading, isSuccess: myTicketsLoaded } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets/my-assigned"],
+    staleTime: 0, // Always fetch fresh data
+    refetchOnMount: true,
   });
 
   // Fetch current user to check role and department
@@ -132,8 +134,8 @@ export default function Home() {
   const isSupport = currentUser?.role === "support" || currentUser?.role === "engineer";
   const isSales = currentUser?.role === "sales" || currentUser?.role === "sales_executive";
   
-  // Determine if user has assigned tickets (support-related role)
-  const hasAssignedTickets = myTickets.length > 0;
+  // Determine if user has assigned tickets (support-related role) - only after data loads
+  const hasAssignedTickets = myTicketsLoaded && myTickets.length > 0;
   const openTicketsCount = myTickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length;
   const closedTicketsCount = myTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length;
 
@@ -609,8 +611,8 @@ export default function Home() {
             </Card>
           )}
 
-          {/* Recent Leads - Only show for sales users or admins, hide for support users */}
-          {!hasAssignedTickets && (
+          {/* Recent Leads - Only show for users with leads permission and no assigned tickets */}
+          {!hasAssignedTickets && !leadsError && (
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-sm sm:text-base">Recent Leads</CardTitle>
@@ -646,42 +648,45 @@ export default function Home() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-sm sm:text-base">Active Projects</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              {projectsLoading ? (
-                <div className="space-y-3">
-                  {Array(3)
-                    .fill(0)
-                    .map((_, i) => (
-                      <Skeleton key={i} className="h-12 sm:h-16 w-full" />
-                    ))}
-                </div>
-              ) : activeProjects && activeProjects.length > 0 ? (
-                <div className="space-y-3">
-                  {activeProjects.map((project) => (
-                    <div key={project.id} className="text-sm space-y-1">
-                      <div className="font-medium truncate">{project.clientName}</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">
-                          {project.status.replace("_", " ")}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {project.completionPercentage}%
-                        </span>
+          {/* Active Projects - Only show for users with projects permission */}
+          {!projectsError && (
+            <Card>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-sm sm:text-base">Active Projects</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 pt-0">
+                {projectsLoading ? (
+                  <div className="space-y-3">
+                    {Array(3)
+                      .fill(0)
+                      .map((_, i) => (
+                        <Skeleton key={i} className="h-12 sm:h-16 w-full" />
+                      ))}
+                  </div>
+                ) : activeProjects && activeProjects.length > 0 ? (
+                  <div className="space-y-3">
+                    {activeProjects.map((project) => (
+                      <div key={project.id} className="text-sm space-y-1">
+                        <div className="font-medium truncate">{project.clientName}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="secondary" className="text-xs">
+                            {project.status.replace("_", " ")}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {project.completionPercentage}%
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No active projects
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No active projects
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="p-4 sm:p-6">
