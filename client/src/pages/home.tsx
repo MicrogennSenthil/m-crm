@@ -511,7 +511,13 @@ export default function Home() {
                   </div>
                 ) : myTickets && myTickets.length > 0 ? (
                   <div className="space-y-2" data-testid="dashboard-my-tickets">
-                    {myTickets.slice(0, 6).map((ticket: Ticket) => (
+                    {[...myTickets]
+                      .sort((a, b) => {
+                        // Sort order: open first, then in_progress, then resolved/closed
+                        const statusOrder: Record<string, number> = { open: 0, in_progress: 1, escalated: 2, pending_customer: 3, resolved: 4, closed: 5 };
+                        return (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+                      })
+                      .slice(0, 6).map((ticket: Ticket) => (
                       <Link key={ticket.id} href={`/tickets`}>
                         <div className="flex gap-2 items-start p-1.5 rounded hover-elevate cursor-pointer" data-testid={`dashboard-ticket-${ticket.id}`}>
                           <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
