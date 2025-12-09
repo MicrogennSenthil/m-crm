@@ -56,6 +56,10 @@ The database schema consists of 14 tables, including `users` (with role-based ac
   - `requirePermission(moduleName, action)` middleware enforces module-level permissions (view/create/edit/delete) based on `user_role_rights` table
   - Super admin (senthil@microgenn.com) bypasses all permission checks
   - Permission caching: 5-minute TTL with automatic cache invalidation when role assignments or rights are modified
+- **Dual Role System Support**: 
+  - New users get roles via `user_role_assignments` table (preferred)
+  - Legacy users with `users.role` field are automatically recognized - the system looks up matching role in `user_roles` table
+  - Both systems work seamlessly together with no migration required
 - **Protected Routes**: 
   - Leads, Projects, Tickets, Tasks: Now use `requirePermission` middleware for granular access control
   - Users management, roles, departments require `isAdmin` for modifications

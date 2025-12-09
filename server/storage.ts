@@ -2538,9 +2538,22 @@ export class DatabaseStorage implements IStorage {
     // Get all system modules
     const allModules = await this.getSystemModules();
     
-    // Get user's role assignments
+    // Get user's role assignments from new table
     const assignments = await this.getUserRoleAssignments(userId);
-    const roleIds = assignments.map(a => a.roleId);
+    let roleIds = assignments.filter(a => a.isActive).map(a => a.roleId);
+    
+    // If no new-style role assignments, check for legacy role in users table
+    if (roleIds.length === 0) {
+      const user = await this.getUser(userId);
+      if (user?.role) {
+        // Find role by name matching the legacy role field
+        const allRoles = await this.getUserRoles();
+        const legacyRole = allRoles.find(r => r.name === user.role && r.isActive);
+        if (legacyRole) {
+          roleIds = [legacyRole.id];
+        }
+      }
+    }
     
     // Get role rights for all assigned roles
     const allRoleRights = roleIds.length > 0 
@@ -2567,7 +2580,8 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Aggregate permissions from all roles (OR logic - if any role grants permission, user has it)
-      const rolePerms = allRoleRights.filter(r => r.module === module.name);
+      // Compare using module.id since userRoleRights.module stores the module ID, not the name
+      const rolePerms = allRoleRights.filter(r => r.module === module.id);
       const hasView = rolePerms.some(r => r.canView);
       const hasCreate = rolePerms.some(r => r.canCreate);
       const hasEdit = rolePerms.some(r => r.canEdit);
