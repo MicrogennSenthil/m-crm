@@ -7853,6 +7853,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Dashboard - Development Tasks Overview
+  app.get("/api/admin/dashboard/development", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const bucket = req.query.bucket as string || 'month';
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = req.query.month ? parseInt(req.query.month as string) : null;
+      
+      const now = new Date();
+      const [allTasks, allUsers] = await Promise.all([
+        storage.getDevelopmentTasks({}),
+        storage.getUsers(),
+      ]);
+      
+      // Enrich tasks with user info
+      const tasksWithDetails = allTasks.map(t => {
+        const assignee = allUsers.find(u => u.id === t.assignedTo);
+        const assigner = allUsers.find(u => u.id === t.assignedBy);
+        const isOverdue = t.deadline && new Date(t.deadline) < now && t.status !== 'completed';
+        return {
+          ...t,
+          assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() : null,
+          assignerName: assigner ? `${assigner.firstName || ''} ${assigner.lastName || ''}`.trim() : null,
+          isOverdue,
+          daysOverdue: isOverdue && t.deadline ? Math.floor((now.getTime() - new Date(t.deadline).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+        };
+      });
+      
+      let buckets: any[] = [];
+      let items: any[] = [];
+      
+      if (bucket === 'year') {
+        for (let m = 0; m < 12; m++) {
+          const start = new Date(year, m, 1);
+          const end = new Date(year, m + 1, 0, 23, 59, 59, 999);
+          
+          const monthTasks = tasksWithDetails.filter(t => {
+            const date = t.createdAt ? new Date(t.createdAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          const completedTasks = tasksWithDetails.filter(t => {
+            if (t.status !== 'completed') return false;
+            const date = t.completedAt ? new Date(t.completedAt) : null;
+            return date && date >= start && date <= end;
+          });
+          
+          buckets.push({
+            period: `${year}-${String(m + 1).padStart(2, '0')}`,
+            label: new Date(year, m).toLocaleDateString('en-US', { month: 'short' }),
+            created: monthTasks.length,
+            completed: completedTasks.length,
+            pending: monthTasks.filter(t => t.status === 'pending').length,
+            inProgress: monthTasks.filter(t => t.status === 'in_progress').length,
+            overdue: monthTasks.filter(t => t.isOverdue).length,
+            fromSupport: monthTasks.filter(t => t.sourceType === 'support').length,
+            fromImplementation: monthTasks.filter(t => t.sourceType === 'implementation').length,
+            fromTasks: monthTasks.filter(t => t.sourceType === 'task').length,
+            manual: monthTasks.filter(t => t.sourceType === 'manual').length,
+          });
+        }
+      } else if (bucket === 'month' && month !== null) {
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+        let weekNum = 1;
+        let weekStart = new Date(monthStart);
+        
+        while (weekStart <= monthEnd) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
+          
+          const weekTasks = tasksWithDetails.filter(t => {
+            const date = t.createdAt ? new Date(t.createdAt) : null;
+            return date && date >= weekStart && date <= weekEnd;
+          });
+          
+          const completedTasks = tasksWithDetails.filter(t => {
+            if (t.status !== 'completed') return false;
+            const date = t.completedAt ? new Date(t.completedAt) : null;
+            return date && date >= weekStart && date <= weekEnd;
+          });
+          
+          buckets.push({
+            period: `Week ${weekNum}`,
+            label: `W${weekNum}`,
+            week: weekNum,
+            created: weekTasks.length,
+            completed: completedTasks.length,
+            pending: weekTasks.filter(t => t.status === 'pending').length,
+            inProgress: weekTasks.filter(t => t.status === 'in_progress').length,
+            overdue: weekTasks.filter(t => t.isOverdue).length,
+            fromSupport: weekTasks.filter(t => t.sourceType === 'support').length,
+            fromImplementation: weekTasks.filter(t => t.sourceType === 'implementation').length,
+            fromTasks: weekTasks.filter(t => t.sourceType === 'task').length,
+            manual: weekTasks.filter(t => t.sourceType === 'manual').length,
+          });
+          
+          weekNum++;
+          weekStart = new Date(weekEnd);
+          weekStart.setDate(weekStart.getDate() + 1);
+        }
+        
+        // Also include items for this month
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 0, 23, 59, 59, 999);
+        items = tasksWithDetails.filter(t => {
+          const date = t.createdAt ? new Date(t.createdAt) : null;
+          return date && date >= start && date <= end;
+        });
+      }
+      
+      // Get overdue tasks
+      const overdueTasks = tasksWithDetails.filter(t => t.isOverdue);
+      
+      // Summary metrics
+      const summary = {
+        total: allTasks.length,
+        pending: allTasks.filter(t => t.status === 'pending').length,
+        inProgress: allTasks.filter(t => t.status === 'in_progress').length,
+        completed: allTasks.filter(t => t.status === 'completed').length,
+        overdue: overdueTasks.length,
+        totalPenaltyPoints: allTasks.reduce((sum, t) => sum + (t.penaltyPoints || 0), 0),
+        fromSupport: allTasks.filter(t => t.sourceType === 'support').length,
+        fromImplementation: allTasks.filter(t => t.sourceType === 'implementation').length,
+        fromTasks: allTasks.filter(t => t.sourceType === 'task').length,
+        manual: allTasks.filter(t => t.sourceType === 'manual').length,
+      };
+      
+      res.json({
+        buckets,
+        items,
+        overdueTasks,
+        summary,
+      });
+    } catch (error) {
+      console.error("Error fetching admin development dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch admin development dashboard" });
+    }
+  });
+
   // Admin Dashboard - Drill-down to specific items
   app.get("/api/admin/dashboard/drilldown", isAuthenticated, isAdmin, async (req: any, res) => {
     try {

@@ -87,6 +87,21 @@ interface SupportBucket {
   weekNumber?: number;
 }
 
+interface DevelopmentBucket {
+  period: string;
+  label: string;
+  created: number;
+  completed: number;
+  pending: number;
+  inProgress: number;
+  overdue: number;
+  fromSupport: number;
+  fromImplementation: number;
+  fromTasks: number;
+  manual: number;
+  week?: number;
+}
+
 interface PerformanceUser {
   id: string;
   name: string;
@@ -1323,6 +1338,290 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
+function DevelopmentDrilldown({ viewMode }: { viewMode: ViewMode }) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState<number | null>(null);
+  
+  const bucket = month ? 'month' : 'year';
+  
+  const devQueryParams = new URLSearchParams({ bucket, year: year.toString() });
+  if (month) devQueryParams.set('month', month.toString());
+  
+  const { data, isLoading } = useQuery<{ buckets: DevelopmentBucket[]; items: any[]; overdueTasks: any[]; summary: any }>({
+    queryKey: [`/api/admin/dashboard/development?${devQueryParams.toString()}`],
+  });
+  
+  const handleDrillDown = (period: string) => {
+    if (!month) {
+      const m = parseInt(period.split('-')[1]);
+      setMonth(m);
+    }
+  };
+  
+  const handleBack = () => {
+    if (month) setMonth(null);
+  };
+  
+  return (
+    <div className="space-y-4">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2">
+        {month && (
+          <Button variant="ghost" size="sm" onClick={handleBack}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+        )}
+        <span className="text-sm text-muted-foreground">
+          {year} {month ? `/ ${new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long' })}` : ''}
+        </span>
+        <div className="ml-auto">
+          <Select value={year.toString()} onValueChange={(v) => { setYear(parseInt(v)); setMonth(null); }}>
+            <SelectTrigger className="w-[100px]" data-testid="select-dev-year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[2023, 2024, 2025].map(y => (
+                <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      {/* Summary */}
+      {data?.summary && (
+        <div className="grid grid-cols-5 gap-4">
+          <Card><CardContent className="pt-4"><div className="text-2xl font-bold">{data.summary.total}</div><div className="text-xs text-muted-foreground">Total</div></CardContent></Card>
+          <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-yellow-600">{data.summary.pending}</div><div className="text-xs text-muted-foreground">Pending</div></CardContent></Card>
+          <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-blue-600">{data.summary.inProgress}</div><div className="text-xs text-muted-foreground">In Progress</div></CardContent></Card>
+          <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-green-600">{data.summary.completed}</div><div className="text-xs text-muted-foreground">Completed</div></CardContent></Card>
+          <Card><CardContent className="pt-4"><div className="text-2xl font-bold text-red-600">{data.summary.overdue}</div><div className="text-xs text-muted-foreground">Overdue</div></CardContent></Card>
+        </div>
+      )}
+      
+      {/* Source Breakdown */}
+      {data?.summary && (
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="bg-purple-50 dark:bg-purple-950/20">
+            <CardContent className="pt-4 text-center">
+              <div className="text-xl font-bold text-purple-600">{data.summary.fromSupport}</div>
+              <div className="text-xs text-muted-foreground">From Support</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-blue-50 dark:bg-blue-950/20">
+            <CardContent className="pt-4 text-center">
+              <div className="text-xl font-bold text-blue-600">{data.summary.fromImplementation}</div>
+              <div className="text-xs text-muted-foreground">From Implementation</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-green-50 dark:bg-green-950/20">
+            <CardContent className="pt-4 text-center">
+              <div className="text-xl font-bold text-green-600">{data.summary.fromTasks}</div>
+              <div className="text-xs text-muted-foreground">From Tasks</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-950/20">
+            <CardContent className="pt-4 text-center">
+              <div className="text-xl font-bold text-amber-600">{data.summary.manual}</div>
+              <div className="text-xs text-muted-foreground">Manual</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {isLoading && (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      )}
+      
+      {/* Charts */}
+      {viewMode === 'graphical' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Development Trend</CardTitle></CardHeader>
+            <CardContent>
+              {data?.buckets && data.buckets.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={data.buckets}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="created" name="Created" fill={CHART_COLORS.info} />
+                    <Bar dataKey="completed" name="Completed" fill={CHART_COLORS.success} />
+                    <Bar dataKey="overdue" name="Overdue" fill={CHART_COLORS.danger} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Briefcase className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No development data available for this period</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Source Breakdown</CardTitle></CardHeader>
+            <CardContent>
+              {data?.summary ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'From Support', value: data.summary.fromSupport, color: CHART_COLORS.purple },
+                        { name: 'From Implementation', value: data.summary.fromImplementation, color: CHART_COLORS.info },
+                        { name: 'From Tasks', value: data.summary.fromTasks, color: CHART_COLORS.success },
+                        { name: 'Manual', value: data.summary.manual, color: CHART_COLORS.accent },
+                      ].filter(item => item.value > 0)}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {[
+                        { name: 'From Support', value: data.summary.fromSupport, color: CHART_COLORS.purple },
+                        { name: 'From Implementation', value: data.summary.fromImplementation, color: CHART_COLORS.info },
+                        { name: 'From Tasks', value: data.summary.fromTasks, color: CHART_COLORS.success },
+                        { name: 'Manual', value: data.summary.manual, color: CHART_COLORS.accent },
+                      ].filter(item => item.value > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <p>No data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      
+      {/* Statistics Table */}
+      {viewMode === 'statistics' && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Development Statistics</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Created</TableHead>
+                  <TableHead className="text-right">Completed</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="text-right">In Progress</TableHead>
+                  <TableHead className="text-right">Overdue</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data?.buckets?.map((bucket) => (
+                  <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period)}>
+                    <TableCell className="font-medium">{bucket.label}</TableCell>
+                    <TableCell className="text-right text-blue-600">{bucket.created}</TableCell>
+                    <TableCell className="text-right text-green-600">{bucket.completed}</TableCell>
+                    <TableCell className="text-right text-yellow-600">{bucket.pending}</TableCell>
+                    <TableCell className="text-right text-purple-600">{bucket.inProgress}</TableCell>
+                    <TableCell className="text-right text-red-600">{bucket.overdue}</TableCell>
+                    <TableCell className="text-right">
+                      {!month && <ChevronRight className="h-4 w-4" />}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right text-blue-600">{data?.buckets?.reduce((sum, b) => sum + b.created, 0) || 0}</TableCell>
+                  <TableCell className="text-right text-green-600">{data?.buckets?.reduce((sum, b) => sum + b.completed, 0) || 0}</TableCell>
+                  <TableCell className="text-right text-yellow-600">{data?.buckets?.reduce((sum, b) => sum + b.pending, 0) || 0}</TableCell>
+                  <TableCell className="text-right text-purple-600">{data?.buckets?.reduce((sum, b) => sum + b.inProgress, 0) || 0}</TableCell>
+                  <TableCell className="text-right text-red-600">{data?.buckets?.reduce((sum, b) => sum + b.overdue, 0) || 0}</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Overdue Tasks */}
+      {data?.overdueTasks && data.overdueTasks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-red-500" />
+              Overdue Tasks ({data.overdueTasks.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[200px]">
+              <div className="space-y-2">
+                {data.overdueTasks.map((t: any) => (
+                  <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20">
+                    <div>
+                      <div className="font-medium">{t.taskNumber}</div>
+                      <div className="text-sm text-muted-foreground">{t.title} - {t.assigneeName || 'Unassigned'}</div>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={t.priority === 'critical' ? 'destructive' : 'outline'}>{t.priority}</Badge>
+                      <div className="text-sm text-red-600 mt-1">{t.daysOverdue} days overdue</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Items List when drilling down */}
+      {month && data?.items && data.items.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Tasks in {new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-2">
+                {data.items.map((item: any) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50">
+                    <div>
+                      <div className="font-medium">{item.taskNumber}</div>
+                      <div className="text-sm text-muted-foreground">{item.title}</div>
+                      <div className="text-xs text-muted-foreground">Assigned to: {item.assigneeName || 'Unassigned'}</div>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={
+                        item.status === 'completed' ? 'default' : 
+                        item.status === 'in_progress' ? 'secondary' : 
+                        item.isOverdue ? 'destructive' : 'outline'
+                      }>
+                        {item.status.replace('_', ' ')}
+                      </Badge>
+                      <div className="text-xs text-muted-foreground mt-1">{item.sourceType}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState('month');
   
@@ -1632,11 +1931,12 @@ export default function SuperAdminDashboard() {
       
       {/* Main Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full max-w-[600px] grid-cols-5">
+        <TabsList className="grid w-full max-w-[720px] grid-cols-6">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
           <TabsTrigger value="implementation" data-testid="tab-implementation">Implementation</TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">Support</TabsTrigger>
+          <TabsTrigger value="development" data-testid="tab-development">Development</TabsTrigger>
           <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
         </TabsList>
         
@@ -1666,6 +1966,10 @@ export default function SuperAdminDashboard() {
         
         <TabsContent value="support">
           <SupportDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="development">
+          <DevelopmentDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="performance">
