@@ -7855,16 +7855,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin Dashboard - Development Tasks Overview
   app.get("/api/admin/dashboard/development", isAuthenticated, isAdmin, async (req: any, res) => {
+    // Disable caching for this endpoint
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     try {
-      const bucket = req.query.bucket as string || 'month';
+      const bucket = req.query.bucket as string || 'year';
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
       const month = req.query.month ? parseInt(req.query.month as string) : null;
+      
+      console.log("[DevDashboard] Fetching tasks for bucket:", bucket, "year:", year, "month:", month);
       
       const now = new Date();
       const [allTasks, allUsers] = await Promise.all([
         storage.getDevelopmentTasks({}),
         storage.getUsers(),
       ]);
+      
+      console.log("[DevDashboard] Found tasks:", allTasks.length, "sourceTypes:", allTasks.map(t => t.sourceType));
+      console.log("[DevDashboard] Sample task:", allTasks[0] ? JSON.stringify({ 
+        id: allTasks[0].id, 
+        sourceType: allTasks[0].sourceType, 
+        status: allTasks[0].status 
+      }) : 'none');
       
       // Enrich tasks with user info
       const tasksWithDetails = allTasks.map(t => {
@@ -7980,6 +7994,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromTasks: allTasks.filter(t => t.sourceType === 'task').length,
         manual: allTasks.filter(t => t.sourceType === 'manual').length,
       };
+      
+      console.log("[DevDashboard] Summary:", JSON.stringify(summary));
+      console.log("[DevDashboard] Buckets count:", buckets.length, "buckets with data:", buckets.filter(b => b.created > 0).length);
       
       res.json({
         buckets,

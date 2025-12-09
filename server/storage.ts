@@ -2257,7 +2257,7 @@ export class DatabaseStorage implements IStorage {
       );
 
     // Get task IDs from followups
-    const followupTaskIds = [...new Set(followupsForToday.map(f => f.taskId))];
+    const followupTaskIds = Array.from(new Set(followupsForToday.map(f => f.taskId)));
     
     // Fetch those tasks if not already included
     if (followupTaskIds.length > 0) {

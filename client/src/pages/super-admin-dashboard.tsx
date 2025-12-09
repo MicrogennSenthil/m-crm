@@ -1348,7 +1348,16 @@ function DevelopmentDrilldown({ viewMode }: { viewMode: ViewMode }) {
   if (month) devQueryParams.set('month', month.toString());
   
   const { data, isLoading } = useQuery<{ buckets: DevelopmentBucket[]; items: any[]; overdueTasks: any[]; summary: any }>({
-    queryKey: [`/api/admin/dashboard/development?${devQueryParams.toString()}`],
+    queryKey: ['/api/admin/dashboard/development', { bucket, year, month }],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/dashboard/development?${devQueryParams.toString()}`, {
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to fetch development dashboard');
+      return res.json();
+    },
+    staleTime: 0,
+    refetchOnMount: true,
   });
   
   const handleDrillDown = (period: string) => {
