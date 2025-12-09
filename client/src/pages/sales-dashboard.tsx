@@ -25,7 +25,7 @@ import {
   Target, Search, MessageSquare, Send, ArrowLeft, 
   Phone, Mail, Building2, DollarSign, Plus, XCircle,
   PlayCircle, Image, Video, Mic, FileText, LayoutGrid, List,
-  CalendarDays, Handshake, UserPlus
+  CalendarDays, Handshake, UserPlus, AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -35,12 +35,17 @@ import type { Lead, FollowUp, LeadComment, Task, User } from "@shared/schema";
 
 interface LeadWithSalesExec extends Lead {
   salesExecutiveName: string | null;
+  hasOverdueFollowup?: boolean;
+  overdueFollowupCount?: number;
+  oldestOverdueDays?: number;
 }
 
 interface FollowUpWithLead extends FollowUp {
   leadCompanyName: string | null;
   leadContactPerson: string | null;
   leadStage: string | null;
+  isOverdue?: boolean;
+  daysOverdue?: number;
 }
 
 interface PeriodStats {
@@ -52,6 +57,7 @@ interface FollowupPeriodStats {
   qty: number;
   pending: number;
   completed: number;
+  overdue?: number;
 }
 
 interface GroupedStats {
@@ -293,18 +299,27 @@ function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSel
             return (
               <TableRow 
                 key={lead.id} 
-                className="cursor-pointer hover:bg-muted/50"
+                className={`cursor-pointer hover:bg-muted/50 ${lead.hasOverdueFollowup ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
                 onClick={() => onSelectLead(lead)}
                 data-testid={`row-lead-${lead.id}`}
               >
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                    {lead.hasOverdueFollowup ? (
+                      <AlertTriangle className="h-4 w-4 text-red-500 hidden sm:block" />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-muted-foreground hidden sm:block" />
+                    )}
                     <div>
                       <div className="font-medium">{lead.companyName}</div>
                       <div className="text-xs text-muted-foreground md:hidden">
                         {lead.contactPerson}
                       </div>
+                      {lead.hasOverdueFollowup && (
+                        <div className="text-xs text-red-500 font-medium">
+                          {lead.overdueFollowupCount} overdue followup{(lead.overdueFollowupCount || 0) > 1 ? 's' : ''}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </TableCell>
@@ -315,9 +330,17 @@ function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSel
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge className={stageConfig.color} data-testid={`badge-stage-${lead.id}`}>
-                    {stageConfig.label}
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge className={stageConfig.color} data-testid={`badge-stage-${lead.id}`}>
+                      {stageConfig.label}
+                    </Badge>
+                    {lead.hasOverdueFollowup && (
+                      <Badge variant="destructive" className="text-[10px]">
+                        <AlertTriangle className="h-2.5 w-2.5 mr-0.5" />
+                        Attention
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
                   {formatCurrency(lead.confirmedOrderValue || lead.estimatedValue || 0)}
@@ -366,18 +389,29 @@ function FollowUpsTable({
           {followUps.map((followUp) => (
             <TableRow 
               key={followUp.id}
-              className="cursor-pointer hover:bg-muted/50"
+              className={`cursor-pointer hover:bg-muted/50 ${followUp.isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
               onClick={() => onSelectLead(followUp.leadId)}
               data-testid={`row-followup-${followUp.id}`}
             >
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  {followUp.isOverdue ? (
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  )}
                   <div>
-                    <div>{format(new Date(followUp.followUpDate), 'MMM dd, yyyy')}</div>
+                    <div className={followUp.isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                      {format(new Date(followUp.followUpDate), 'MMM dd, yyyy')}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {format(new Date(followUp.followUpDate), 'HH:mm')}
                     </div>
+                    {followUp.isOverdue && followUp.daysOverdue && (
+                      <div className="text-xs text-red-500 font-medium">
+                        {followUp.daysOverdue} day{followUp.daysOverdue > 1 ? 's' : ''} overdue
+                      </div>
+                    )}
                   </div>
                 </div>
               </TableCell>
@@ -395,6 +429,11 @@ function FollowUpsTable({
                   <Badge className="bg-green-500 text-white">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
                     Done
+                  </Badge>
+                ) : followUp.isOverdue ? (
+                  <Badge variant="destructive">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Overdue
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-yellow-600 border-yellow-300">

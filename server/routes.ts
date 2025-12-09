@@ -3950,15 +3950,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // ============= FOLLOWUP STATS =============
+      // Overdue followups (pending from past days - should show on dashboard until completed)
+      const overdueFollowups = filteredFollowUps.filter(f => {
+        if (f.completed) return false;
+        const fDate = new Date(f.followUpDate);
+        return fDate < today; // Past due and not completed
+      });
+      
       // Today's followups
       const todayFollowups = filteredFollowUps.filter(f => {
         const fDate = new Date(f.followUpDate);
         return fDate >= today && fDate < tomorrow;
       });
+      
+      // Combined pending: today's pending + all overdue (yesterday's and before)
+      const totalPendingFollowups = todayFollowups.filter(f => !f.completed).length + overdueFollowups.length;
+      
       const followupToday = {
-        qty: todayFollowups.length,
-        pending: todayFollowups.filter(f => !f.completed).length,
+        qty: todayFollowups.length + overdueFollowups.length, // Include overdue in today's view
+        pending: totalPendingFollowups,
         completed: todayFollowups.filter(f => f.completed).length,
+        overdue: overdueFollowups.length, // Separately track overdue count
       };
       
       // This month followups
@@ -3970,6 +3982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         qty: thisMonthFollowups.length,
         pending: thisMonthFollowups.filter(f => !f.completed).length,
         completed: thisMonthFollowups.filter(f => f.completed).length,
+        overdue: thisMonthFollowups.filter(f => !f.completed && new Date(f.followUpDate) < today).length,
       };
       
       // This year followups
@@ -3981,6 +3994,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         qty: thisYearFollowups.length,
         pending: thisYearFollowups.filter(f => !f.completed).length,
         completed: thisYearFollowups.filter(f => f.completed).length,
+        overdue: thisYearFollowups.filter(f => !f.completed && new Date(f.followUpDate) < today).length,
       };
       
       // ============= DEAL STATS (Closed Won) =============
@@ -4060,24 +4074,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         l.closedDate && new Date(l.closedDate) >= today && new Date(l.closedDate) < tomorrow
       ).length;
       
-      // Add user info to leads for display
+      // Add user info to leads for display, including overdue followup indicators
       const leadsWithSalesExec = allLeads.map(lead => {
         const salesExec = allUsers.find(u => u.id === lead.salesExecutiveId);
+        // Check if this lead has any overdue followups
+        const leadFollowups = filteredFollowUps.filter(f => f.leadId === lead.id);
+        const overdueLeadFollowups = leadFollowups.filter(f => {
+          if (f.completed) return false;
+          const fDate = new Date(f.followUpDate);
+          return fDate < today;
+        });
+        const hasOverdueFollowup = overdueLeadFollowups.length > 0;
+        const oldestOverdueDays = hasOverdueFollowup 
+          ? Math.max(...overdueLeadFollowups.map(f => Math.floor((today.getTime() - new Date(f.followUpDate).getTime()) / (1000 * 60 * 60 * 24))))
+          : 0;
+          
         return {
           ...lead,
           salesExecutiveName: salesExec ? `${salesExec.firstName || ''} ${salesExec.lastName || ''}`.trim() || salesExec.email : null,
+          hasOverdueFollowup,
+          overdueFollowupCount: overdueLeadFollowups.length,
+          oldestOverdueDays,
         };
+      }).sort((a, b) => {
+        // Sort leads with overdue followups first
+        if (a.hasOverdueFollowup && !b.hasOverdueFollowup) return -1;
+        if (!a.hasOverdueFollowup && b.hasOverdueFollowup) return 1;
+        return 0;
       });
       
-      // Add lead info to followups
-      const followUpsWithLead = filteredFollowUps.map(followUp => {
+      // Add lead info to followups, mark overdue ones, and filter to show relevant ones
+      const relevantFollowUps = filteredFollowUps.filter(f => {
+        // Include: overdue (pending from past) OR today's followups OR future pending
+        if (!f.completed) return true; // All incomplete followups should show
+        // For completed, only show today's completed
+        const fDate = new Date(f.followUpDate);
+        return fDate >= today && fDate < tomorrow;
+      });
+      
+      const followUpsWithLead = relevantFollowUps.map(followUp => {
         const lead = allLeads.find(l => l.id === followUp.leadId);
+        const fDate = new Date(followUp.followUpDate);
+        const isOverdue = !followUp.completed && fDate < today;
         return {
           ...followUp,
           leadCompanyName: lead?.companyName || null,
           leadContactPerson: lead?.contactPerson || null,
           leadStage: lead?.stage || null,
+          isOverdue,
+          daysOverdue: isOverdue ? Math.floor((today.getTime() - fDate.getTime()) / (1000 * 60 * 60 * 24)) : 0,
         };
+      }).sort((a, b) => {
+        // Sort: overdue first, then by date
+        if (a.isOverdue && !b.isOverdue) return -1;
+        if (!a.isOverdue && b.isOverdue) return 1;
+        return new Date(a.followUpDate).getTime() - new Date(b.followUpDate).getTime();
       });
       
       res.json({
