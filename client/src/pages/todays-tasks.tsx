@@ -145,11 +145,22 @@ export default function TodaysTasksPage() {
     }
   };
 
+  const calculateDaysOverdue = (date: Date | string | null | undefined): number => {
+    if (!date) return 0;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    if (targetDate >= today) return 0;
+    return Math.floor((today.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   const renderTaskRow = (task: TaskWithDetails) => {
     const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
     const priorityConfig = PRIORITY_CONFIG[task.priority || "medium"];
     const StatusIcon = statusConfig.icon;
     const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+    const daysOverdue = isOverdue ? calculateDaysOverdue(task.dueDate) : 0;
 
     return (
       <TableRow 
@@ -165,6 +176,9 @@ export default function TodaysTasksPage() {
               <p className="font-medium truncate max-w-[200px]">{task.title}</p>
               {task.description && (
                 <p className="text-xs text-muted-foreground truncate max-w-[200px]">{task.description}</p>
+              )}
+              {isOverdue && daysOverdue > 0 && (
+                <p className="text-xs text-red-500 font-medium">{daysOverdue} day{daysOverdue > 1 ? 's' : ''} overdue</p>
               )}
             </div>
           </div>

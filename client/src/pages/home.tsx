@@ -19,6 +19,7 @@ import {
   Circle,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Users,
   Video,
   Image,
@@ -34,6 +35,34 @@ type TaskWithDetails = Task & {
   creator?: User;
   assignee?: User;
 };
+
+// Calculate overdue days for a task
+function getTaskOverdueInfo(task: Task): { isOverdue: boolean; daysOverdue: number } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  // Check due date
+  if (task.dueDate && task.status !== 'completed') {
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+    if (dueDate < today) {
+      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      return { isOverdue: true, daysOverdue };
+    }
+  }
+  
+  // Check reminder date
+  if (task.reminderDate && task.status !== 'completed') {
+    const reminderDate = new Date(task.reminderDate);
+    reminderDate.setHours(0, 0, 0, 0);
+    if (reminderDate < today) {
+      const daysOverdue = Math.floor((today.getTime() - reminderDate.getTime()) / (1000 * 60 * 60 * 24));
+      return { isOverdue: true, daysOverdue };
+    }
+  }
+  
+  return { isOverdue: false, daysOverdue: 0 };
+}
 
 // Get greeting based on Indian Standard Time (IST = UTC+5:30)
 function getISTGreeting(): string {
@@ -333,14 +362,15 @@ export default function Home() {
                     const hasPhoto = task.attachments?.some(a => a.type === "photo");
                     const hasFile = task.attachments?.some(a => a.type === "file");
                     const hasAttachments = hasVoiceNote || hasVideo || hasPhoto || hasFile;
+                    const { isOverdue, daysOverdue } = getTaskOverdueInfo(task);
                     return (
                       <div 
                         key={task.id} 
-                        className="flex gap-2 items-start group"
+                        className={`flex gap-2 items-start group p-1.5 rounded ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
                         data-testid={`dashboard-task-${task.id}`}
                       >
-                        <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${getTaskStatusColor(task.status)}`}>
-                          <StatusIcon className="h-4 w-4" />
+                        <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${isOverdue ? 'text-red-500' : getTaskStatusColor(task.status)}`}>
+                          {isOverdue ? <AlertTriangle className="h-4 w-4" /> : <StatusIcon className="h-4 w-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p 
@@ -348,6 +378,11 @@ export default function Home() {
                           >
                             {task.title}
                           </p>
+                          {isOverdue && (
+                            <p className="text-xs text-red-500 font-medium">
+                              {daysOverdue} day{daysOverdue > 1 ? 's' : ''} overdue
+                            </p>
+                          )}
                           {hasAttachments && (
                             <div className="flex gap-1.5 mt-1" data-testid={`task-attachments-${task.id}`}>
                               {hasVoiceNote && (

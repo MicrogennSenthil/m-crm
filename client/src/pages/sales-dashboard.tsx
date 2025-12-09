@@ -318,6 +318,9 @@ function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSel
                       {lead.hasOverdueFollowup && (
                         <div className="text-xs text-red-500 font-medium">
                           {lead.overdueFollowupCount} overdue followup{(lead.overdueFollowupCount || 0) > 1 ? 's' : ''}
+                          {lead.oldestOverdueDays && lead.oldestOverdueDays > 0 && (
+                            <span> ({lead.oldestOverdueDays} day{lead.oldestOverdueDays > 1 ? 's' : ''})</span>
+                          )}
                         </div>
                       )}
                     </div>
