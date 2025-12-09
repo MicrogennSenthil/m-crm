@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, ArrowUpDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,10 +47,21 @@ export default function Support() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [sortOrder, setSortOrder] = useState<string>("status");
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets"],
   });
+
+  // Status order for sorting: in_progress first, then open, then others, closed last
+  const STATUS_ORDER: Record<string, number> = {
+    in_progress: 0,
+    open: 1,
+    escalated: 2,
+    pending_customer: 3,
+    resolved: 4,
+    closed: 5,
+  };
 
   const filteredTickets = tickets?.filter((ticket) =>
     searchQuery
@@ -58,6 +70,25 @@ export default function Support() {
         ticket.issueSummary.toLowerCase().includes(searchQuery.toLowerCase())
       : true
   );
+
+  // Sort tickets based on selected sort order
+  const sortedTickets = [...(filteredTickets || [])].sort((a, b) => {
+    switch (sortOrder) {
+      case "status":
+        return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
+      case "priority":
+        const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+        return (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99);
+      case "newest":
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      case "oldest":
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      case "ticket_id":
+        return a.ticketNumber.localeCompare(b.ticketNumber);
+      default:
+        return 0;
+    }
+  });
 
   const calculateAge = (createdAt: Date | string) => {
     return formatDistanceToNow(new Date(createdAt), { addSuffix: false });
@@ -91,15 +122,30 @@ export default function Support() {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search tickets..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 min-h-[44px]"
-          data-testid="input-search-tickets"
-        />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search tickets..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 min-h-[44px]"
+            data-testid="input-search-tickets"
+          />
+        </div>
+        <Select value={sortOrder} onValueChange={setSortOrder}>
+          <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" data-testid="select-sort-order">
+            <ArrowUpDown className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Sort by..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="status">By Status</SelectItem>
+            <SelectItem value="priority">By Priority</SelectItem>
+            <SelectItem value="newest">Newest First</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+            <SelectItem value="ticket_id">By Ticket ID</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Mobile Card View */}
@@ -119,8 +165,8 @@ export default function Support() {
                 </CardContent>
               </Card>
             ))
-        ) : filteredTickets && filteredTickets.length > 0 ? (
-          filteredTickets.map((ticket) => {
+        ) : sortedTickets && sortedTickets.length > 0 ? (
+          sortedTickets.map((ticket) => {
             const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
             const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
             return (
@@ -202,8 +248,8 @@ export default function Support() {
                     <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                   </TableRow>
                 ))
-            ) : filteredTickets && filteredTickets.length > 0 ? (
-              filteredTickets.map((ticket) => {
+            ) : sortedTickets && sortedTickets.length > 0 ? (
+              sortedTickets.map((ticket) => {
                 const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
                 const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
                 return (
