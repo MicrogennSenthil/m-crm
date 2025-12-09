@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfDay, isToday } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -232,12 +232,24 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     },
   });
 
+  const isDemoTimeValid = () => {
+    if (!demoDate) return false;
+    const [hours, minutes] = demoTime.split(":").map(Number);
+    const dateWithTime = new Date(demoDate);
+    dateWithTime.setHours(hours, minutes, 0, 0);
+    return dateWithTime > new Date();
+  };
+
   const scheduleDemoMutation = useMutation({
     mutationFn: async () => {
       if (!demoDate) return;
       const [hours, minutes] = demoTime.split(":").map(Number);
       const dateWithTime = new Date(demoDate);
       dateWithTime.setHours(hours, minutes, 0, 0);
+      
+      if (dateWithTime <= new Date()) {
+        throw new Error("Please select a future date and time");
+      }
       
       await apiRequest("PATCH", `/api/leads/${lead.id}`, {
         demoDate: dateWithTime.toISOString(),
@@ -772,7 +784,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                             setDemoCalendarOpen(false);
                           }}
                           initialFocus
-                          disabled={(date) => date < new Date()}
+                          disabled={(date) => startOfDay(date) < startOfDay(new Date())}
                         />
                       </PopoverContent>
                     </Popover>
@@ -785,13 +797,18 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     />
                     <Button
                       onClick={() => scheduleDemoMutation.mutate()}
-                      disabled={!demoDate || scheduleDemoMutation.isPending}
+                      disabled={!demoDate || !isDemoTimeValid() || scheduleDemoMutation.isPending}
                       data-testid="button-schedule-demo"
                     >
                       <Video className="h-4 w-4 mr-2" />
                       {scheduleDemoMutation.isPending ? "Scheduling..." : lead.demoDate ? "Reschedule" : "Schedule Demo"}
                     </Button>
                   </div>
+                  {demoDate && isToday(demoDate) && !isDemoTimeValid() && (
+                    <p className="text-sm text-destructive mt-1">
+                      Please select a time after the current time for today's date
+                    </p>
+                  )}
                 </div>
               </div>
 
