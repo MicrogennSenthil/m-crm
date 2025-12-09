@@ -24,6 +24,12 @@ import {
   Calendar,
   Play,
   Trash2,
+  Image,
+  Video,
+  Mic,
+  FileText,
+  Paperclip,
+  ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -509,6 +515,108 @@ export default function DevelopmentTasks() {
                     )}
                   </div>
                 )}
+
+                {/* Attachments Section */}
+                {selectedTask.attachments && selectedTask.attachments.length > 0 && (
+                  <div className="space-y-3" data-testid="attachments-section">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Paperclip className="h-4 w-4" />
+                      Attachments ({selectedTask.attachments.length})
+                    </Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {selectedTask.attachments.map((attachment, index) => {
+                        const url = attachment;
+                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+                        const isVideo = /\.(mp4|webm|mov|avi)$/i.test(url);
+                        const isAudio = /\.(mp3|wav|ogg|m4a|webm)$/i.test(url) || url.includes("voice");
+                        
+                        if (isImage) {
+                          return (
+                            <a 
+                              key={index}
+                              href={url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block rounded-lg overflow-hidden border hover-elevate"
+                              data-testid={`attachment-image-${index}`}
+                            >
+                              <div className="aspect-square relative bg-muted">
+                                <img 
+                                  src={url} 
+                                  alt={`Attachment ${index + 1}`}
+                                  className="object-cover w-full h-full"
+                                />
+                                <div className="absolute bottom-1 right-1">
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Image className="h-3 w-3 mr-1" />
+                                    Image
+                                  </Badge>
+                                </div>
+                              </div>
+                            </a>
+                          );
+                        }
+                        
+                        if (isVideo) {
+                          return (
+                            <div 
+                              key={index}
+                              className="rounded-lg overflow-hidden border"
+                              data-testid={`attachment-video-${index}`}
+                            >
+                              <div className="aspect-square relative bg-muted">
+                                <video 
+                                  src={url}
+                                  controls
+                                  className="object-cover w-full h-full"
+                                />
+                                <div className="absolute bottom-1 right-1">
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Video className="h-3 w-3 mr-1" />
+                                    Video
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        if (isAudio) {
+                          return (
+                            <div 
+                              key={index}
+                              className="rounded-lg border p-3 bg-muted/50"
+                              data-testid={`attachment-audio-${index}`}
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <Mic className="h-8 w-8 text-indigo-500" />
+                                <Badge variant="outline" className="text-xs">Voice Recording</Badge>
+                                <audio src={url} controls className="w-full h-8" />
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <a 
+                            key={index}
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="rounded-lg border p-3 bg-muted/50 hover-elevate flex flex-col items-center gap-2"
+                            data-testid={`attachment-file-${index}`}
+                          >
+                            <FileText className="h-8 w-8 text-muted-foreground" />
+                            <Badge variant="outline" className="text-xs">
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View File
+                            </Badge>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <DialogFooter className="gap-2 flex-wrap">
@@ -576,7 +684,7 @@ export default function DevelopmentTasks() {
                   <FormItem>
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Textarea {...field} placeholder="Task description" rows={3} data-testid="textarea-task-description" />
+                      <Textarea {...field} value={field.value || ""} placeholder="Task description" rows={3} data-testid="textarea-task-description" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -615,7 +723,12 @@ export default function DevelopmentTasks() {
                     <FormItem>
                       <FormLabel>Deadline *</FormLabel>
                       <FormControl>
-                        <Input type="datetime-local" {...field} data-testid="input-task-deadline" />
+                        <Input 
+                          type="datetime-local" 
+                          {...field} 
+                          value={field.value instanceof Date ? field.value.toISOString().slice(0, 16) : (field.value || "")}
+                          data-testid="input-task-deadline" 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -630,7 +743,7 @@ export default function DevelopmentTasks() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Assign To</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value || undefined}>
                         <FormControl>
                           <SelectTrigger data-testid="select-assign-to">
                             <SelectValue placeholder="Select developer" />
@@ -656,7 +769,7 @@ export default function DevelopmentTasks() {
                     <FormItem>
                       <FormLabel>Estimated Hours</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} placeholder="Hours" data-testid="input-estimated-hours" />
+                        <Input type="number" {...field} value={field.value ?? ""} placeholder="Hours" data-testid="input-estimated-hours" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -1206,6 +1206,8 @@ export const developmentTasks = pgTable("development_tasks", {
   penaltyApplied: boolean("penalty_applied").default(false),
   penaltyPoints: integer("penalty_points").default(0),
   penaltyReason: text("penalty_reason"),
+  estimatedHours: integer("estimated_hours"),
+  actualHours: integer("actual_hours"),
   notes: text("notes"),
   attachments: text("attachments").array(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1219,6 +1221,7 @@ export const insertDevelopmentTaskSchema = createInsertSchema(developmentTasks).
   penaltyApplied: true,
   penaltyPoints: true,
   penaltyReason: true,
+  actualHours: true,
   createdAt: true,
   updatedAt: true,
 });
