@@ -261,7 +261,7 @@ const reportsSubItems = [
   {
     title: "Development Reports",
     url: "/reports/development",
-    icon: Code,
+    icon: Code2,
     color: "text-indigo-500",
     bgColor: "bg-indigo-500/10",
     module: "development_reports",
