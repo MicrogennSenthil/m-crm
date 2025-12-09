@@ -27,6 +27,9 @@ import {
   Mic,
   Calendar,
   ExternalLink,
+  Code2,
+  Building2,
+  Target,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { Lead, Project, Ticket, ActivityLog, Task, User } from "@shared/schema";
@@ -95,11 +98,59 @@ interface DashboardStats {
   closuresChange: number;
 }
 
+interface DepartmentDashboard {
+  departmentName: string;
+  isDepartmentHead: boolean;
+  memberCount: number;
+  members: Array<{ id: string; name: string; email: string; role: string }>;
+  stats: {
+    type: 'sales' | 'support' | 'implementation' | 'development' | 'admin';
+    // Sales stats
+    totalLeads?: number;
+    activeLeads?: number;
+    wonLeads?: number;
+    lostLeads?: number;
+    pendingFollowups?: number;
+    // Support stats
+    totalTickets?: number;
+    openTickets?: number;
+    resolvedTickets?: number;
+    criticalTickets?: number;
+    overdueTickets?: number;
+    // Implementation stats
+    totalProjects?: number;
+    activeProjects?: number;
+    completedProjects?: number;
+    avgCompletion?: number;
+    // Development stats
+    totalTasks?: number;
+    yetToWork?: number;
+    onProcess?: number;
+    pending?: number;
+    completed?: number;
+    overdue?: number;
+  };
+  myTasks: {
+    total: number;
+    pending: number;
+    followup: number;
+    completed: number;
+    overdue: number;
+  };
+}
+
 export default function Home() {
   const { toast } = useToast();
   
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
+  });
+
+  // Fetch department-specific dashboard data
+  const { data: deptDashboard, isLoading: deptLoading } = useQuery<DepartmentDashboard>({
+    queryKey: ["/api/dashboard/my-department"],
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   const { data: activities, isLoading: activitiesLoading } = useQuery<ActivityLog[]>({
@@ -186,40 +237,61 @@ export default function Home() {
     }
   };
 
-  const metricCards = [
-    {
-      title: "Active Leads",
-      value: stats?.activeLeads || 0,
-      change: stats?.leadsChange || 0,
-      icon: TrendingUp,
-      color: "text-blue-600",
-      bgColor: "bg-blue-600/10",
-    },
-    {
-      title: "Ongoing Implementations",
-      value: stats?.ongoingProjects || 0,
-      change: stats?.projectsChange || 0,
-      icon: Wrench,
-      color: "text-green-600",
-      bgColor: "bg-green-600/10",
-    },
-    {
-      title: "Open Tickets",
-      value: stats?.openTickets || 0,
-      change: stats?.ticketsChange || 0,
-      icon: Headphones,
-      color: "text-orange-600",
-      bgColor: "bg-orange-600/10",
-    },
-    {
-      title: "This Month's Closures",
-      value: stats?.monthlyClosures || 0,
-      change: stats?.closuresChange || 0,
-      icon: CheckCircle,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-600/10",
-    },
-  ];
+  // Generate department-specific metric cards
+  const getDepartmentMetricCards = () => {
+    const deptStats = deptDashboard?.stats;
+    const deptType = deptStats?.type || 'admin';
+
+    // Sales Department Cards
+    if (deptType === 'sales') {
+      return [
+        { title: "My Active Leads", value: deptStats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10" },
+        { title: "Won Deals", value: deptStats?.wonLeads || 0, icon: Target, color: "text-green-600", bgColor: "bg-green-600/10" },
+        { title: "Pending Followups", value: deptStats?.pendingFollowups || 0, icon: Clock, color: "text-orange-600", bgColor: "bg-orange-600/10" },
+        { title: "Total Leads", value: deptStats?.totalLeads || 0, icon: Users, color: "text-purple-600", bgColor: "bg-purple-600/10" },
+      ];
+    }
+
+    // Support Department Cards
+    if (deptType === 'support') {
+      return [
+        { title: "My Open Tickets", value: deptStats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10" },
+        { title: "Resolved", value: deptStats?.resolvedTickets || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
+        { title: "Critical", value: deptStats?.criticalTickets || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10" },
+        { title: "Overdue", value: deptStats?.overdueTickets || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10" },
+      ];
+    }
+
+    // Implementation/Technical Department Cards
+    if (deptType === 'implementation') {
+      return [
+        { title: "Active Projects", value: deptStats?.activeProjects || 0, icon: Wrench, color: "text-blue-600", bgColor: "bg-blue-600/10" },
+        { title: "Completed", value: deptStats?.completedProjects || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
+        { title: "Avg Progress", value: `${deptStats?.avgCompletion || 0}%`, icon: Target, color: "text-purple-600", bgColor: "bg-purple-600/10" },
+        { title: "Total Projects", value: deptStats?.totalProjects || 0, icon: Building2, color: "text-orange-600", bgColor: "bg-orange-600/10" },
+      ];
+    }
+
+    // Development Department Cards
+    if (deptType === 'development') {
+      return [
+        { title: "Yet to Work", value: deptStats?.yetToWork || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10" },
+        { title: "In Progress", value: deptStats?.onProcess || 0, icon: Code2, color: "text-blue-600", bgColor: "bg-blue-600/10" },
+        { title: "Completed", value: deptStats?.completed || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
+        { title: "Overdue", value: deptStats?.overdue || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10" },
+      ];
+    }
+
+    // Admin/Default - Show overall stats
+    return [
+      { title: "Active Leads", value: stats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10" },
+      { title: "Ongoing Implementations", value: stats?.ongoingProjects || 0, icon: Wrench, color: "text-green-600", bgColor: "bg-green-600/10" },
+      { title: "Open Tickets", value: stats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10" },
+      { title: "This Month's Closures", value: stats?.monthlyClosures || 0, icon: CheckCircle, color: "text-emerald-600", bgColor: "bg-emerald-600/10" },
+    ];
+  };
+
+  const metricCards = getDepartmentMetricCards();
 
   const getActivityIcon = (entityType: string) => {
     switch (entityType) {
@@ -259,21 +331,33 @@ export default function Home() {
 
   const greeting = getISTGreeting();
   const userName = currentUser?.firstName || "User";
+  const departmentName = deptDashboard?.departmentName || '';
+  const isDepartmentHead = deptDashboard?.isDepartmentHead || false;
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-lg sm:text-xl font-bold mb-1" data-testid="text-greeting">
-          Hi {userName}, {greeting}!
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Welcome to your M-CRM dashboard
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold mb-1" data-testid="text-greeting">
+            Hi {userName}, {greeting}!
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {departmentName ? `${departmentName} Department` : 'M-CRM Dashboard'}
+            {isDepartmentHead && <Badge variant="secondary" className="ml-2 text-xs">Department Head</Badge>}
+          </p>
+        </div>
+        {/* Department Head Team Summary */}
+        {isDepartmentHead && deptDashboard?.memberCount > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">{deptDashboard.memberCount} team members</span>
+          </div>
+        )}
       </div>
 
-      {/* Hero Stats Section */}
+      {/* Hero Stats Section - Department Specific */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-        {statsLoading
+        {(statsLoading || deptLoading)
           ? Array(4)
               .fill(0)
               .map((_, i) => (

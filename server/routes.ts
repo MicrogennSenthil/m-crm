@@ -4880,6 +4880,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Department-specific dashboard stats
+  app.get("/api/dashboard/my-department", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const departmentId = user.departmentId;
+      let department = null;
+      let isDepartmentHead = false;
+      let departmentMembers: any[] = [];
+      
+      if (departmentId) {
+        department = await storage.getDepartment(departmentId);
+        isDepartmentHead = department?.managerId === userId;
+        
+        // If department head, get all department members
+        if (isDepartmentHead) {
+          const allUsers = await storage.getUsers();
+          departmentMembers = allUsers.filter(u => u.departmentId === departmentId && u.id !== userId);
+        }
+      }
+
+      // Determine department type for stats
+      const departmentName = department?.name?.toLowerCase() || '';
+      const userRole = user.role?.toLowerCase() || '';
+      
+      // Department-specific stats
+      let departmentStats: any = {
+        departmentName: department?.name || 'General',
+        isDepartmentHead,
+        memberCount: departmentMembers.length,
+        members: isDepartmentHead ? departmentMembers.map(m => ({
+          id: m.id,
+          name: `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.email,
+          email: m.email,
+          role: m.role
+        })) : [],
+        stats: {}
+      };
+
+      // Sales Department Stats
+      if (departmentName.includes('sales') || userRole.includes('sales')) {
+        const allLeads = await storage.getLeads();
+        const userLeads = isDepartmentHead 
+          ? allLeads.filter(l => departmentMembers.some(m => m.id === l.assignedTo) || l.assignedTo === userId)
+          : allLeads.filter(l => l.assignedTo === userId);
+        
+        departmentStats.stats = {
+          type: 'sales',
+          totalLeads: userLeads.length,
+          activeLeads: userLeads.filter(l => l.stage !== 'closed_won' && l.stage !== 'closed_lost').length,
+          wonLeads: userLeads.filter(l => l.stage === 'closed_won').length,
+          lostLeads: userLeads.filter(l => l.stage === 'closed_lost').length,
+          pendingFollowups: userLeads.filter(l => l.nextFollowUp && new Date(l.nextFollowUp) <= new Date()).length
+        };
+      }
+      
+      // Support Department Stats
+      else if (departmentName.includes('support') || userRole.includes('support') || userRole.includes('engineer')) {
+        const allTickets = await storage.getTickets({});
+        const userTickets = isDepartmentHead
+          ? allTickets.filter(t => departmentMembers.some(m => m.id === t.assignedEngineerId) || t.assignedEngineerId === userId)
+          : allTickets.filter(t => t.assignedEngineerId === userId);
+        
+        departmentStats.stats = {
+          type: 'support',
+          totalTickets: userTickets.length,
+          openTickets: userTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length,
+          resolvedTickets: userTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
+          criticalTickets: userTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
+          overdueTickets: userTickets.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'closed').length
+        };
+      }
+      
+      // Technical/Implementation Department Stats
+      else if (departmentName.includes('technical') || departmentName.includes('implementation')) {
+        const allProjects = await storage.getProjects();
+        const userProjects = isDepartmentHead
+          ? allProjects
+          : allProjects.filter(p => p.engineers?.includes(userId) || p.leadEngineerId === userId);
+        
+        departmentStats.stats = {
+          type: 'implementation',
+          totalProjects: userProjects.length,
+          activeProjects: userProjects.filter(p => p.status === 'in_progress').length,
+          completedProjects: userProjects.filter(p => p.status === 'completed').length,
+          avgCompletion: userProjects.length > 0 
+            ? Math.round(userProjects.reduce((sum, p) => sum + (p.completionPercentage || 0), 0) / userProjects.length)
+            : 0
+        };
+      }
+      
+      // Development Department Stats
+      else if (departmentName.includes('development')) {
+        const allDevTasks = await storage.getDevelopmentTasks({});
+        const userDevTasks = isDepartmentHead
+          ? allDevTasks.filter(t => departmentMembers.some(m => m.id === t.assignedTo) || t.assignedTo === userId)
+          : allDevTasks.filter(t => t.assignedTo === userId);
+        
+        departmentStats.stats = {
+          type: 'development',
+          totalTasks: userDevTasks.length,
+          yetToWork: userDevTasks.filter(t => t.status === 'yet_to_work').length,
+          onProcess: userDevTasks.filter(t => t.status === 'on_process').length,
+          pending: userDevTasks.filter(t => t.status === 'pending').length,
+          completed: userDevTasks.filter(t => t.status === 'completed').length,
+          overdue: userDevTasks.filter(t => t.deadline && new Date(t.deadline) < new Date() && t.status !== 'completed').length
+        };
+      }
+      
+      // Default/Admin stats
+      else {
+        const dashboardStats = await storage.getDashboardStats();
+        departmentStats.stats = {
+          type: 'admin',
+          ...dashboardStats
+        };
+      }
+
+      // Get user's tasks
+      const allTasks = await storage.getTasks();
+      const myTasks = allTasks.filter(t => 
+        t.createdBy === userId || t.assignedTo === userId
+      );
+      
+      departmentStats.myTasks = {
+        total: myTasks.length,
+        pending: myTasks.filter(t => t.status === 'pending').length,
+        followup: myTasks.filter(t => t.status === 'followup').length,
+        completed: myTasks.filter(t => t.status === 'completed').length,
+        overdue: myTasks.filter(t => {
+          if (t.status === 'completed') return false;
+          const dueDate = t.dueDate ? new Date(t.dueDate) : null;
+          return dueDate && dueDate < new Date();
+        }).length
+      };
+
+      console.log(`[Dashboard] Department stats for ${user.email}: ${department?.name || 'No department'}, isHead: ${isDepartmentHead}`);
+      
+      res.json(departmentStats);
+    } catch (error) {
+      console.error("Error fetching department dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch department dashboard" });
+    }
+  });
+
   app.get("/api/dashboard/activities", isAuthenticated, async (req, res) => {
     try {
       const activities = await storage.getRecentActivities(20);
