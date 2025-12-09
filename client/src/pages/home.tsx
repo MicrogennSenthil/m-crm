@@ -237,7 +237,7 @@ export default function Home() {
     }
   };
 
-  // Generate department-specific metric cards
+  // Generate department-specific metric cards with clickable links
   const getDepartmentMetricCards = () => {
     const deptStats = deptDashboard?.stats;
     const deptType = deptStats?.type || 'admin';
@@ -245,53 +245,54 @@ export default function Home() {
     // Sales Department Cards
     if (deptType === 'sales') {
       return [
-        { title: "My Active Leads", value: deptStats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10" },
-        { title: "Won Deals", value: deptStats?.wonLeads || 0, icon: Target, color: "text-green-600", bgColor: "bg-green-600/10" },
-        { title: "Pending Followups", value: deptStats?.pendingFollowups || 0, icon: Clock, color: "text-orange-600", bgColor: "bg-orange-600/10" },
-        { title: "Total Leads", value: deptStats?.totalLeads || 0, icon: Users, color: "text-purple-600", bgColor: "bg-purple-600/10" },
+        { title: "My Active Leads", value: deptStats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10", link: "/leads?status=new,contacted,qualified,proposal" },
+        { title: "Won Deals", value: deptStats?.wonLeads || 0, icon: Target, color: "text-green-600", bgColor: "bg-green-600/10", link: "/leads?status=won" },
+        { title: "Pending Followups", value: deptStats?.pendingFollowups || 0, icon: Clock, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/tasks?status=pending,followup" },
+        { title: "Total Leads", value: deptStats?.totalLeads || 0, icon: Users, color: "text-purple-600", bgColor: "bg-purple-600/10", link: "/leads" },
       ];
     }
 
     // Support Department Cards
     if (deptType === 'support') {
       return [
-        { title: "My Open Tickets", value: deptStats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10" },
-        { title: "Resolved", value: deptStats?.resolvedTickets || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
-        { title: "Critical", value: deptStats?.criticalTickets || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10" },
-        { title: "Overdue", value: deptStats?.overdueTickets || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10" },
+        { title: "My Open Tickets", value: deptStats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/tickets?status=open,in_progress" },
+        { title: "Resolved", value: deptStats?.resolvedTickets || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10", link: "/tickets?status=resolved,closed" },
+        { title: "Critical", value: deptStats?.criticalTickets || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10", link: "/tickets?priority=critical" },
+        { title: "Overdue", value: deptStats?.overdueTickets || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10", link: "/tickets?overdue=true" },
       ];
     }
 
     // Implementation/Technical Department Cards
     if (deptType === 'implementation') {
       return [
-        { title: "Active Projects", value: deptStats?.activeProjects || 0, icon: Wrench, color: "text-blue-600", bgColor: "bg-blue-600/10" },
-        { title: "Completed", value: deptStats?.completedProjects || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
-        { title: "Avg Progress", value: `${deptStats?.avgCompletion || 0}%`, icon: Target, color: "text-purple-600", bgColor: "bg-purple-600/10" },
-        { title: "Total Projects", value: deptStats?.totalProjects || 0, icon: Building2, color: "text-orange-600", bgColor: "bg-orange-600/10" },
+        { title: "Active Projects", value: deptStats?.activeProjects || 0, icon: Wrench, color: "text-blue-600", bgColor: "bg-blue-600/10", link: "/implementation?status=planning,in_progress" },
+        { title: "Completed", value: deptStats?.completedProjects || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10", link: "/implementation?status=completed" },
+        { title: "Avg Progress", value: `${deptStats?.avgCompletion || 0}%`, icon: Target, color: "text-purple-600", bgColor: "bg-purple-600/10", link: "/implementation" },
+        { title: "Total Projects", value: deptStats?.totalProjects || 0, icon: Building2, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/implementation" },
       ];
     }
 
     // Development Department Cards
     if (deptType === 'development') {
       return [
-        { title: "Yet to Work", value: deptStats?.yetToWork || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10" },
-        { title: "In Progress", value: deptStats?.onProcess || 0, icon: Code2, color: "text-blue-600", bgColor: "bg-blue-600/10" },
-        { title: "Completed", value: deptStats?.completed || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10" },
-        { title: "Overdue", value: deptStats?.overdue || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10" },
+        { title: "Yet to Work", value: deptStats?.yetToWork || 0, icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-600/10", link: "/development/tasks?status=yet_to_work" },
+        { title: "In Progress", value: deptStats?.onProcess || 0, icon: Code2, color: "text-blue-600", bgColor: "bg-blue-600/10", link: "/development/tasks?status=on_process" },
+        { title: "Completed", value: deptStats?.completed || 0, icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-600/10", link: "/development/tasks?status=completed" },
+        { title: "Overdue", value: deptStats?.overdue || 0, icon: AlertTriangle, color: "text-red-600", bgColor: "bg-red-600/10", link: "/development/tasks?overdue=true" },
       ];
     }
 
     // Admin/Default - Show overall stats
     return [
-      { title: "Active Leads", value: stats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10" },
-      { title: "Ongoing Implementations", value: stats?.ongoingProjects || 0, icon: Wrench, color: "text-green-600", bgColor: "bg-green-600/10" },
-      { title: "Open Tickets", value: stats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10" },
-      { title: "This Month's Closures", value: stats?.monthlyClosures || 0, icon: CheckCircle, color: "text-emerald-600", bgColor: "bg-emerald-600/10" },
+      { title: "Active Leads", value: stats?.activeLeads || 0, icon: TrendingUp, color: "text-blue-600", bgColor: "bg-blue-600/10", link: "/leads" },
+      { title: "Ongoing Implementations", value: stats?.ongoingProjects || 0, icon: Wrench, color: "text-green-600", bgColor: "bg-green-600/10", link: "/implementation" },
+      { title: "Open Tickets", value: stats?.openTickets || 0, icon: Headphones, color: "text-orange-600", bgColor: "bg-orange-600/10", link: "/tickets" },
+      { title: "This Month's Closures", value: stats?.monthlyClosures || 0, icon: CheckCircle, color: "text-emerald-600", bgColor: "bg-emerald-600/10", link: "/leads?status=won" },
     ];
   };
 
   const metricCards = getDepartmentMetricCards();
+  const deptType = deptDashboard?.stats?.type || 'admin';
 
   const getActivityIcon = (entityType: string) => {
     switch (entityType) {
@@ -373,30 +374,25 @@ export default function Home() {
                 </Card>
               ))
           : metricCards.map((card) => (
-              <Card key={card.title} data-testid={`card-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                <CardHeader className="flex flex-row items-center justify-between gap-1 sm:gap-2 space-y-0 pb-2 p-3 sm:p-6">
-                  <CardTitle className="text-xs sm:text-sm font-medium leading-tight">
-                    {card.title}
-                  </CardTitle>
-                  <div className={`h-6 w-6 sm:h-8 sm:w-8 rounded-md ${card.bgColor} flex items-center justify-center flex-shrink-0`}>
-                    <card.icon className={`h-3 w-3 sm:h-4 sm:w-4 ${card.color}`} />
-                  </div>
-                </CardHeader>
-                <CardContent className="p-3 sm:p-6 pt-0">
-                  <div className="text-xl sm:text-2xl font-bold" data-testid={`value-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>{card.value}</div>
-                  <div className="flex items-center text-xs text-muted-foreground mt-1">
-                    {card.change > 0 ? (
-                      <ArrowUp className="h-3 w-3 text-green-600 mr-1" />
-                    ) : card.change < 0 ? (
-                      <ArrowDown className="h-3 w-3 text-red-600 mr-1" />
-                    ) : null}
-                    <span className={card.change > 0 ? "text-green-600" : card.change < 0 ? "text-red-600" : ""}>
-                      {card.change > 0 ? "+" : ""}{card.change}%
-                    </span>
-                    <span className="ml-1 hidden sm:inline">vs last month</span>
-                  </div>
-                </CardContent>
-              </Card>
+              <Link key={card.title} href={card.link || "#"}>
+                <Card className="cursor-pointer hover-elevate transition-all" data-testid={`card-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                  <CardHeader className="flex flex-row items-center justify-between gap-1 sm:gap-2 space-y-0 pb-2 p-3 sm:p-6">
+                    <CardTitle className="text-xs sm:text-sm font-medium leading-tight">
+                      {card.title}
+                    </CardTitle>
+                    <div className={`h-6 w-6 sm:h-8 sm:w-8 rounded-md ${card.bgColor} flex items-center justify-center flex-shrink-0`}>
+                      <card.icon className={`h-3 w-3 sm:h-4 sm:w-4 ${card.color}`} />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-3 sm:p-6 pt-0">
+                    <div className="text-xl sm:text-2xl font-bold" data-testid={`value-${card.title.toLowerCase().replace(/\s+/g, "-")}`}>{card.value}</div>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <span className="text-primary underline-offset-2 hover:underline">View details</span>
+                      <ExternalLink className="h-3 w-3 ml-1" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
       </div>
 
@@ -450,26 +446,105 @@ export default function Home() {
 
         {/* Right Column - Tasks and Quick Panels */}
         <div className="space-y-3 sm:space-y-4">
-          {/* My Tasks Panel */}
+          {/* My Work Panel - Department-aware: Shows tickets for Support, tasks for others */}
           <Card>
             <CardHeader className="p-4 sm:p-6 flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <ListTodo className="h-4 w-4" />
-                My Tasks
+                {deptType === 'support' ? (
+                  <>
+                    <Headphones className="h-4 w-4" />
+                    My Tickets
+                  </>
+                ) : (
+                  <>
+                    <ListTodo className="h-4 w-4" />
+                    My Tasks
+                  </>
+                )}
               </CardTitle>
               <div className="flex gap-1">
-                <Badge variant="secondary" className="text-xs">
-                  {pendingTasks.length} pending
-                </Badge>
-                {recentlyCompletedTasks.length > 0 && (
-                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                    {recentlyCompletedTasks.length} done
-                  </Badge>
+                {deptType === 'support' ? (
+                  <>
+                    {openTicketsCount > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {openTicketsCount} open
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-xs">
+                      {closedTicketsCount} closed
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="text-xs">
+                      {pendingTasks.length} pending
+                    </Badge>
+                    {recentlyCompletedTasks.length > 0 && (
+                      <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                        {recentlyCompletedTasks.length} done
+                      </Badge>
+                    )}
+                  </>
                 )}
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              {tasksLoading ? (
+              {/* Support users see their tickets */}
+              {deptType === 'support' ? (
+                myTicketsLoading ? (
+                  <div className="space-y-2">
+                    {Array(4).fill(0).map((_, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full flex-shrink-0" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : myTickets && myTickets.length > 0 ? (
+                  <div className="space-y-2" data-testid="dashboard-my-tickets">
+                    {myTickets.slice(0, 6).map((ticket: Ticket) => (
+                      <Link key={ticket.id} href={`/tickets`}>
+                        <div className="flex gap-2 items-start p-1.5 rounded hover-elevate cursor-pointer" data-testid={`dashboard-ticket-${ticket.id}`}>
+                          <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                            ticket.status === 'open' ? 'text-orange-500' :
+                            ticket.status === 'in_progress' ? 'text-blue-500' :
+                            ticket.status === 'resolved' ? 'text-green-500' :
+                            'text-muted-foreground'
+                          }`}>
+                            {ticket.status === 'resolved' || ticket.status === 'closed' ? (
+                              <CheckCircle className="h-4 w-4" />
+                            ) : (
+                              <Circle className="h-4 w-4" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm truncate ${ticket.status === 'closed' ? 'line-through text-muted-foreground' : ''}`}>
+                              {ticket.ticketNumber}: {ticket.subject}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={
+                                ticket.priority === 'critical' ? 'destructive' :
+                                ticket.priority === 'high' ? 'destructive' :
+                                'secondary'
+                              } className="text-[10px] h-4">
+                                {ticket.priority}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground capitalize">{ticket.status?.replace('_', ' ')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    {myTickets.length > 6 && (
+                      <p className="text-xs text-muted-foreground text-center">+{myTickets.length - 6} more tickets</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No tickets assigned
+                  </p>
+                )
+              ) : tasksLoading ? (
                 <div className="space-y-2">
                   {Array(4)
                     .fill(0)
@@ -593,23 +668,42 @@ export default function Home() {
               )}
             </CardContent>
             <CardFooter className="p-4 sm:p-6 pt-0 flex gap-2 justify-end">
-              <Button variant="outline" size="sm" asChild data-testid="link-todays-tasks">
-                <Link href="/tasks/today">
-                  <Calendar className="h-3.5 w-3.5 mr-1" />
-                  Today's Tasks
-                </Link>
-              </Button>
-              <Button variant="ghost" size="sm" asChild data-testid="link-all-tasks">
-                <Link href="/tasks">
-                  View All
-                  <ExternalLink className="h-3.5 w-3.5 ml-1" />
-                </Link>
-              </Button>
+              {deptType === 'support' ? (
+                <>
+                  <Button variant="outline" size="sm" asChild data-testid="link-open-tickets">
+                    <Link href="/tickets?status=open,in_progress">
+                      <AlertCircle className="h-3.5 w-3.5 mr-1" />
+                      Open Tickets
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="sm" asChild data-testid="link-all-tickets">
+                    <Link href="/tickets">
+                      View All
+                      <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                    </Link>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" asChild data-testid="link-todays-tasks">
+                    <Link href="/tasks/today">
+                      <Calendar className="h-3.5 w-3.5 mr-1" />
+                      Today's Tasks
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="sm" asChild data-testid="link-all-tasks">
+                    <Link href="/tasks">
+                      View All
+                      <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                    </Link>
+                  </Button>
+                </>
+              )}
             </CardFooter>
           </Card>
 
-          {/* My Tickets Panel - Shows assigned tickets for support/engineer users */}
-          {hasAssignedTickets && (
+          {/* My Tickets Panel - Shows assigned tickets for non-support users who have tickets */}
+          {hasAssignedTickets && deptType !== 'support' && (
             <Card>
               <CardHeader className="p-4 sm:p-6 flex flex-row items-center justify-between gap-2">
                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
