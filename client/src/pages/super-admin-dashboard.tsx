@@ -1327,7 +1327,7 @@ function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState('month');
   
   const { data, isLoading } = useQuery<{ topPerformers: PerformanceUser[]; byDepartment: any; allUsers: PerformanceUser[] }>({
-    queryKey: ['/api/admin/dashboard/performance', { period }],
+    queryKey: [`/api/admin/dashboard/performance?period=${period}`],
   });
   
   const getMedalColor = (index: number) => {
