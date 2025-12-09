@@ -4581,6 +4581,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Ticket routes
+  
+  // Get current user's assigned tickets (for dashboard "My Tickets" section)
+  app.get("/api/tickets/my-assigned", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const allTickets = await storage.getTickets({});
+      
+      // Filter to only tickets assigned to current user that are not closed
+      const myTickets = allTickets.filter(t => 
+        t.assignedEngineerId === userId && 
+        t.status !== 'closed'
+      );
+      
+      console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${userId}`);
+      
+      res.json(myTickets);
+    } catch (error) {
+      console.error("Error fetching user's assigned tickets:", error);
+      res.status(500).json({ message: "Failed to fetch assigned tickets" });
+    }
+  });
+  
   app.get("/api/tickets", isAuthenticated, requirePermission('tickets', 'view'), async (req, res) => {
     try {
       const { status, priority, limit } = req.query;

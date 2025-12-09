@@ -117,6 +117,11 @@ export default function Home() {
   const { data: openTickets, isLoading: ticketsLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets?status=open&limit=5"],
   });
+  
+  // Fetch user's assigned tickets for dashboard display
+  const { data: myTickets = [], isLoading: myTicketsLoading } = useQuery<Ticket[]>({
+    queryKey: ["/api/tickets/my-assigned"],
+  });
 
   // Fetch current user to check if admin
   const { data: currentUser } = useQuery<User>({
@@ -509,6 +514,82 @@ export default function Home() {
               </Button>
             </CardFooter>
           </Card>
+
+          {/* My Tickets Panel - Shows assigned tickets for support users */}
+          {myTickets.length > 0 && (
+            <Card>
+              <CardHeader className="p-4 sm:p-6 flex flex-row items-center justify-between gap-2">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                  <Headphones className="h-4 w-4" />
+                  My Tickets
+                </CardTitle>
+                <div className="flex gap-1">
+                  <Badge variant="secondary" className="text-xs">
+                    {myTickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length} open
+                  </Badge>
+                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
+                    {myTickets.length} assigned
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6 pt-0">
+                {myTicketsLoading ? (
+                  <div className="space-y-2">
+                    {Array(3).fill(0).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2" data-testid="dashboard-my-tickets">
+                    {myTickets.slice(0, 5).map((ticket) => {
+                      const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && ticket.status !== 'closed' && ticket.status !== 'resolved';
+                      return (
+                        <div 
+                          key={ticket.id}
+                          className={`flex gap-2 items-start p-2 rounded ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
+                          data-testid={`dashboard-ticket-${ticket.id}`}
+                        >
+                          <div className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                            ticket.priority === 'critical' ? 'text-red-500' :
+                            ticket.priority === 'high' ? 'text-orange-500' :
+                            ticket.priority === 'medium' ? 'text-yellow-500' : 'text-green-500'
+                          }`}>
+                            {isOverdue ? <AlertTriangle className="h-4 w-4 text-red-500" /> : <Headphones className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate font-medium">{ticket.ticketNumber}</p>
+                            <p className="text-xs text-muted-foreground truncate">{ticket.issueSummary}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant={ticket.priority === 'critical' ? 'destructive' : 'outline'} className="text-[10px] h-4">
+                                {ticket.priority}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[10px] h-4">
+                                {ticket.status.replace('_', ' ')}
+                              </Badge>
+                              {isOverdue && (
+                                <span className="text-[10px] text-red-500 font-medium">Overdue</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {myTickets.length > 5 && (
+                      <p className="text-xs text-muted-foreground text-center">+{myTickets.length - 5} more tickets</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="p-4 sm:p-6 pt-0 flex justify-end">
+                <Button variant="ghost" size="sm" asChild data-testid="link-all-tickets">
+                  <Link href="/tickets">
+                    View All Tickets
+                    <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                  </Link>
+                </Button>
+              </CardFooter>
+            </Card>
+          )}
 
           {/* Recent Leads */}
           <Card>
