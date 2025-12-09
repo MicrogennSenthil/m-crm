@@ -40,11 +40,11 @@ The CRM includes:
   - **Features**: OpenAI text-embedding-3-small (1536 dimensions), 800-1000 token chunks with 200 overlap, 15 supported languages (English, Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Tamil, Telugu, Russian, Italian, Dutch)
   - **Multilingual Support**: Translation group IDs link documents across languages, language-specific embeddings for accurate retrieval, optional cross-language search
 - **Development Module**: Work assignment system for developers with cross-module integration:
-  - **Dashboard** (/development): Aggregated metrics showing task counts by status, priority, and overdue status
-  - **Tasks Page** (/development/tasks): Full CRUD operations with filtering by status, source type, priority, and overdue status
+  - **Dashboard** (/development): Enhanced metrics with Work Status Categories (Yet to Work, On Process, Pending, Completed) and Source Breakdown (from Support, Implementation, Tasks, Manual). Shows task counts by status, priority, overdue status, and source type.
+  - **Tasks Page** (/development/tasks): Full CRUD operations with filtering by status, source type, priority, and overdue status. Supports attachment viewing (images, videos, voice recordings) from source modules.
   - **Cross-Module Integration**: "Assign to Development" button in Implementation projects, Support tickets, and Tasks modals
-  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours tracking, commenting system
-  - **Source Types**: implementation (from projects), support (from tickets), task (from tasks module)
+  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours and actual hours tracking, commenting system
+  - **Source Types**: implementation (from projects), support (from tickets), task (from tasks module), manual (created directly)
   - **Shared Component**: AssignToDevelopmentDialog for consistent assignment workflow across modules
 
 ### System Design Choices
