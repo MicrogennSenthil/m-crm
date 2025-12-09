@@ -4588,11 +4588,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const allTickets = await storage.getTickets({});
       
-      // Filter to only tickets assigned to current user that are not closed
-      const myTickets = allTickets.filter(t => 
-        t.assignedEngineerId === userId && 
-        t.status !== 'closed'
-      );
+      // Filter to tickets assigned to current user (include all statuses for dashboard display)
+      const myTickets = allTickets.filter(t => t.assignedEngineerId === userId);
+      
+      // Sort: open/in_progress first, then by created date
+      myTickets.sort((a, b) => {
+        const aOpen = a.status !== 'closed' && a.status !== 'resolved';
+        const bOpen = b.status !== 'closed' && b.status !== 'resolved';
+        if (aOpen && !bOpen) return -1;
+        if (!aOpen && bOpen) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
       
       console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${userId}`);
       
