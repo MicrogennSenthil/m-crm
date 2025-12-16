@@ -188,6 +188,7 @@ export const leads = pgTable("leads", {
   // Close deal fields
   closedDate: timestamp("closed_date"), // When deal was closed (won or lost)
   confirmedOrderValue: integer("confirmed_order_value"), // Final confirmed order value
+  specialInstructions: text("special_instructions"), // Special notes for closed deals (third-party integrations, special requests, etc.)
   closedReason: text("closed_reason"), // Reason for lost deals
   lostAmount: integer("lost_amount"), // Value of the lost deal for tracking
   daysInStage: integer("days_in_stage").default(0),

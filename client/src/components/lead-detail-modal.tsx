@@ -77,6 +77,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   // Close deal state
   const [closedDate, setClosedDate] = useState<Date>();
   const [confirmedOrderValue, setConfirmedOrderValue] = useState("");
+  const [specialInstructions, setSpecialInstructions] = useState("");
   const [closedReason, setClosedReason] = useState("");
   
   // Calendar popover open states for auto-close
@@ -377,6 +378,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         closedDate: closedDate.toISOString(),
         stage: isWon ? "closed_won" : "closed_lost",
         confirmedOrderValue: isWon ? parseInt(confirmedOrderValue) : undefined,
+        specialInstructions: isWon && specialInstructions ? specialInstructions : undefined,
         closedReason: !isWon ? closedReason : undefined,
       });
     },
@@ -386,6 +388,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setClosedDate(undefined);
       setConfirmedOrderValue("");
+      setSpecialInstructions("");
       setClosedReason("");
       toast({
         title: isWon ? "Deal Won!" : "Deal Lost",
@@ -1055,7 +1058,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       {lead.stage === "closed_won" && lead.confirmedOrderValue && (
                         <div className="flex items-center gap-2 ml-6">
                           <DollarSign className="h-3 w-3" />
-                          <span>Confirmed Value: ${lead.confirmedOrderValue.toLocaleString()}</span>
+                          <span>Order Value: ${lead.confirmedOrderValue.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {lead.stage === "closed_won" && lead.specialInstructions && (
+                        <div className="ml-6 mt-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded text-sm">
+                          <span className="font-medium text-blue-600 dark:text-blue-400">Special Instructions:</span>
+                          <p className="mt-1 text-muted-foreground whitespace-pre-wrap">{lead.specialInstructions}</p>
                         </div>
                       )}
                       {lead.stage === "closed_lost" && lead.closedReason && (
@@ -1114,6 +1123,20 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           data-testid="input-confirmed-order-value"
                         />
                       </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-xs">Special Instructions (for Won deals)</Label>
+                      <Textarea
+                        value={specialInstructions}
+                        onChange={(e) => setSpecialInstructions(e.target.value)}
+                        placeholder="Third-party integrations, special requests, custom configurations..."
+                        className="min-h-20 text-sm"
+                        data-testid="textarea-special-instructions"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Include any special requirements, third-party integrations, or notes for implementation
+                      </p>
                     </div>
                     
                     <div>
