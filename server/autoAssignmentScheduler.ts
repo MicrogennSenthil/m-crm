@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { tickets, users, departments, activityLog } from "@shared/schema";
-import { eq, and, isNull, lte, sql } from "drizzle-orm";
+import { eq, and, isNull, lte, sql, inArray } from "drizzle-orm";
 import { log } from "./app";
 
 let isRunning = false;
@@ -66,7 +66,7 @@ async function getLastAutoAssignedUserId(activeUserIds: string[]): Promise<strin
     .where(
       and(
         eq(tickets.assignmentMethod, "auto"),
-        sql`${tickets.assignedEngineerId} = ANY(${activeUserIds})`
+        inArray(tickets.assignedEngineerId, activeUserIds)
       )
     )
     .orderBy(sql`${tickets.assignedAt} DESC NULLS LAST`)

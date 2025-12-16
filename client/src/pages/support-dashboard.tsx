@@ -23,7 +23,7 @@ import { DataTablePagination, usePagination } from "@/components/ui/data-table-p
 import { 
   Ticket, Users, UserCheck, Clock, CheckCircle2, AlertTriangle, 
   RotateCcw, Timer, Search, MessageSquare, Send, ArrowLeft, 
-  Phone, Mail, Building2, FileText, AlertCircle, RefreshCcw
+  Phone, Mail, Building2, FileText, AlertCircle, RefreshCcw, Code2
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +34,9 @@ import type { Ticket as TicketType, TicketComment, User } from "@shared/schema";
 
 interface TicketWithAssignee extends TicketType {
   assigneeName: string | null;
+  hasPendingDevelopment?: boolean;
+  devTaskStatus?: string | null;
+  devTaskNumber?: string | null;
 }
 
 interface SupportDashboardStats {
@@ -49,6 +52,7 @@ interface SupportDashboardStats {
   reassignedCount: number;
   reopenedCount: number;
   longProcessingCount: number;
+  pendingDevelopmentCount: number;
 }
 
 interface SupportDashboardData {
@@ -57,7 +61,7 @@ interface SupportDashboardData {
 }
 
 type FilterType = 'all' | 'assigned' | 'unassigned' | 'open' | 'in_progress' | 'completed' | 
-                  'pending_customer' | 'escalated' | 'reassigned' | 'reopened' | 'long_processing';
+                  'pending_customer' | 'escalated' | 'reassigned' | 'reopened' | 'long_processing' | 'pending_development';
 
 const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
   critical: { color: "bg-red-500 text-white", label: "Critical" },
@@ -190,6 +194,8 @@ export default function SupportDashboard() {
           t.status === 'in_progress' && 
           t.updatedAt && new Date(t.updatedAt) < thirtyMinAgo
         );
+      case 'pending_development':
+        return tickets.filter(t => t.hasPendingDevelopment === true);
       default:
         // For 'all' view: exclude old closed tickets, only show today's closed tickets
         const todayStart = new Date();
@@ -229,6 +235,7 @@ export default function SupportDashboard() {
       reassigned: 'Reassigned Tickets',
       reopened: 'Reopened Tickets',
       long_processing: 'Long Processing (>30 min)',
+      pending_development: 'Pending at Development',
     };
     return labels[filter];
   };
@@ -356,6 +363,14 @@ export default function SupportDashboard() {
           isActive={activeFilter === 'pending_customer'}
           onClick={() => setActiveFilter('pending_customer')}
         />
+        <StatCard
+          icon={<Code2 className="h-5 w-5" />}
+          label="Pending at Dev"
+          count={stats?.pendingDevelopmentCount || 0}
+          color="bg-violet-600"
+          isActive={activeFilter === 'pending_development'}
+          onClick={() => setActiveFilter('pending_development')}
+        />
       </div>
 
       <Card>
@@ -429,9 +444,17 @@ export default function SupportDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={STATUS_CONFIG[ticket.status]?.color || "bg-gray-100"}>
-                          {STATUS_CONFIG[ticket.status]?.label || ticket.status}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge className={STATUS_CONFIG[ticket.status]?.color || "bg-gray-100"}>
+                            {STATUS_CONFIG[ticket.status]?.label || ticket.status}
+                          </Badge>
+                          {ticket.hasPendingDevelopment && (
+                            <Badge variant="outline" className="bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300 text-xs whitespace-nowrap">
+                              <Code2 className="h-3 w-3 mr-1" />
+                              Dev: {ticket.devTaskStatus === 'in_progress' ? 'In Progress' : 'Pending'}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         {ticket.assigneeName || <span className="text-muted-foreground">Unassigned</span>}

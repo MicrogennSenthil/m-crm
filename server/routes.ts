@@ -4582,6 +4582,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const allTickets = await storage.getTickets({});
       const users = await storage.getUsers();
+      const developmentTasks = await storage.getDevelopmentTasks({});
+      
+      // Create a map of ticket IDs to their development task status
+      const ticketDevTaskMap = new Map<string, { hasPendingDev: boolean; devTaskStatus: string; devTaskNumber: string }>();
+      for (const task of developmentTasks) {
+        if (task.sourceType === 'support' && task.sourceId) {
+          const isPending = task.status !== 'completed';
+          ticketDevTaskMap.set(task.sourceId, {
+            hasPendingDev: isPending,
+            devTaskStatus: task.status,
+            devTaskNumber: task.taskNumber
+          });
+        }
+      }
       
       // Calculate stats
       const totalTickets = allTickets.length;
@@ -4603,6 +4617,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pendingCustomerCount = allTickets.filter(t => t.status === 'pending_customer').length;
       const escalatedCount = allTickets.filter(t => t.status === 'escalated' || (t.escalationLevel && t.escalationLevel > 1)).length;
       
+      // Count tickets with pending development work
+      const pendingDevelopmentCount = allTickets.filter(t => {
+        const devInfo = ticketDevTaskMap.get(t.id);
+        return devInfo && devInfo.hasPendingDev;
+      }).length;
+      
       // Calculate reassigned tickets - those where assignment changed (check activity log or estimate)
       // For now, we can count tickets that have been updated and have an assignment
       const reassignedCount = allTickets.filter(t => 
@@ -4617,12 +4637,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.updatedAt && new Date(t.updatedAt) < thirtyMinAgo
       ).length;
       
-      // Add user info to tickets for display
+      // Add user info and development task info to tickets for display
       const ticketsWithAssignee = allTickets.map(ticket => {
         const assignee = users.find(u => u.id === ticket.assignedEngineerId);
+        const devInfo = ticketDevTaskMap.get(ticket.id);
         return {
           ...ticket,
           assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email : null,
+          hasPendingDevelopment: devInfo?.hasPendingDev || false,
+          devTaskStatus: devInfo?.devTaskStatus || null,
+          devTaskNumber: devInfo?.devTaskNumber || null,
         };
       });
       
@@ -4640,6 +4664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reassignedCount,
           reopenedCount,
           longProcessingCount,
+          pendingDevelopmentCount,
         },
         tickets: ticketsWithAssignee,
       });
@@ -8581,6 +8606,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingTask = await storage.getDevelopmentTask(id);
       if (!existingTask) {
         return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Prevent reassignment when task is in_progress (work has started)
+      if (req.body.assignedTo && 
+          existingTask.assignedTo && 
+          req.body.assignedTo !== existingTask.assignedTo &&
+          existingTask.status === 'in_progress') {
+        return res.status(400).json({ 
+          message: "Cannot reassign task while work is in progress. Task must be completed first." 
+        });
       }
       
       // Track status change for completion handling
