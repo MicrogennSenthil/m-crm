@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Code2, 
   Clock, 
@@ -17,7 +18,9 @@ import {
   Headphones,
   Wrench,
   ClipboardCheck,
-  FileText
+  FileText,
+  Users,
+  Building2
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +42,25 @@ interface DashboardMetrics {
   implementationTasks: number;
   taskModuleTasks: number;
   manualTasks: number;
+}
+
+interface DeveloperSummary {
+  developer: { id: string; firstName: string; lastName: string; email: string };
+  pending: number;
+  inProgress: number;
+  completed: number;
+  overdue: number;
+  total: number;
+}
+
+interface ClientSummary {
+  customer: { id: string; name: string; code: string };
+  pending: number;
+  inProgress: number;
+  completed: number;
+  overdue: number;
+  total: number;
+  sources: { support: number; implementation: number; task: number; manual: number };
 }
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
@@ -76,6 +98,14 @@ export default function DevelopmentDashboard() {
   
   const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
     queryKey: ["/api/development/dashboard"],
+  });
+
+  const { data: developerSummary } = useQuery<DeveloperSummary[]>({
+    queryKey: ["/api/development/developer-summary"],
+  });
+
+  const { data: clientSummary } = useQuery<ClientSummary[]>({
+    queryKey: ["/api/development/client-summary"],
   });
 
   if (metricsLoading) {
@@ -266,6 +296,147 @@ export default function DevelopmentDashboard() {
               <p className="text-sm text-muted-foreground">Manual</p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Developer-wise Work List */}
+      <Card data-testid="card-developer-summary">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-500" />
+            Developer-wise Work List
+          </CardTitle>
+          <CardDescription>Task distribution across developers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!developerSummary || developerSummary.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No developer assignments found</p>
+          ) : (
+            <div className="space-y-3">
+              {developerSummary.map((dev) => (
+                <div key={dev.developer.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover-elevate" data-testid={`developer-row-${dev.developer.id}`}>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback className="bg-blue-100 text-blue-700 text-sm">
+                        {dev.developer.firstName?.[0]}{dev.developer.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-sm">{dev.developer.firstName} {dev.developer.lastName}</p>
+                      <p className="text-xs text-muted-foreground">{dev.total} total tasks</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {dev.pending > 0 && (
+                      <Badge variant="outline" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-xs">
+                        {dev.pending} Pending
+                      </Badge>
+                    )}
+                    {dev.inProgress > 0 && (
+                      <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs">
+                        {dev.inProgress} In Progress
+                      </Badge>
+                    )}
+                    {dev.completed > 0 && (
+                      <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
+                        {dev.completed} Done
+                      </Badge>
+                    )}
+                    {dev.overdue > 0 && (
+                      <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs">
+                        {dev.overdue} Overdue
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Client-based Work List */}
+      <Card data-testid="card-client-summary">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-purple-500" />
+            Client-based Work List
+          </CardTitle>
+          <CardDescription>Task distribution by customer with source breakdown</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!clientSummary || clientSummary.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No client-based tasks found</p>
+          ) : (
+            <div className="space-y-3">
+              {clientSummary.map((client) => (
+                <div key={client.customer.id} className="p-3 rounded-lg bg-muted/50 hover-elevate" data-testid={`client-row-${client.customer.id}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9">
+                        <AvatarFallback className="bg-purple-100 text-purple-700 text-sm">
+                          {client.customer.name?.[0]?.toUpperCase() || 'C'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{client.customer.name}</p>
+                        <p className="text-xs text-muted-foreground">{client.customer.code} • {client.total} total tasks</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {client.pending > 0 && (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-xs">
+                          {client.pending} Pending
+                        </Badge>
+                      )}
+                      {client.inProgress > 0 && (
+                        <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs">
+                          {client.inProgress} In Progress
+                        </Badge>
+                      )}
+                      {client.completed > 0 && (
+                        <Badge variant="outline" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">
+                          {client.completed} Done
+                        </Badge>
+                      )}
+                      {client.overdue > 0 && (
+                        <Badge variant="outline" className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs">
+                          {client.overdue} Overdue
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {/* Source breakdown for this client */}
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground pl-12">
+                    {client.sources.support > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Headphones className="h-3 w-3 text-orange-500" />
+                        {client.sources.support} Support
+                      </span>
+                    )}
+                    {client.sources.implementation > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Wrench className="h-3 w-3 text-amber-500" />
+                        {client.sources.implementation} Implementation
+                      </span>
+                    )}
+                    {client.sources.task > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ClipboardCheck className="h-3 w-3 text-green-500" />
+                        {client.sources.task} Task
+                      </span>
+                    )}
+                    {client.sources.manual > 0 && (
+                      <span className="flex items-center gap-1">
+                        <ListTodo className="h-3 w-3 text-gray-500" />
+                        {client.sources.manual} Manual
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

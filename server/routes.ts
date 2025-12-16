@@ -8391,6 +8391,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get developer-wise task summary
+  app.get("/api/development/developer-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const tasks = await storage.getDevelopmentTasks({});
+      const users = await storage.getAllUsers();
+      
+      // Group tasks by developer
+      const developerMap = new Map<string, { developer: any; pending: number; inProgress: number; completed: number; overdue: number; total: number }>();
+      
+      for (const task of tasks) {
+        if (task.assignedTo) {
+          if (!developerMap.has(task.assignedTo)) {
+            const user = users.find(u => u.id === task.assignedTo);
+            developerMap.set(task.assignedTo, {
+              developer: user ? { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email } : null,
+              pending: 0,
+              inProgress: 0,
+              completed: 0,
+              overdue: 0,
+              total: 0
+            });
+          }
+          const entry = developerMap.get(task.assignedTo)!;
+          entry.total++;
+          if (task.status === 'pending') entry.pending++;
+          else if (task.status === 'in_progress') entry.inProgress++;
+          else if (task.status === 'completed') entry.completed++;
+          if (task.isOverdue || task.status === 'overdue') entry.overdue++;
+        }
+      }
+      
+      const summary = Array.from(developerMap.values()).filter(d => d.developer);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching developer summary:", error);
+      res.status(500).json({ message: "Failed to fetch developer summary" });
+    }
+  });
+
+  // Get client-wise task summary
+  app.get("/api/development/client-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const tasks = await storage.getDevelopmentTasks({});
+      const tickets = await storage.getTickets();
+      const projects = await storage.getProjects();
+      const customers = await storage.getCustomers();
+      
+      // Build a source ID to customer map
+      const sourceToCustomer = new Map<string, string>();
+      
+      // Map tickets to their customers
+      for (const ticket of tickets) {
+        if (ticket.customerId) {
+          sourceToCustomer.set(ticket.id, ticket.customerId);
+        }
+      }
+      
+      // Map projects to their customers
+      for (const project of projects) {
+        if (project.customerId) {
+          sourceToCustomer.set(project.id, project.customerId);
+        }
+      }
+      
+      // Group tasks by customer
+      const customerMap = new Map<string, { customer: any; pending: number; inProgress: number; completed: number; overdue: number; total: number; sources: { support: number; implementation: number; task: number; manual: number } }>();
+      
+      for (const task of tasks) {
+        let customerId = sourceToCustomer.get(task.sourceId);
+        
+        if (customerId) {
+          if (!customerMap.has(customerId)) {
+            const customer = customers.find(c => c.id === customerId);
+            customerMap.set(customerId, {
+              customer: customer ? { id: customer.id, name: customer.name, code: customer.code } : null,
+              pending: 0,
+              inProgress: 0,
+              completed: 0,
+              overdue: 0,
+              total: 0,
+              sources: { support: 0, implementation: 0, task: 0, manual: 0 }
+            });
+          }
+          const entry = customerMap.get(customerId)!;
+          entry.total++;
+          if (task.status === 'pending') entry.pending++;
+          else if (task.status === 'in_progress') entry.inProgress++;
+          else if (task.status === 'completed') entry.completed++;
+          if (task.isOverdue || task.status === 'overdue') entry.overdue++;
+          
+          // Track source type
+          if (task.sourceType === 'support') entry.sources.support++;
+          else if (task.sourceType === 'implementation') entry.sources.implementation++;
+          else if (task.sourceType === 'task') entry.sources.task++;
+          else if (task.sourceType === 'manual') entry.sources.manual++;
+        }
+      }
+      
+      const summary = Array.from(customerMap.values()).filter(c => c.customer);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching client summary:", error);
+      res.status(500).json({ message: "Failed to fetch client summary" });
+    }
+  });
+
   // Get all development tasks with filtering
   app.get("/api/development/tasks", isAuthenticated, async (req: any, res) => {
     try {
