@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -32,6 +33,7 @@ export default function Implementations() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(9);
 
   const { data: projects, isLoading } = useQuery<(Project & { engineers?: User[] })[]>({
     queryKey: ["/api/projects"],
@@ -100,7 +102,7 @@ export default function Implementations() {
               </Card>
             ))
         ) : filteredProjects && filteredProjects.length > 0 ? (
-          filteredProjects.map((project) => {
+          paginateData(filteredProjects).map((project) => {
             const statusConfig = STATUS_BADGES[project.status as keyof typeof STATUS_BADGES] || STATUS_BADGES.not_started;
             return (
               <Card
@@ -167,6 +169,17 @@ export default function Implementations() {
           </Card>
         )}
       </div>
+
+      {filteredProjects && filteredProjects.length > 0 && (
+        <DataTablePagination
+          currentPage={currentPage}
+          totalPages={getTotalPages(filteredProjects.length)}
+          pageSize={pageSize}
+          totalItems={filteredProjects.length}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       {selectedProject && (
         <ProjectDetailModal

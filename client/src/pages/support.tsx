@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, ArrowUpDown, ChevronRight, Zap } from "lucide-react";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,6 +49,7 @@ export default function Support() {
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [sortOrder, setSortOrder] = useState<string>("status");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets"],
@@ -258,7 +260,7 @@ export default function Support() {
                   </TableRow>
                 ))
             ) : sortedTickets && sortedTickets.length > 0 ? (
-              sortedTickets.map((ticket) => {
+              paginateData(sortedTickets).map((ticket) => {
                 const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
                 const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
                 const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
@@ -327,6 +329,17 @@ export default function Support() {
             )}
           </TableBody>
         </Table>
+        
+        {sortedTickets && sortedTickets.length > 0 && (
+          <DataTablePagination
+            currentPage={currentPage}
+            totalPages={getTotalPages(sortedTickets.length)}
+            pageSize={pageSize}
+            totalItems={sortedTickets.length}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        )}
       </div>
 
       {selectedTicket && (

@@ -10,6 +10,7 @@ import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2, Search, UserCog, Users, ShieldCheck, LogIn, Ban, CheckCircle, Mail, Calendar, Crown, Shield } from "lucide-react";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { format } from "date-fns";
 import type { User, UserRole } from "@shared/schema";
 import {
@@ -58,6 +59,7 @@ export default function AdminUsers() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
@@ -302,7 +304,7 @@ export default function AdminUsers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {paginateData(filteredUsers).map((user) => (
                     <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -503,6 +505,16 @@ export default function AdminUsers() {
                   ))}
                 </TableBody>
               </Table>
+              {filteredUsers.length > 0 && (
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={getTotalPages(filteredUsers.length)}
+                  pageSize={pageSize}
+                  totalItems={filteredUsers.length}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              )}
             </div>
           )}
         </CardContent>

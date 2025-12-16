@@ -7,6 +7,7 @@ import type { Task, User } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -76,6 +77,7 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -386,9 +388,21 @@ export default function TasksPage() {
               </Button>
             </Card>
           ) : (
-            <div className="grid gap-4">
-              {filteredTasks.map(renderTaskCard)}
-            </div>
+            <>
+              <div className="grid gap-4">
+                {paginateData(filteredTasks).map(renderTaskCard)}
+              </div>
+              {filteredTasks.length > 0 && (
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={getTotalPages(filteredTasks.length)}
+                  pageSize={pageSize}
+                  totalItems={filteredTasks.length}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              )}
+            </>
           )}
         </TabsContent>
         
