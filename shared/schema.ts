@@ -532,6 +532,8 @@ export const tickets = pgTable("tickets", {
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
   status: text("status").notNull().default("open"), // open, in_progress, pending_customer, escalated, closed, reopened
   assignedEngineerId: varchar("assigned_engineer_id").references(() => users.id),
+  assignmentMethod: text("assignment_method").default("manual"), // manual, auto (for 30-min unassigned auto-assignment)
+  assignedAt: timestamp("assigned_at"), // When the ticket was assigned to an engineer
   dueDate: timestamp("due_date"), // Due date for SLA tracking and overdue detection
   resolvedAt: timestamp("resolved_at"), // When the ticket was actually resolved (for MTTR calculation)
   escalationLevel: integer("escalation_level").default(1), // 1: Support Engineer, 2: Senior Support, 3: Development Team
