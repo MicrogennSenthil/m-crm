@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -49,11 +50,21 @@ export default function Support() {
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [sortOrder, setSortOrder] = useState<string>("status");
+  const [activeTab, setActiveTab] = useState<string>("all");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets"],
   });
+
+  // Resolved statuses for counting completed tickets
+  const RESOLVED_STATUSES = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
+  
+  // Calculate counts for tabs
+  const allCount = tickets?.length || 0;
+  const openCount = tickets?.filter(t => t.status === "open").length || 0;
+  const inProgressCount = tickets?.filter(t => t.status === "in_progress" || t.status === "escalated" || t.status === "pending_customer").length || 0;
+  const completedCount = tickets?.filter(t => RESOLVED_STATUSES.includes(t.status)).length || 0;
 
   // Status order for sorting: in_progress first, then open, then others, closed last
   const STATUS_ORDER: Record<string, number> = {
@@ -66,6 +77,12 @@ export default function Support() {
   };
 
   const filteredTickets = tickets?.filter((ticket) => {
+    // Tab filtering
+    if (activeTab === "open" && ticket.status !== "open") return false;
+    if (activeTab === "in_progress" && !["in_progress", "escalated", "pending_customer"].includes(ticket.status)) return false;
+    if (activeTab === "completed" && !RESOLVED_STATUSES.includes(ticket.status)) return false;
+    
+    // Search filtering
     if (!searchQuery) return true;
     
     const query = searchQuery.toLowerCase();
@@ -136,33 +153,50 @@ export default function Support() {
         </Dialog>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search tickets..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 min-h-[44px]"
-            data-testid="input-search-tickets"
-          />
-        </div>
-        <Select value={sortOrder} onValueChange={setSortOrder}>
-          <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" data-testid="select-sort-order">
-            <ArrowUpDown className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Sort by..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="status">By Status</SelectItem>
-            <SelectItem value="priority">By Priority</SelectItem>
-            <SelectItem value="newest">Newest First</SelectItem>
-            <SelectItem value="oldest">Oldest First</SelectItem>
-            <SelectItem value="ticket_id">By Ticket ID</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="flex-wrap" data-testid="tabs-status">
+          <TabsTrigger value="all" data-testid="tab-all">
+            All ({allCount})
+          </TabsTrigger>
+          <TabsTrigger value="open" data-testid="tab-open">
+            Open ({openCount})
+          </TabsTrigger>
+          <TabsTrigger value="in_progress" data-testid="tab-in-progress">
+            In Progress ({inProgressCount})
+          </TabsTrigger>
+          <TabsTrigger value="completed" data-testid="tab-completed">
+            Completed ({completedCount})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Mobile Card View */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tickets..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 min-h-[44px]"
+              data-testid="input-search-tickets"
+            />
+          </div>
+          <Select value={sortOrder} onValueChange={setSortOrder}>
+            <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" data-testid="select-sort-order">
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Sort by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="status">By Status</SelectItem>
+              <SelectItem value="priority">By Priority</SelectItem>
+              <SelectItem value="newest">Newest First</SelectItem>
+              <SelectItem value="oldest">Oldest First</SelectItem>
+              <SelectItem value="ticket_id">By Ticket ID</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <TabsContent value={activeTab} className="space-y-4">
+          {/* Mobile Card View */}
       <div className="md:hidden space-y-3">
         {isLoading ? (
           Array(5)
@@ -353,6 +387,8 @@ export default function Support() {
           />
         )}
       </div>
+        </TabsContent>
+      </Tabs>
 
       {selectedTicket && (
         <TicketDetailModal
