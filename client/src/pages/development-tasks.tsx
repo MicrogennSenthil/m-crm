@@ -393,12 +393,18 @@ export default function DevelopmentTasks() {
     return bNum - aNum; // Descending order - higher number first
   });
 
-  const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string) => {
+  const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string, closeDialog: boolean = false) => {
     if (!isAdmin && !canEdit("development_tasks")) {
       toast({ title: "Permission Denied", description: "You don't have permission to update tasks", variant: "destructive" });
       return;
     }
-    updateTaskMutation.mutate({ id: task.id, data: { status: newStatus } });
+    updateTaskMutation.mutate({ id: task.id, data: { status: newStatus } }, {
+      onSuccess: () => {
+        if (closeDialog) {
+          setIsDetailDialogOpen(false);
+        }
+      }
+    });
   };
 
   const onSubmitTask = (data: CreateTaskFormData) => {
@@ -882,9 +888,13 @@ export default function DevelopmentTasks() {
 
               <DialogFooter className="gap-2 flex-wrap">
                 {selectedTask.status === "pending" && (isAdmin || canEdit("development_tasks")) && (
-                  <Button onClick={() => handleStatusChange(selectedTask, "in_progress")} data-testid="button-start-work">
+                  <Button 
+                    onClick={() => handleStatusChange(selectedTask, "in_progress", true)} 
+                    disabled={updateTaskMutation.isPending}
+                    data-testid="button-start-work"
+                  >
                     <Play className="h-4 w-4 mr-2" />
-                    Start Work
+                    {updateTaskMutation.isPending ? "Starting..." : "Start Work"}
                   </Button>
                 )}
                 {selectedTask.status === "in_progress" && (isAdmin || canEdit("development_tasks")) && (
