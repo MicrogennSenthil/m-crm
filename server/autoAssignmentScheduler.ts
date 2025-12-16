@@ -122,7 +122,7 @@ async function autoAssignTickets() {
 
       // Use optimistic concurrency - only update if ticket is still unassigned
       // This prevents race conditions where a manual assignment happens between query and update
-      const result = await db
+      const updatedRows = await db
         .update(tickets)
         .set({
           assignedEngineerId: assignee.id,
@@ -135,30 +135,35 @@ async function autoAssignTickets() {
             eq(tickets.id, ticket.id),
             isNull(tickets.assignedEngineerId) // Only assign if still unassigned
           )
-        );
+        )
+        .returning({ id: tickets.id });
 
-      const assigneeName = `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email || 'Unknown';
-      
-      // Only log and count if the ticket was actually assigned (not already manually assigned)
-      // In drizzle-orm, we can check if rowCount was affected
-      await db.insert(activityLog).values({
-        action: "auto_assign_ticket",
-        entityType: "ticket",
-        entityId: ticket.id,
-        description: `Auto-assigned to ${assigneeName} (unassigned for more than 30 minutes)`,
-        metadata: {
-          ticketNumber: ticket.ticketNumber,
-          assignedTo: assignee.id,
-          assigneeName: assigneeName,
-          reason: "Unassigned for more than 30 minutes",
-          method: "round_robin",
-        },
-      });
+      // Only log, count, and advance pointer if the ticket was actually assigned
+      if (updatedRows.length > 0) {
+        const assigneeName = `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email || 'Unknown';
+        
+        await db.insert(activityLog).values({
+          action: "auto_assign_ticket",
+          entityType: "ticket",
+          entityId: ticket.id,
+          description: `Auto-assigned to ${assigneeName} (unassigned for more than 30 minutes)`,
+          metadata: {
+            ticketNumber: ticket.ticketNumber,
+            assignedTo: assignee.id,
+            assigneeName: assigneeName,
+            reason: "Unassigned for more than 30 minutes",
+            method: "round_robin",
+          },
+        });
 
-      log(`[AutoAssign] Ticket ${ticket.ticketNumber} assigned to ${assigneeName}`, "scheduler");
-      assignedCount++;
+        log(`[AutoAssign] Ticket ${ticket.ticketNumber} assigned to ${assigneeName}`, "scheduler");
+        assignedCount++;
 
-      currentIndex = (currentIndex + 1) % supportUsers.length;
+        // Only advance the round-robin pointer when assignment actually succeeded
+        currentIndex = (currentIndex + 1) % supportUsers.length;
+      } else {
+        log(`[AutoAssign] Ticket ${ticket.ticketNumber} was already manually assigned, skipping`, "scheduler");
+      }
     }
 
     log(`[AutoAssign] Auto-assigned ${assignedCount} of ${unassignedTickets.length} tickets successfully`, "scheduler");
