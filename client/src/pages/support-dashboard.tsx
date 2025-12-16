@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { 
   Ticket, Users, UserCheck, Clock, CheckCircle2, AlertTriangle, 
   RotateCcw, Timer, Search, MessageSquare, Send, ArrowLeft, 
@@ -94,24 +95,10 @@ export default function SupportDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<TicketWithAssignee | null>(null);
   const [newComment, setNewComment] = useState("");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   // Only show today's completed tickets (removed toggle for showing all)
 
-  if (!hasAccess(user)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <AlertTriangle className="h-16 w-16 text-amber-500" />
-        <h2 className="text-xl font-semibold">Access Denied</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          You don't have permission to access the Support Dashboard. 
-          This page is only available to Support Heads, Admins, and Super Admins.
-        </p>
-        <Button variant="outline" onClick={() => window.history.back()}>
-          Go Back
-        </Button>
-      </div>
-    );
-  }
-
+  // All hooks must be called before conditional returns
   const { data: dashboardData, isLoading } = useQuery<SupportDashboardData>({
     queryKey: ["/api/dashboard/support"],
   });
@@ -144,6 +131,22 @@ export default function SupportDashboard() {
       toast({ title: "Failed to add comment", variant: "destructive" });
     },
   });
+
+  if (!hasAccess(user)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <AlertTriangle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          You don't have permission to access the Support Dashboard. 
+          This page is only available to Support Heads, Admins, and Super Admins.
+        </p>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   const stats = dashboardData?.stats;
   const allTickets = dashboardData?.tickets || [];
@@ -398,7 +401,7 @@ export default function SupportDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTickets.map((ticket) => (
+                  {paginateData(filteredTickets).map((ticket) => (
                     <TableRow 
                       key={ticket.id} 
                       className="cursor-pointer hover-elevate"
@@ -452,6 +455,14 @@ export default function SupportDashboard() {
                   ))}
                 </TableBody>
               </Table>
+              <DataTablePagination
+                currentPage={currentPage}
+                totalPages={getTotalPages(filteredTickets.length)}
+                pageSize={pageSize}
+                totalItems={filteredTickets.length}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
             </div>
           )}
         </CardContent>
