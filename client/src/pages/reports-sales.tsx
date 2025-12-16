@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import {
   Select,
   SelectContent,
@@ -119,6 +120,7 @@ export default function SalesReports() {
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   const [emailSubject, setEmailSubject] = useState("Sales Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
@@ -163,7 +165,7 @@ export default function SalesReports() {
         return false;
       }
       
-      if (selectedSource !== "all" && lead.source !== selectedSource) {
+      if (selectedSource !== "all" && lead.leadSource !== selectedSource) {
         return false;
       }
       
@@ -171,9 +173,9 @@ export default function SalesReports() {
         const query = searchQuery.toLowerCase();
         return (
           lead.companyName?.toLowerCase().includes(query) ||
-          lead.contactName?.toLowerCase().includes(query) ||
-          lead.email?.toLowerCase().includes(query) ||
-          lead.phone?.toLowerCase().includes(query)
+          lead.contactPerson?.toLowerCase().includes(query) ||
+          lead.contactEmail?.toLowerCase().includes(query) ||
+          lead.contactPhone?.toLowerCase().includes(query)
         );
       }
       
@@ -200,7 +202,7 @@ export default function SalesReports() {
 
   const uniqueSources = useMemo(() => {
     if (!leads) return [];
-    return [...new Set(leads.map(l => l.source).filter(Boolean))];
+    return Array.from(new Set(leads.map(l => l.leadSource).filter(Boolean)));
   }, [leads]);
 
   const stats = useMemo(() => ({
@@ -215,15 +217,15 @@ export default function SalesReports() {
   const prepareExportData = () => {
     return reportData.map(lead => ({
       "Company Name": lead.companyName,
-      "Contact Name": lead.contactName,
-      "Email": lead.email,
-      "Phone": lead.phone,
+      "Contact Name": lead.contactPerson,
+      "Email": lead.contactEmail,
+      "Phone": lead.contactPhone,
       "Stage": lead.stage?.replace("_", " ").toUpperCase(),
-      "Source": lead.source,
-      "Expected Value": lead.expectedValue,
+      "Source": lead.leadSource,
+      "Expected Value": lead.estimatedValue,
       "Created Date": lead.createdAt ? format(new Date(lead.createdAt), "yyyy-MM-dd") : "",
-      "Last Contact": lead.lastContactDate ? format(new Date(lead.lastContactDate), "yyyy-MM-dd") : "",
-      "Notes": lead.notes,
+      "Demo Date": lead.demoDate ? format(new Date(lead.demoDate), "yyyy-MM-dd") : "",
+      "Notes": lead.specialInstructions || "",
     }));
   };
 
@@ -490,20 +492,20 @@ export default function SalesReports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {reportData.map(lead => (
+                      {paginateData(reportData).map(lead => (
                         <TableRow key={lead.id} data-testid={`row-lead-${lead.id}`}>
                           <TableCell className="font-medium">{lead.companyName}</TableCell>
-                          <TableCell>{lead.contactName}</TableCell>
-                          <TableCell>{lead.email}</TableCell>
-                          <TableCell>{lead.phone}</TableCell>
+                          <TableCell>{lead.contactPerson}</TableCell>
+                          <TableCell>{lead.contactEmail}</TableCell>
+                          <TableCell>{lead.contactPhone}</TableCell>
                           <TableCell>
                             <Badge className={getStageColor(lead.stage || "")}>
                               {lead.stage?.replace("_", " ").toUpperCase()}
                             </Badge>
                           </TableCell>
-                          <TableCell>{lead.source || "-"}</TableCell>
+                          <TableCell>{lead.leadSource || "-"}</TableCell>
                           <TableCell className="text-right">
-                            {lead.expectedValue ? `$${Number(lead.expectedValue).toLocaleString()}` : "-"}
+                            {lead.estimatedValue ? `$${Number(lead.estimatedValue).toLocaleString()}` : "-"}
                           </TableCell>
                           <TableCell>
                             {lead.createdAt ? format(new Date(lead.createdAt), "MMM dd, yyyy") : "-"}
@@ -512,6 +514,16 @@ export default function SalesReports() {
                       ))}
                     </TableBody>
                   </Table>
+                  {reportData.length > 0 && (
+                    <DataTablePagination
+                      currentPage={currentPage}
+                      totalPages={getTotalPages(reportData.length)}
+                      pageSize={pageSize}
+                      totalItems={reportData.length}
+                      onPageChange={handlePageChange}
+                      onPageSizeChange={handlePageSizeChange}
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

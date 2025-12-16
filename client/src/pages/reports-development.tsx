@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import {
   Select,
   SelectContent,
@@ -122,6 +123,7 @@ export default function DevelopmentReports() {
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [selectedSourceType, setSelectedSourceType] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   const [emailTo, setEmailTo] = useState("");
   const [emailSubject, setEmailSubject] = useState("Development Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
@@ -602,7 +604,7 @@ export default function DevelopmentReports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.map((task) => {
+                    {paginateData(reportData).map((task) => {
                       const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== "completed";
                       return (
                         <TableRow key={task.id} className={isOverdue ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
@@ -658,6 +660,14 @@ export default function DevelopmentReports() {
                     })}
                   </TableBody>
                 </Table>
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={getTotalPages(reportData.length)}
+                  pageSize={pageSize}
+                  totalItems={reportData.length}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
               </div>
             )}
           </CardContent>

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import {
   Select,
   SelectContent,
@@ -119,6 +120,7 @@ export default function ImplementationReports() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailSubject, setEmailSubject] = useState("Implementation Report - M-CRM");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   const [emailBody, setEmailBody] = useState("");
 
   const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({
@@ -165,8 +167,7 @@ export default function ImplementationReports() {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
-          project.clientName?.toLowerCase().includes(query) ||
-          project.contactEmail?.toLowerCase().includes(query)
+          project.clientName?.toLowerCase().includes(query)
         );
       }
       
@@ -202,13 +203,11 @@ export default function ImplementationReports() {
   const prepareExportData = () => {
     return reportData.map(project => ({
       "Client Name": project.clientName,
-      "Contact Email": project.contactEmail,
       "Status": project.status?.replace("_", " ").toUpperCase(),
-      "Progress": `${project.progress || 0}%`,
-      "Start Date": project.startDate ? format(new Date(project.startDate), "yyyy-MM-dd") : "",
-      "Target End Date": project.targetEndDate ? format(new Date(project.targetEndDate), "yyyy-MM-dd") : "",
+      "Progress": `${project.completionPercentage || 0}%`,
+      "Implementation Date": project.implementationDate ? format(new Date(project.implementationDate), "yyyy-MM-dd") : "",
+      "Target Go-Live": project.targetGoLiveDate ? format(new Date(project.targetGoLiveDate), "yyyy-MM-dd") : "",
       "Created Date": project.createdAt ? format(new Date(project.createdAt), "yyyy-MM-dd") : "",
-      "Notes": project.notes,
     }));
   };
 
@@ -459,10 +458,10 @@ export default function ImplementationReports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {reportData.map(project => (
+                      {paginateData(reportData).map(project => (
                         <TableRow key={project.id} data-testid={`row-project-${project.id}`}>
                           <TableCell className="font-medium">{project.clientName}</TableCell>
-                          <TableCell>{project.contactEmail}</TableCell>
+                          <TableCell>{(project as any).contactEmail || "-"}</TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(project.status || "")}>
                               {project.status?.replace("_", " ").toUpperCase()}
@@ -470,15 +469,15 @@ export default function ImplementationReports() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Progress value={project.progress || 0} className="w-20 h-2" />
-                              <span className="text-xs text-muted-foreground">{project.progress || 0}%</span>
+                              <Progress value={project.completionPercentage || 0} className="w-20 h-2" />
+                              <span className="text-xs text-muted-foreground">{project.completionPercentage || 0}%</span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            {project.startDate ? format(new Date(project.startDate), "MMM dd, yyyy") : "-"}
+                            {project.implementationDate ? format(new Date(project.implementationDate), "MMM dd, yyyy") : "-"}
                           </TableCell>
                           <TableCell>
-                            {project.targetEndDate ? format(new Date(project.targetEndDate), "MMM dd, yyyy") : "-"}
+                            {project.targetGoLiveDate ? format(new Date(project.targetGoLiveDate), "MMM dd, yyyy") : "-"}
                           </TableCell>
                           <TableCell>
                             {project.createdAt ? format(new Date(project.createdAt), "MMM dd, yyyy") : "-"}
@@ -487,6 +486,16 @@ export default function ImplementationReports() {
                       ))}
                     </TableBody>
                   </Table>
+                  {reportData.length > 0 && (
+                    <DataTablePagination
+                      currentPage={currentPage}
+                      totalPages={getTotalPages(reportData.length)}
+                      pageSize={pageSize}
+                      totalItems={reportData.length}
+                      onPageChange={handlePageChange}
+                      onPageSizeChange={handlePageSizeChange}
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

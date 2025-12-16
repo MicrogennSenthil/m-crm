@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import {
   Select,
   SelectContent,
@@ -119,6 +120,7 @@ export default function SupportReports() {
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   const [emailSubject, setEmailSubject] = useState("Support Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
@@ -498,7 +500,7 @@ export default function SupportReports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {reportData.map(ticket => (
+                      {paginateData(reportData).map(ticket => (
                         <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`}>
                           <TableCell className="font-mono font-medium">{ticket.ticketNumber}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{ticket.issueSummary}</TableCell>
@@ -526,6 +528,16 @@ export default function SupportReports() {
                       ))}
                     </TableBody>
                   </Table>
+                  {reportData.length > 0 && (
+                    <DataTablePagination
+                      currentPage={currentPage}
+                      totalPages={getTotalPages(reportData.length)}
+                      pageSize={pageSize}
+                      totalItems={reportData.length}
+                      onPageChange={handlePageChange}
+                      onPageSizeChange={handlePageSizeChange}
+                    />
+                  )}
                 </div>
               )}
             </CardContent>

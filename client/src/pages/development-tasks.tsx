@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -96,6 +97,7 @@ export default function DevelopmentTasks() {
   const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const form = useForm<CreateTaskFormData>({
     resolver: zodResolver(createTaskFormSchema),
@@ -337,7 +339,7 @@ export default function DevelopmentTasks() {
             </Card>
           ) : (
             <div className="space-y-3" data-testid="task-list">
-              {filteredTasks.map(task => {
+              {paginateData(filteredTasks).map(task => {
                 const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
                 const StatusIcon = statusConfig.icon;
                 const deadline = new Date(task.deadline);
@@ -414,6 +416,16 @@ export default function DevelopmentTasks() {
                   </Card>
                 );
               })}
+              {filteredTasks.length > 0 && (
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={getTotalPages(filteredTasks.length)}
+                  pageSize={pageSize}
+                  totalItems={filteredTasks.length}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              )}
             </div>
           )}
         </TabsContent>
