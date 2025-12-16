@@ -65,13 +65,25 @@ export default function Support() {
     closed: 5,
   };
 
-  const filteredTickets = tickets?.filter((ticket) =>
-    searchQuery
-      ? ticket.ticketNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.issueSummary.toLowerCase().includes(searchQuery.toLowerCase())
-      : true
-  );
+  const filteredTickets = tickets?.filter((ticket) => {
+    if (!searchQuery) return true;
+    
+    const query = searchQuery.toLowerCase();
+    const priorityLabel = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG]?.label?.toLowerCase() || ticket.priority?.toLowerCase();
+    const statusLabel = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG]?.label?.toLowerCase() || ticket.status?.toLowerCase();
+    const escalationLabel = `l${ticket.escalationLevel}`;
+    const ageText = ticket.createdAt ? calculateAge(ticket.createdAt).toLowerCase() : "";
+    
+    return (
+      ticket.ticketNumber.toLowerCase().includes(query) ||
+      ticket.customerName.toLowerCase().includes(query) ||
+      ticket.issueSummary.toLowerCase().includes(query) ||
+      priorityLabel.includes(query) ||
+      statusLabel.includes(query) ||
+      escalationLabel.includes(query) ||
+      ageText.includes(query)
+    );
+  });
 
   // Sort tickets based on selected sort order
   const sortedTickets = [...(filteredTickets || [])].sort((a, b) => {
