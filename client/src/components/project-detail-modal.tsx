@@ -65,15 +65,22 @@ const DEPARTMENTS = [
   { value: "management", label: "Management" },
 ];
 
+interface DepartmentType {
+  id: string;
+  name: string;
+}
+
 // Separate component for module installation with local state and save button
 function ModuleInstallationCard({ 
   pm, 
   engineers, 
+  departments,
   updateModuleMutation,
   getStatusBadge 
 }: { 
   pm: ProjectModuleWithDetails;
   engineers: UserType[];
+  departments: DepartmentType[];
   updateModuleMutation: any;
   getStatusBadge: (status: string) => JSX.Element;
 }) {
@@ -176,11 +183,19 @@ function ModuleInstallationCard({
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DEPARTMENTS.map((dept) => (
-                    <SelectItem key={dept.value} value={dept.value}>
-                      {dept.label}
-                    </SelectItem>
-                  ))}
+                  {departments.length > 0 ? (
+                    departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -377,7 +392,16 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
   const { data: engineers } = useQuery<UserType[]>({
     queryKey: ["/api/users/all"],
     enabled: open,
-    select: (users) => users.filter((u) => u.role?.toLowerCase() === "engineer"),
+    // Include technical, engineer roles or users in implementation-related work
+    select: (users) => users.filter((u) => {
+      const role = u.role?.toLowerCase() || "";
+      return role === "engineer" || role === "technical" || role.includes("engineer") || role.includes("implementation");
+    }),
+  });
+
+  const { data: departments } = useQuery<DepartmentType[]>({
+    queryKey: ["/api/departments"],
+    enabled: open,
   });
 
   const toggleModuleMutation = useMutation({
@@ -712,6 +736,7 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
                     key={pm.id} 
                     pm={pm} 
                     engineers={engineers || []}
+                    departments={departments || []}
                     updateModuleMutation={updateModuleMutation}
                     getStatusBadge={getStatusBadge}
                   />
