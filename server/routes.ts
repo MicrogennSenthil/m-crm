@@ -4751,7 +4751,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ticketsList = ticketsList.slice(0, parseInt(limit as string));
       }
       
-      res.json(ticketsList);
+      // Add development task info to each ticket
+      const developmentTasks = await storage.getDevelopmentTasks({});
+      const ticketDevTaskMap = new Map<string, { hasActiveDevelopmentTask: boolean; devTaskStatus: string; devTaskNumber: string }>();
+      for (const task of developmentTasks) {
+        if (task.sourceType === 'support' && task.sourceId) {
+          const sourceIdStr = String(task.sourceId); // Normalize to string for consistent lookup
+          const isActive = task.status !== 'completed' && task.status !== 'cancelled';
+          // Only store if this is an active task or no entry exists yet
+          if (!ticketDevTaskMap.has(sourceIdStr) || isActive) {
+            ticketDevTaskMap.set(sourceIdStr, {
+              hasActiveDevelopmentTask: isActive,
+              devTaskStatus: task.status,
+              devTaskNumber: task.taskNumber
+            });
+          }
+        }
+      }
+      
+      const ticketsWithDevInfo = ticketsList.map(ticket => {
+        const ticketIdStr = String(ticket.id); // Normalize to string for consistent lookup
+        return {
+          ...ticket,
+          hasActiveDevelopmentTask: ticketDevTaskMap.get(ticketIdStr)?.hasActiveDevelopmentTask || false,
+          devTaskStatus: ticketDevTaskMap.get(ticketIdStr)?.devTaskStatus || null,
+          devTaskNumber: ticketDevTaskMap.get(ticketIdStr)?.devTaskNumber || null,
+        };
+      });
+      
+      res.json(ticketsWithDevInfo);
     } catch (error) {
       console.error("Error fetching tickets:", error);
       res.status(500).json({ message: "Failed to fetch tickets" });
@@ -4968,6 +4996,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tickets/:id/close", isAuthenticated, async (req: any, res) => {
     try {
+      // Check for active development tasks before allowing closure
+      const ticketIdStr = String(req.params.id); // Normalize to string
+      const developmentTasks = await storage.getDevelopmentTasks({});
+      const activeDevTask = developmentTasks.find(
+        task => task.sourceType === 'support' && 
+                String(task.sourceId) === ticketIdStr && 
+                task.status !== 'completed' && 
+                task.status !== 'cancelled'
+      );
+      
+      if (activeDevTask) {
+        return res.status(400).json({ 
+          message: `Cannot close ticket: Development task ${activeDevTask.taskNumber} is still in progress` 
+        });
+      }
+      
       const updated = await storage.updateTicket(req.params.id, {
         status: "closed",
         closedAt: new Date(),
@@ -8532,7 +8576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all development tasks with filtering
   app.get("/api/development/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const { status, sourceType, priority, isOverdue } = req.query;
+      const { status, sourceType, sourceId, priority, isOverdue } = req.query;
       const userId = req.user?.id;
       const role = req.user?.role;
       
@@ -8547,7 +8591,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.assignedTo = userId;
       }
       
-      const tasks = await storage.getDevelopmentTasks(filters);
+      let tasks = await storage.getDevelopmentTasks(filters);
+      
+      // Filter by sourceId if provided (for checking dev tasks linked to a specific ticket/project/task)
+      if (sourceId) {
+        const sourceIdStr = String(sourceId);
+        tasks = tasks.filter(t => String(t.sourceId) === sourceIdStr);
+      }
+      
       res.json(tasks);
     } catch (error) {
       console.error("Error fetching development tasks:", error);

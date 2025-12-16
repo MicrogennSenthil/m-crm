@@ -62,15 +62,9 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
     enabled: open,
   });
 
-  // Check if ticket has active development task (not completed/cancelled)
-  const { data: developmentTasks } = useQuery<{ id: string; status: string }[]>({
-    queryKey: ["/api/development-tasks", { sourceType: "support", sourceId: ticket.id }],
-    enabled: open,
-  });
-  
-  const hasActiveDevelopmentTask = developmentTasks?.some(
-    task => task.status !== "completed" && task.status !== "cancelled"
-  ) || false;
+  // hasActiveDevelopmentTask is derived from the ticket prop (enriched by /api/tickets endpoint)
+  // This avoids making a separate API call and keeps the logic consistent
+  const hasActiveDevelopmentTask = (ticket as any).hasActiveDevelopmentTask || false;
 
   const addCommentMutation = useMutation({
     mutationFn: async () => {
@@ -513,12 +507,17 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                   variant="default"
                   className="w-full"
                   onClick={() => closeTicketMutation.mutate()}
-                  disabled={closeTicketMutation.isPending}
+                  disabled={closeTicketMutation.isPending || hasActiveDevelopmentTask}
                   data-testid="button-close-ticket"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Close Ticket
+                  {hasActiveDevelopmentTask ? "Close (Dev Task Pending)" : "Close Ticket"}
                 </Button>
+                {hasActiveDevelopmentTask && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
+                    Cannot close ticket while development task is in progress
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

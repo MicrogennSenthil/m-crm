@@ -43,6 +43,15 @@ const STATUS_CONFIG: Record<string, { variant: "secondary" | "default" | "outlin
   pending_customer: { variant: "outline", label: "Pending Customer" },
   escalated: { variant: "destructive", label: "Escalated" },
   closed: { variant: "outline", label: "Closed", className: "bg-green-600/10 text-green-700" },
+  development: { variant: "secondary", label: "Development", className: "bg-purple-600/20 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400" },
+};
+
+// Helper to get display status config (shows "Development" if ticket has active dev task)
+const getDisplayStatusConfig = (ticket: any) => {
+  if (ticket.hasActiveDevelopmentTask) {
+    return STATUS_CONFIG.development;
+  }
+  return STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
 };
 
 export default function Support() {
@@ -61,16 +70,19 @@ export default function Support() {
   // Resolved statuses for counting completed tickets
   const RESOLVED_STATUSES = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
   
-  // Filter tickets by category first (Support = level 1-2, Development = level 3)
+  // Helper to check if ticket is in development (level 3 OR has active development task)
+  const isDevelopmentTicket = (t: any) => t.escalationLevel === 3 || t.hasActiveDevelopmentTask;
+  
+  // Filter tickets by category first (Support = level 1-2 with no dev task, Development = level 3 OR has active dev task)
   const categoryFilteredTickets = tickets?.filter(t => {
-    if (categoryTab === "support") return (t.escalationLevel || 1) < 3;
-    if (categoryTab === "development") return t.escalationLevel === 3;
+    if (categoryTab === "support") return !isDevelopmentTicket(t);
+    if (categoryTab === "development") return isDevelopmentTicket(t);
     return true;
   }) || [];
 
   // Category counts
-  const supportCount = tickets?.filter(t => (t.escalationLevel || 1) < 3).length || 0;
-  const developmentCount = tickets?.filter(t => t.escalationLevel === 3).length || 0;
+  const supportCount = tickets?.filter(t => !isDevelopmentTicket(t)).length || 0;
+  const developmentCount = tickets?.filter(t => isDevelopmentTicket(t)).length || 0;
   
   // Calculate counts for status tabs (based on category-filtered tickets)
   const allCount = categoryFilteredTickets.length;
@@ -241,7 +253,7 @@ export default function Support() {
         ) : sortedTickets && sortedTickets.length > 0 ? (
           sortedTickets.map((ticket) => {
             const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
-            const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
+            const statusConfig = getDisplayStatusConfig(ticket);
             const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
             return (
               <Card
@@ -333,7 +345,7 @@ export default function Support() {
             ) : sortedTickets && sortedTickets.length > 0 ? (
               paginateData(sortedTickets).map((ticket) => {
                 const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
-                const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
+                const statusConfig = getDisplayStatusConfig(ticket);
                 const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
                 return (
                   <TableRow
