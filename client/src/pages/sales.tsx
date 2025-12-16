@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
 import { LeadImportDialog } from "@/components/lead-import-dialog";
+import { RescheduleDemoDialog } from "@/components/reschedule-demo-dialog";
 import type { Lead, FollowUp } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ export default function Sales() {
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [rescheduleLeadId, setRescheduleLeadId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: leads, isLoading } = useQuery<Lead[]>({
@@ -395,7 +397,20 @@ export default function Sales() {
                         {lead.demoDate && (
                           <div className="flex items-center gap-1 text-xs text-primary">
                             <Clock className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate">{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
+                            <span className="truncate flex-1">{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 p-0 hover:bg-primary/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRescheduleLeadId(lead.id);
+                              }}
+                              title="Reschedule Demo"
+                              data-testid={`button-reschedule-demo-${lead.id}`}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                            </Button>
                           </div>
                         )}
                         <div className="flex items-center justify-between gap-1 text-xs">
@@ -428,6 +443,15 @@ export default function Sales() {
           lead={selectedLead}
           open={!!selectedLead}
           onClose={() => setSelectedLead(null)}
+        />
+      )}
+
+      {/* Reschedule Demo Dialog */}
+      {rescheduleLeadId && leads && (
+        <RescheduleDemoDialog
+          lead={leads.find(l => l.id === rescheduleLeadId)!}
+          open={!!rescheduleLeadId}
+          onClose={() => setRescheduleLeadId(null)}
         />
       )}
     </div>
