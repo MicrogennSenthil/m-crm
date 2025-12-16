@@ -111,32 +111,7 @@ export default function DevelopmentTasks() {
     },
   });
 
-  if (permissionsLoading || !user) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
-      </div>
-    );
-  }
-
-  const isAdmin = user.email === SUPER_ADMIN_EMAIL || user.role === "admin";
-  const hasAccess = isAdmin || canView("development_tasks");
-
-  if (!hasAccess) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <AlertTriangle className="h-16 w-16 text-amber-500" />
-        <h2 className="text-xl font-semibold" data-testid="text-access-denied">Access Denied</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          You don't have permission to access Development Tasks.
-        </p>
-        <Button variant="outline" onClick={() => window.history.back()} data-testid="button-go-back">
-          Go Back
-        </Button>
-      </div>
-    );
-  }
-
+  // All hooks must be called before any conditional returns
   const { data: tasks, isLoading } = useQuery<DevelopmentTaskWithDetails[]>({
     queryKey: ["/api/development/tasks"],
   });
@@ -196,6 +171,33 @@ export default function DevelopmentTasks() {
       toast({ title: "Error", description: "Failed to delete task", variant: "destructive" });
     },
   });
+
+  // Permission checks - placed after all hooks
+  if (permissionsLoading || !user) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
+      </div>
+    );
+  }
+
+  const isAdmin = user.email === SUPER_ADMIN_EMAIL || user.role === "admin";
+  const hasAccess = isAdmin || canView("development_tasks");
+
+  if (!hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <AlertTriangle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold" data-testid="text-access-denied">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          You don't have permission to access Development Tasks.
+        </p>
+        <Button variant="outline" onClick={() => window.history.back()} data-testid="button-go-back">
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   const filteredTasks = tasks?.filter(task => {
     if (searchTerm && !task.title.toLowerCase().includes(searchTerm.toLowerCase()) && 
