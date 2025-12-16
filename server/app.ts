@@ -8,6 +8,7 @@ import express, {
 } from "express";
 
 import { registerRoutes } from "./routes";
+import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -93,5 +94,8 @@ export default async function runApp(
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start the auto-assignment scheduler for support tickets
+    startAutoAssignmentScheduler();
   });
 }
