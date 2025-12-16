@@ -116,7 +116,13 @@ export default function DevelopmentTasks() {
     queryKey: ["/api/development/tasks"],
   });
 
-  const { data: users } = useQuery<UserType[]>({
+  // Use the development-assignable endpoint which filters by Development department ID
+  const { data: developmentUsers } = useQuery<UserType[]>({
+    queryKey: ["/api/users/development-assignable"],
+  });
+  
+  // Also fetch all users for fallback if no development department users
+  const { data: allUsers } = useQuery<UserType[]>({
     queryKey: ["/api/users/all"],
   });
 
@@ -250,25 +256,10 @@ export default function DevelopmentTasks() {
   const completedCount = tasks?.filter(t => t.status === "completed").length || 0;
   const overdueCount = tasks?.filter(t => t.status === "overdue" || t.isOverdue).length || 0;
 
-  // Get developers first, then fall back to all active users if none match
-  const filteredDevs = users?.filter(u => {
-    if (u.isActive === false) return false;
-    const role = u.role?.toLowerCase() || "";
-    return (
-      role === "developer" || 
-      role === "engineer" || 
-      role === "admin" ||
-      role.includes("developer") ||
-      role.includes("engineer") ||
-      role.includes("technical") ||
-      role.includes("development")
-    );
-  }) || [];
-  
-  // Fall back to all active users if no developers found
-  const developers = filteredDevs.length > 0 
-    ? filteredDevs 
-    : (users?.filter(u => u.isActive !== false) || []);
+  // Use development department users from API, fallback to all active users if none found
+  const developers = (developmentUsers && developmentUsers.length > 0)
+    ? developmentUsers
+    : (allUsers?.filter(u => u.isActive !== false) || []);
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6" data-testid="development-tasks-page">
