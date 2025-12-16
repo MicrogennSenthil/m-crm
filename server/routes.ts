@@ -8723,6 +8723,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Complete development task with mandatory image and description
+  app.post("/api/development/tasks/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      const { completionStatus, completionDescription, completionImageUrl } = req.body;
+      
+      // Validate required fields
+      if (!completionStatus || !['complete', 'incomplete'].includes(completionStatus)) {
+        return res.status(400).json({ message: "Invalid completion status. Must be 'complete' or 'incomplete'" });
+      }
+      
+      if (!completionDescription || !completionDescription.trim()) {
+        return res.status(400).json({ message: "Completion description is required" });
+      }
+      
+      if (!completionImageUrl) {
+        return res.status(400).json({ message: "Completion image is required" });
+      }
+      
+      const existingTask = await storage.getDevelopmentTask(id);
+      if (!existingTask) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Task must be in_progress to be completed
+      if (existingTask.status !== 'in_progress') {
+        return res.status(400).json({ message: "Only tasks in progress can be marked as complete or incomplete" });
+      }
+      
+      // Determine final status
+      const finalStatus = completionStatus === 'complete' ? 'completed' : 'incomplete';
+      
+      // Update task with completion details
+      const updated = await storage.updateDevelopmentTask(id, {
+        status: finalStatus,
+        completionStatus,
+        completionDescription: completionDescription.trim(),
+        completionImageUrl,
+        completedAt: new Date(),
+      });
+      
+      // Log activity
+      await storage.logActivity({
+        userId,
+        entityType: 'development_task',
+        entityId: id,
+        action: completionStatus === 'complete' ? 'completed' : 'marked_incomplete',
+        description: `Marked development task ${updated.taskNumber} as ${completionStatus}`,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing development task:", error);
+      res.status(500).json({ message: "Failed to complete development task" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
