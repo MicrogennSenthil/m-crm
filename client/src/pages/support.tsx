@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -169,16 +169,25 @@ export default function Support() {
           sortedTickets.map((ticket) => {
             const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
             const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
+            const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
             return (
               <Card
                 key={ticket.id}
-                className="hover-elevate active-elevate-2 cursor-pointer touch-manipulation"
+                className={`hover-elevate active-elevate-2 cursor-pointer touch-manipulation ${isAutoAssigned ? 'auto-assigned-ticket' : ''}`}
                 onClick={() => setSelectedTicket(ticket)}
                 data-testid={`card-ticket-${ticket.id}`}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
+                      {isAutoAssigned && (
+                        <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning text-xs">
+                          <Zap className="h-3 w-3 mr-1" />
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </div>
                   <h3 className="font-medium text-sm mb-1 leading-tight">{ticket.customerName}</h3>
@@ -252,14 +261,25 @@ export default function Support() {
               sortedTickets.map((ticket) => {
                 const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
                 const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
+                const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
                 return (
                   <TableRow
                     key={ticket.id}
-                    className="cursor-pointer hover-elevate"
+                    className={`cursor-pointer hover-elevate ${isAutoAssigned ? 'auto-assigned-row' : ''}`}
                     onClick={() => setSelectedTicket(ticket)}
                     data-testid={`row-ticket-${ticket.id}`}
                   >
-                    <TableCell className="font-mono text-sm">{ticket.ticketNumber}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <div className="flex items-center gap-2">
+                        {ticket.ticketNumber}
+                        {isAutoAssigned && (
+                          <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning text-xs">
+                            <Zap className="h-3 w-3 mr-1" />
+                            Auto
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{ticket.customerName}</TableCell>
                     <TableCell className="max-w-xs truncate">{ticket.issueSummary}</TableCell>
                     <TableCell>

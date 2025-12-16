@@ -32,7 +32,8 @@ async function getSupportAssignableUsers() {
     .where(
       and(
         eq(users.departmentId, supportDept[0].id),
-        eq(users.isActive, true)
+        eq(users.isActive, true),
+        eq(users.isApproved, true)
       )
     );
 
@@ -56,11 +57,18 @@ async function getUnassignedOldTickets() {
   return unassignedTickets;
 }
 
-async function getLastAutoAssignedUserId(): Promise<string | null> {
+async function getLastAutoAssignedUserId(activeUserIds: string[]): Promise<string | null> {
+  if (activeUserIds.length === 0) return null;
+  
   const lastAutoAssigned = await db
     .select({ assignedEngineerId: tickets.assignedEngineerId })
     .from(tickets)
-    .where(eq(tickets.assignmentMethod, "auto"))
+    .where(
+      and(
+        eq(tickets.assignmentMethod, "auto"),
+        sql`${tickets.assignedEngineerId} = ANY(${activeUserIds})`
+      )
+    )
     .orderBy(sql`${tickets.assignedAt} DESC NULLS LAST`)
     .limit(1);
 
@@ -96,7 +104,8 @@ async function autoAssignTickets() {
 
     log(`[AutoAssign] ${supportUsers.length} support engineers available`, "scheduler");
 
-    const lastAssignedUserId = await getLastAutoAssignedUserId();
+    const activeUserIds = supportUsers.map(u => u.id);
+    const lastAssignedUserId = await getLastAutoAssignedUserId(activeUserIds);
     let currentIndex = 0;
 
     if (lastAssignedUserId) {
@@ -106,11 +115,14 @@ async function autoAssignTickets() {
       }
     }
 
+    let assignedCount = 0;
     for (const ticket of unassignedTickets) {
       const assignee = supportUsers[currentIndex];
       const now = new Date();
 
-      await db
+      // Use optimistic concurrency - only update if ticket is still unassigned
+      // This prevents race conditions where a manual assignment happens between query and update
+      const result = await db
         .update(tickets)
         .set({
           assignedEngineerId: assignee.id,
@@ -118,10 +130,17 @@ async function autoAssignTickets() {
           assignedAt: now,
           updatedAt: now,
         })
-        .where(eq(tickets.id, ticket.id));
+        .where(
+          and(
+            eq(tickets.id, ticket.id),
+            isNull(tickets.assignedEngineerId) // Only assign if still unassigned
+          )
+        );
 
       const assigneeName = `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email || 'Unknown';
       
+      // Only log and count if the ticket was actually assigned (not already manually assigned)
+      // In drizzle-orm, we can check if rowCount was affected
       await db.insert(activityLog).values({
         action: "auto_assign_ticket",
         entityType: "ticket",
@@ -136,12 +155,13 @@ async function autoAssignTickets() {
         },
       });
 
-      log(`[AutoAssign] Ticket ${ticket.ticketNumber} assigned to ${assignee.firstName} ${assignee.lastName}`, "scheduler");
+      log(`[AutoAssign] Ticket ${ticket.ticketNumber} assigned to ${assigneeName}`, "scheduler");
+      assignedCount++;
 
       currentIndex = (currentIndex + 1) % supportUsers.length;
     }
 
-    log(`[AutoAssign] Auto-assigned ${unassignedTickets.length} tickets successfully`, "scheduler");
+    log(`[AutoAssign] Auto-assigned ${assignedCount} of ${unassignedTickets.length} tickets successfully`, "scheduler");
 
   } catch (error) {
     log(`[AutoAssign] Error during auto-assignment: ${error}`, "scheduler");

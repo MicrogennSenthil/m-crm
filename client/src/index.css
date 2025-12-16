@@ -333,3 +333,24 @@ body {
     inset: -1px;
   }
 }
+
+/* Auto-assigned ticket highlight animation */
+@keyframes auto-assign-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--warning) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 8px 3px hsl(var(--warning) / 0.6);
+  }
+}
+
+.auto-assigned-ticket {
+  animation: auto-assign-pulse 2s ease-in-out infinite;
+  border: 2px solid hsl(var(--warning)) !important;
+  background-color: hsl(var(--warning) / 0.08) !important;
+}
+
+.auto-assigned-row {
+  animation: auto-assign-pulse 2s ease-in-out infinite;
+  background-color: hsl(var(--warning) / 0.08) !important;
+}
