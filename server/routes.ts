@@ -8436,8 +8436,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user?.id;
       
+      // Parse deadline string to Date if provided
+      const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
+      
       const taskData = {
         ...req.body,
+        deadline,
         assignedBy: userId,
         status: 'pending',
         isOverdue: false,

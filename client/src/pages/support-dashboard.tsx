@@ -397,6 +397,7 @@ export default function SupportDashboard() {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden sm:table-cell">Assigned To</TableHead>
                     <TableHead className="hidden lg:table-cell">Created</TableHead>
+                    <TableHead className="hidden lg:table-cell">Closed</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -437,6 +438,11 @@ export default function SupportDashboard() {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                         {ticket.createdAt ? format(new Date(ticket.createdAt), "MMM d, yyyy") : "-"}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {ticket.status === 'closed' && ticket.updatedAt 
+                          ? format(new Date(ticket.updatedAt), "MMM d, yyyy") 
+                          : "-"}
                       </TableCell>
                       <TableCell>
                         <Button
