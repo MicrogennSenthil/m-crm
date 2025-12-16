@@ -54,15 +54,12 @@ export function AssignToDevelopmentDialog({
   const [estimatedHours, setEstimatedHours] = useState("");
 
   const { data: developers } = useQuery<UserType[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/development-assignable"],
     enabled: open,
   });
 
-  const activeDevelopers = developers?.filter(
-    (u) =>
-      u.isActive !== false &&
-      (u.role === "developer" || u.role === "engineer" || u.role === "admin")
-  );
+  // Already filtered by the API endpoint to active Development department users
+  const activeDevelopers = developers;
 
   const createDevTaskMutation = useMutation({
     mutationFn: async () => {

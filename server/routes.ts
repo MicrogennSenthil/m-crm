@@ -857,6 +857,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get users who can be assigned development tasks (users in Development department)
+  // Only returns active users for assignment purposes
+  app.get("/api/users/development-assignable", isAuthenticated, async (req, res) => {
+    try {
+      // Get Development department
+      const devDepartment = await storage.getDepartmentByName("Development");
+      if (!devDepartment) {
+        return res.json([]);
+      }
+      
+      // Get all users in Development department
+      const allUsers = await storage.getUsers();
+      const devUsers = allUsers.filter(u => 
+        u.departmentId === devDepartment.id && u.isActive !== false
+      );
+      
+      res.json(devUsers);
+    } catch (error) {
+      console.error("Error fetching development assignable users:", error);
+      res.status(500).json({ message: "Failed to fetch development assignable users" });
+    }
+  });
+
   // =============================================
   // MASTER DATA ROUTES
   // =============================================
