@@ -213,10 +213,10 @@ export function AssignToDevelopmentDialog({
 
           {/* Priority & Deadline Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="dev-task-priority">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger id="dev-task-priority" data-testid="select-dev-task-priority">
+                <SelectTrigger id="dev-task-priority" className="h-9" data-testid="select-dev-task-priority">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -228,11 +228,12 @@ export function AssignToDevelopmentDialog({
               </Select>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="dev-task-deadline">Deadline</Label>
               <Input
                 id="dev-task-deadline"
                 type="date"
+                className="h-9"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
                 data-testid="input-dev-task-deadline"
@@ -242,10 +243,10 @@ export function AssignToDevelopmentDialog({
 
           {/* Assign To & Estimated Hours Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="dev-task-assignee">Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger id="dev-task-assignee" data-testid="select-dev-task-assignee">
+                <SelectTrigger id="dev-task-assignee" className="h-9" data-testid="select-dev-task-assignee">
                   <SelectValue placeholder={developersLoading ? "Loading..." : "Select developer"} />
                 </SelectTrigger>
                 <SelectContent className="z-[200]">
@@ -267,13 +268,14 @@ export function AssignToDevelopmentDialog({
               </Select>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label htmlFor="dev-task-hours">Estimated Hours</Label>
               <Input
                 id="dev-task-hours"
                 type="number"
                 min="0"
                 step="0.5"
+                className="h-9"
                 value={estimatedHours}
                 onChange={(e) => setEstimatedHours(e.target.value)}
                 placeholder="e.g., 4"
