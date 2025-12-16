@@ -107,6 +107,8 @@ export default function DevelopmentTasks() {
   const [completionImageFile, setCompletionImageFile] = useState<File | null>(null);
   const [completionImagePreview, setCompletionImagePreview] = useState<string | null>(null);
   const [isUploadingCompletion, setIsUploadingCompletion] = useState(false);
+  const [updateSourceTicket, setUpdateSourceTicket] = useState(true);
+  const [sourceTicketStatus, setSourceTicketStatus] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const form = useForm<CreateTaskFormData>({
@@ -210,6 +212,8 @@ export default function DevelopmentTasks() {
     setCompletionImageFile(null);
     setCompletionImagePreview(null);
     setCompletionType("complete");
+    setUpdateSourceTicket(true);
+    setSourceTicketStatus("");
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -277,13 +281,23 @@ export default function DevelopmentTasks() {
       }
 
       // Now complete the task with the image URL
+      const completionData: any = {
+        completionStatus: completionType,
+        completionDescription: completionDescription.trim(),
+        completionImageUrl: objectPath,
+      };
+      
+      // Include source ticket update options if task is from support
+      if (selectedTask.sourceType === 'support' && updateSourceTicket) {
+        completionData.updateSourceTicket = true;
+        if (sourceTicketStatus) {
+          completionData.sourceTicketStatus = sourceTicketStatus;
+        }
+      }
+      
       completionMutation.mutate({
         id: selectedTask.id,
-        data: {
-          completionStatus: completionType,
-          completionDescription: completionDescription.trim(),
-          completionImageUrl: objectPath,
-        },
+        data: completionData,
       });
     } catch (error) {
       console.error("Completion error:", error);
@@ -1009,6 +1023,50 @@ export default function DevelopmentTasks() {
                 data-testid="textarea-completion-description"
               />
             </div>
+
+            {/* Source Ticket Update (only for support-sourced tasks) */}
+            {selectedTask?.sourceType === "support" && (
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="updateSourceTicket"
+                    checked={updateSourceTicket}
+                    onChange={(e) => setUpdateSourceTicket(e.target.checked)}
+                    className="h-4 w-4 rounded border-input"
+                    data-testid="checkbox-update-source-ticket"
+                  />
+                  <Label htmlFor="updateSourceTicket" className="text-sm font-medium cursor-pointer">
+                    Update source support ticket
+                  </Label>
+                </div>
+                
+                {updateSourceTicket && (
+                  <div className="space-y-2 pl-6">
+                    <Label className="text-sm text-muted-foreground">
+                      Change ticket status to (optional):
+                    </Label>
+                    <Select
+                      value={sourceTicketStatus}
+                      onValueChange={setSourceTicketStatus}
+                    >
+                      <SelectTrigger data-testid="select-source-ticket-status">
+                        <SelectValue placeholder="Keep current status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="pending_feedback">Pending Feedback</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      A comment will be added to the ticket about this task completion.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-2">

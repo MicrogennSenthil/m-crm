@@ -8774,6 +8774,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Marked development task ${updated.taskNumber} as ${completionStatus}`,
       });
       
+      // Handle source ticket update if requested (for support-sourced tasks)
+      const { updateSourceTicket, sourceTicketStatus, sourceTicketComment } = req.body;
+      if (existingTask.sourceType === 'support' && existingTask.sourceId && updateSourceTicket) {
+        try {
+          // Update the source ticket status if provided
+          if (sourceTicketStatus) {
+            await storage.updateTicket(existingTask.sourceId, { status: sourceTicketStatus });
+          }
+          
+          // Add a comment to the ticket about the development task completion
+          if (sourceTicketComment) {
+            await storage.createConversation({
+              ticketId: existingTask.sourceId,
+              userId,
+              message: sourceTicketComment,
+              isInternal: false,
+            });
+          } else {
+            // Auto-add a comment about the development task completion
+            await storage.createConversation({
+              ticketId: existingTask.sourceId,
+              userId,
+              message: `Development task ${updated.taskNumber} has been marked as ${completionStatus}. ${completionDescription.trim()}`,
+              isInternal: true,
+            });
+          }
+          
+          await storage.logActivity({
+            userId,
+            entityType: 'ticket',
+            entityId: existingTask.sourceId,
+            action: 'development_completed',
+            description: `Development task ${updated.taskNumber} completed for ticket`,
+          });
+        } catch (ticketError) {
+          console.error("Error updating source ticket:", ticketError);
+          // Don't fail the completion if ticket update fails
+        }
+      }
+      
       res.json(updated);
     } catch (error) {
       console.error("Error completing development task:", error);
