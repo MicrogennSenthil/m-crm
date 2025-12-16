@@ -117,7 +117,7 @@ export default function DevelopmentTasks() {
   });
 
   const { data: users } = useQuery<UserType[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/all"],
   });
 
   const createTaskMutation = useMutation({
@@ -250,7 +250,8 @@ export default function DevelopmentTasks() {
   const completedCount = tasks?.filter(t => t.status === "completed").length || 0;
   const overdueCount = tasks?.filter(t => t.status === "overdue" || t.isOverdue).length || 0;
 
-  const developers = users?.filter(u => {
+  // Get developers first, then fall back to all active users if none match
+  const filteredDevs = users?.filter(u => {
     if (u.isActive === false) return false;
     const role = u.role?.toLowerCase() || "";
     return (
@@ -263,6 +264,11 @@ export default function DevelopmentTasks() {
       role.includes("development")
     );
   }) || [];
+  
+  // Fall back to all active users if no developers found
+  const developers = filteredDevs.length > 0 
+    ? filteredDevs 
+    : (users?.filter(u => u.isActive !== false) || []);
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6" data-testid="development-tasks-page">
