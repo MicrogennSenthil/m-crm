@@ -104,6 +104,7 @@ export default function DevelopmentTasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [engineerFilter, setEngineerFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
+  const [activeSourceTab, setActiveSourceTab] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
@@ -373,10 +374,13 @@ export default function DevelopmentTasks() {
         !(task.assignee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()))) {
       return false;
     }
+    // Status tab filtering
     if (activeTab === "pending" && task.status !== "pending") return false;
     if (activeTab === "in_progress" && task.status !== "in_progress") return false;
     if (activeTab === "completed" && task.status !== "completed") return false;
     if (activeTab === "overdue" && task.status !== "overdue" && !task.isOverdue) return false;
+    // Source tab filtering
+    if (activeSourceTab !== "all" && task.sourceType !== activeSourceTab) return false;
     if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
     if (sourceFilter !== "all" && task.sourceType !== sourceFilter) return false;
     if (statusFilter !== "all" && task.status !== statusFilter) return false;
@@ -435,6 +439,12 @@ export default function DevelopmentTasks() {
   const inProgressCount = tasks?.filter(t => t.status === "in_progress").length || 0;
   const completedCount = tasks?.filter(t => t.status === "completed").length || 0;
   const overdueCount = tasks?.filter(t => t.status === "overdue" || t.isOverdue).length || 0;
+  
+  // Source type counts for categorization tabs
+  const supportCount = tasks?.filter(t => t.sourceType === "support").length || 0;
+  const implementationCount = tasks?.filter(t => t.sourceType === "implementation").length || 0;
+  const taskCount = tasks?.filter(t => t.sourceType === "task").length || 0;
+  const manualCount = tasks?.filter(t => t.sourceType === "manual").length || 0;
 
   // Use development department users from API, fallback to all active users if none found
   const developers = (developmentUsers && developmentUsers.length > 0)
@@ -461,6 +471,28 @@ export default function DevelopmentTasks() {
         )}
       </div>
 
+      {/* Source Type Categorization Tabs */}
+      <Tabs value={activeSourceTab} onValueChange={setActiveSourceTab} className="space-y-2">
+        <TabsList className="flex-wrap" data-testid="tabs-source-category">
+          <TabsTrigger value="all" data-testid="tab-source-all">
+            All Sources ({tasks?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="support" data-testid="tab-source-support" className="text-blue-600 dark:text-blue-400">
+            Support ({supportCount})
+          </TabsTrigger>
+          <TabsTrigger value="implementation" data-testid="tab-source-implementation" className="text-purple-600 dark:text-purple-400">
+            Implementation ({implementationCount})
+          </TabsTrigger>
+          <TabsTrigger value="task" data-testid="tab-source-task" className="text-green-600 dark:text-green-400">
+            Tasks ({taskCount})
+          </TabsTrigger>
+          <TabsTrigger value="manual" data-testid="tab-source-manual">
+            Manual ({manualCount})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Status Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex-wrap" data-testid="tabs-status">
           <TabsTrigger value="all" data-testid="tab-all">
