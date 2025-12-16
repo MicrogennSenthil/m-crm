@@ -248,10 +248,19 @@ export default function DevelopmentTasks() {
   const completedCount = tasks?.filter(t => t.status === "completed").length || 0;
   const overdueCount = tasks?.filter(t => t.status === "overdue" || t.isOverdue).length || 0;
 
-  const developers = users?.filter(u => 
-    u.isActive !== false && 
-    (u.role === "developer" || u.role === "engineer" || u.role === "admin")
-  ) || [];
+  const developers = users?.filter(u => {
+    if (u.isActive === false) return false;
+    const role = u.role?.toLowerCase() || "";
+    return (
+      role === "developer" || 
+      role === "engineer" || 
+      role === "admin" ||
+      role.includes("developer") ||
+      role.includes("engineer") ||
+      role.includes("technical") ||
+      role.includes("development")
+    );
+  }) || [];
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6" data-testid="development-tasks-page">
