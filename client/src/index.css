@@ -11,6 +11,41 @@
   display: none;
 }
 
+/* Mobile Native App Styles */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Safe area support for notched devices (iPhone X+) */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-left {
+  padding-left: env(safe-area-inset-left, 0);
+}
+
+.safe-area-right {
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* Touch optimization */
+@media (hover: none) and (pointer: coarse) {
+  button, a, .cursor-pointer {
+    touch-action: manipulation;
+  }
+}
+
+/* Prevent pull-to-refresh on mobile when not needed */
+body {
+  overscroll-behavior-y: contain;
+}
+
 /* LIGHT MODE - M-CRM Brand Colors */
 /* Primary: Navy Blue (#1a2b6d) - HSL: 228, 65%, 26% */
 /* Accent: Golden Yellow (#f5a623) - HSL: 42, 92%, 55% */
