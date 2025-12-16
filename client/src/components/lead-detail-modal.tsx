@@ -145,6 +145,19 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     enabled: open,
   });
 
+  const { data: stageHistory } = useQuery<Array<{
+    id: string;
+    leadId: string;
+    fromStage: string | null;
+    toStage: string;
+    changedById: string | null;
+    changeReason: string | null;
+    createdAt: string;
+  }>>({
+    queryKey: ["/api/leads", lead.id, "stage-history"],
+    enabled: open,
+  });
+
   const updateLeadMutation = useMutation({
     mutationFn: async (data: Partial<InsertLead>) => {
       await apiRequest("PATCH", `/api/leads/${lead.id}`, data);
@@ -153,6 +166,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setIsEditing(false);
       toast({
         title: "Success",
@@ -260,6 +274,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "demo-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setDemoDate(undefined);
       setDemoTime("10:00");
       toast({
@@ -300,6 +315,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setQuoteDate(undefined);
       setQuoteValue("");
       setSelectedModules([]);
@@ -340,6 +356,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "negotiation-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setNegotiationDate(undefined);
       toast({
         title: "Negotiation Started",
@@ -386,6 +403,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setClosedDate(undefined);
       setConfirmedOrderValue("");
       setSpecialInstructions("");
@@ -1175,6 +1193,57 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
               </div>
 
               <Separator />
+
+              {/* Stage History Section */}
+              {stageHistory && stageHistory.length > 0 && (
+                <>
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      Stage Change History
+                    </h3>
+                    <div className="p-3 border rounded-md max-h-48 overflow-y-auto">
+                      <div className="space-y-2">
+                        {stageHistory.map((item, index) => {
+                          const stageLabels: Record<string, string> = {
+                            new_lead: "New Lead",
+                            demo_scheduled: "Demo Scheduled",
+                            quote_sent: "Quote Sent",
+                            negotiation: "Negotiation",
+                            closed_won: "Closed Won",
+                            closed_lost: "Closed Lost",
+                          };
+                          const fromLabel = item.fromStage ? stageLabels[item.fromStage] || item.fromStage : "Initial";
+                          const toLabel = stageLabels[item.toStage] || item.toStage;
+                          
+                          return (
+                            <div key={item.id} className="flex items-center justify-between text-sm border-b last:border-b-0 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "w-2 h-2 rounded-full",
+                                  index === 0 ? "bg-primary" : "bg-muted-foreground/30"
+                                )} />
+                                <span className="text-muted-foreground">{fromLabel}</span>
+                                <span className="text-xs">→</span>
+                                <Badge variant={
+                                  item.toStage === "closed_won" ? "default" :
+                                  item.toStage === "closed_lost" ? "destructive" : "secondary"
+                                } className="text-xs">
+                                  {toLabel}
+                                </Badge>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(item.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
 
               <div>
                 <h3 className="font-semibold mb-3">Follow-up Tracker</h3>

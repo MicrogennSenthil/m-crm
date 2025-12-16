@@ -2382,6 +2382,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Track stage changes in history
+      if (updateData.stage && currentLead && updateData.stage !== currentLead.stage) {
+        const stageLabels: Record<string, string> = {
+          new_lead: "New Lead",
+          demo_scheduled: "Demo Scheduled",
+          quote_sent: "Quote Sent",
+          negotiation: "Negotiation",
+          closed_won: "Closed Won",
+          closed_lost: "Closed Lost",
+        };
+        const fromLabel = stageLabels[currentLead.stage] || currentLead.stage;
+        const toLabel = stageLabels[updateData.stage] || updateData.stage;
+        
+        await storage.createLeadStageHistory({
+          leadId: req.params.id,
+          fromStage: currentLead.stage,
+          toStage: updateData.stage,
+          changedById: req.user.claims.sub,
+          changeReason: `Stage changed from ${fromLabel} to ${toLabel}`,
+        });
+      }
+      
       // Handle deal closure (won or lost)
       if (updateData.closedDate && updateData.stage) {
         if (updateData.stage === "closed_won") {
@@ -3180,6 +3202,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching negotiation date history:", error);
       res.status(500).json({ message: "Failed to fetch negotiation date history" });
+    }
+  });
+
+  // Lead Stage History routes
+  app.get("/api/leads/:id/stage-history", isAuthenticated, async (req, res) => {
+    try {
+      const history = await storage.getLeadStageHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching lead stage history:", error);
+      res.status(500).json({ message: "Failed to fetch lead stage history" });
     }
   });
 
