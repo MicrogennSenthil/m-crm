@@ -4609,13 +4609,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/tickets", isAuthenticated, requirePermission('tickets', 'view'), async (req, res) => {
+  app.get("/api/tickets", isAuthenticated, requirePermission('tickets', 'view'), async (req: any, res) => {
     try {
-      const { status, priority, limit } = req.query;
+      const { status, priority, limit, assignedTo } = req.query;
+      const userId = req.user?.claims?.sub;
+      
       let ticketsList = await storage.getTickets({
         status: status as string,
         priority: priority as string,
       });
+      
+      // Check if user is super admin
+      const currentUser = await storage.getUser(userId);
+      const isSuperAdminUser = currentUser?.email === "senthil@microgenn.com";
+      
+      // Check if user is a department head (manager)
+      let isDepartmentHead = false;
+      if (currentUser?.departmentId) {
+        const department = await storage.getDepartment(currentUser.departmentId);
+        isDepartmentHead = department?.managerId === userId;
+      }
+      
+      // If user is in Support department and NOT super admin and NOT department head,
+      // filter to only show their assigned tickets
+      if (currentUser?.departmentId && !isSuperAdminUser && !isDepartmentHead) {
+        const department = await storage.getDepartment(currentUser.departmentId);
+        const departmentName = department?.name?.toLowerCase() || '';
+        
+        if (departmentName.includes('support')) {
+          // Support users only see their assigned tickets
+          ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === userId);
+        }
+      }
+      
+      // Allow explicit assignedTo filter (for dashboard "My Tickets" etc.)
+      if (assignedTo) {
+        ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === assignedTo);
+      }
       
       if (limit) {
         ticketsList = ticketsList.slice(0, parseInt(limit as string));
