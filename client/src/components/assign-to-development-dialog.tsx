@@ -164,7 +164,7 @@ export function AssignToDevelopmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-lg z-[100]">
+      <DialogContent className="max-w-2xl z-[100]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Code2 className="h-5 w-5 text-indigo-600" />
