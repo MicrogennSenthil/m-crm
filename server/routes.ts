@@ -4623,22 +4623,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentUser = await storage.getUser(userId);
       const isSuperAdminUser = currentUser?.email === "senthil@microgenn.com";
       
-      // Check if user is a department head (manager)
-      let isDepartmentHead = false;
-      if (currentUser?.departmentId) {
-        const department = await storage.getDepartment(currentUser.departmentId);
-        isDepartmentHead = department?.managerId === userId;
-      }
-      
-      // If user is in Support department and NOT super admin and NOT department head,
-      // filter to only show their assigned tickets
-      if (currentUser?.departmentId && !isSuperAdminUser && !isDepartmentHead) {
+      // Super admin sees all tickets
+      if (!isSuperAdminUser && currentUser?.departmentId) {
         const department = await storage.getDepartment(currentUser.departmentId);
         const departmentName = department?.name?.toLowerCase() || '';
+        const isDepartmentHead = department?.managerId === userId;
         
         if (departmentName.includes('support')) {
-          // Support users only see their assigned tickets
-          ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === userId);
+          if (isDepartmentHead) {
+            // Department head sees all tickets assigned to users in their department
+            const allUsers = await storage.getUsers();
+            const departmentUserIds = allUsers
+              .filter(u => u.departmentId === currentUser.departmentId)
+              .map(u => u.id);
+            ticketsList = ticketsList.filter(ticket => 
+              ticket.assignedEngineerId && departmentUserIds.includes(ticket.assignedEngineerId)
+            );
+          } else {
+            // Regular support users only see their assigned tickets
+            ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === userId);
+          }
         }
       }
       
