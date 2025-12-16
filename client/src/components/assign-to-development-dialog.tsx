@@ -212,7 +212,7 @@ export function AssignToDevelopmentDialog({
           </div>
 
           {/* Priority & Deadline Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="dev-task-priority">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
@@ -242,7 +242,7 @@ export function AssignToDevelopmentDialog({
           </div>
 
           {/* Assign To & Estimated Hours Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="dev-task-assignee">Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
