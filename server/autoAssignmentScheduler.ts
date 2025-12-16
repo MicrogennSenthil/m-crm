@@ -6,7 +6,7 @@ import { log } from "./app";
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
 
-const AUTO_ASSIGN_THRESHOLD_MINUTES = 30;
+const AUTO_ASSIGN_THRESHOLD_MINUTES = 10;
 const CHECK_INTERVAL_MINUTES = 5;
 
 async function getSupportAssignableUsers() {
@@ -89,11 +89,11 @@ async function autoAssignTickets() {
     const unassignedTickets = await getUnassignedOldTickets();
 
     if (unassignedTickets.length === 0) {
-      log("[AutoAssign] No unassigned tickets older than 30 minutes", "scheduler");
+      log("[AutoAssign] No unassigned tickets older than 10 minutes", "scheduler");
       return;
     }
 
-    log(`[AutoAssign] Found ${unassignedTickets.length} unassigned tickets older than 30 minutes`, "scheduler");
+    log(`[AutoAssign] Found ${unassignedTickets.length} unassigned tickets older than 10 minutes`, "scheduler");
 
     const supportUsers = await getSupportAssignableUsers();
 
@@ -146,12 +146,12 @@ async function autoAssignTickets() {
           action: "auto_assign_ticket",
           entityType: "ticket",
           entityId: ticket.id,
-          description: `Auto-assigned to ${assigneeName} (unassigned for more than 30 minutes)`,
+          description: `Auto-assigned to ${assigneeName} (unassigned for more than 10 minutes)`,
           metadata: {
             ticketNumber: ticket.ticketNumber,
             assignedTo: assignee.id,
             assigneeName: assigneeName,
-            reason: "Unassigned for more than 30 minutes",
+            reason: "Unassigned for more than 10 minutes",
             method: "round_robin",
           },
         });
