@@ -863,7 +863,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get Development department
       const devDepartment = await storage.getDepartmentByName("Development");
+      console.log("[Dev Assignable] Development department:", devDepartment?.id, devDepartment?.name);
       if (!devDepartment) {
+        console.log("[Dev Assignable] No Development department found");
         return res.json([]);
       }
       
@@ -872,6 +874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const devUsers = allUsers.filter(u => 
         u.departmentId === devDepartment.id && u.isActive !== false
       );
+      console.log("[Dev Assignable] Found", devUsers.length, "developers:", devUsers.map(u => u.email));
       
       res.json(devUsers);
     } catch (error) {

@@ -53,10 +53,14 @@ export function AssignToDevelopmentDialog({
   const [assignedTo, setAssignedTo] = useState("");
   const [estimatedHours, setEstimatedHours] = useState("");
 
-  const { data: developers } = useQuery<UserType[]>({
+  const { data: developers, isLoading: developersLoading, error: developersError } = useQuery<UserType[]>({
     queryKey: ["/api/users/development-assignable"],
     enabled: open,
+    staleTime: 0, // Always refetch when dialog opens
   });
+
+  // Log for debugging
+  console.log("[AssignToDev] open:", open, "developers:", developers?.length, "loading:", developersLoading, "error:", developersError);
 
   // Already filtered by the API endpoint to active Development department users
   const activeDevelopers = developers;
@@ -241,9 +245,15 @@ export function AssignToDevelopmentDialog({
               <Label htmlFor="dev-task-assignee">Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
                 <SelectTrigger id="dev-task-assignee" data-testid="select-dev-task-assignee">
-                  <SelectValue placeholder="Select developer" />
+                  <SelectValue placeholder={developersLoading ? "Loading..." : "Select developer"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[200]">
+                  {developersLoading && (
+                    <div className="p-2 text-sm text-muted-foreground">Loading developers...</div>
+                  )}
+                  {!developersLoading && (!activeDevelopers || activeDevelopers.length === 0) && (
+                    <div className="p-2 text-sm text-muted-foreground">No developers available</div>
+                  )}
                   {activeDevelopers?.map((dev) => (
                     <SelectItem key={dev.id} value={dev.id}>
                       <span className="flex items-center gap-2">
