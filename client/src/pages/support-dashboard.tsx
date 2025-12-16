@@ -75,6 +75,9 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   in_progress: { color: "bg-yellow-100 text-yellow-700", label: "In Progress" },
   pending_customer: { color: "bg-purple-100 text-purple-700", label: "Pending Customer" },
   escalated: { color: "bg-red-100 text-red-700", label: "Escalated" },
+  resolved_at_techteam: { color: "bg-teal-100 text-teal-700", label: "Resolved at Tech Team" },
+  resolved: { color: "bg-emerald-100 text-emerald-700", label: "Resolved" },
+  pending_feedback: { color: "bg-indigo-100 text-indigo-700", label: "Pending Feedback" },
   closed: { color: "bg-green-100 text-green-700", label: "Closed" },
   reopened: { color: "bg-orange-100 text-orange-700", label: "Reopened" },
 };
@@ -163,7 +166,7 @@ export default function SupportDashboard() {
         return tickets.filter(t => t.assignedEngineerId);
       case 'unassigned':
         // Exclude closed/resolved tickets from unassigned since they don't need assignment
-        return tickets.filter(t => !t.assignedEngineerId && t.status !== 'closed' && t.status !== 'resolved');
+        return tickets.filter(t => !t.assignedEngineerId && t.status !== 'closed' && t.status !== 'resolved' && t.status !== 'resolved_at_techteam' && t.status !== 'pending_feedback');
       case 'open':
         return tickets.filter(t => t.status === 'open');
       case 'in_progress':

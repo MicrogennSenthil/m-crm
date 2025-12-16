@@ -191,7 +191,7 @@ export default function DevelopmentTasks() {
   });
 
   const completionMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { completionStatus: string; completionDescription: string; completionImageUrl: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { completionStatus: string; completionDescription: string; completionImageUrl: string; updateSourceTicket?: boolean; sourceTicketStatus?: string } }) => {
       return await apiRequest("POST", `/api/development/tasks/${id}/complete`, data);
     },
     onSuccess: () => {
@@ -281,7 +281,13 @@ export default function DevelopmentTasks() {
       }
 
       // Now complete the task with the image URL
-      const completionData: any = {
+      const completionData: { 
+        completionStatus: string; 
+        completionDescription: string; 
+        completionImageUrl: string; 
+        updateSourceTicket?: boolean; 
+        sourceTicketStatus?: string;
+      } = {
         completionStatus: completionType,
         completionDescription: completionDescription.trim(),
         completionImageUrl: objectPath,
@@ -1054,6 +1060,7 @@ export default function DevelopmentTasks() {
                         <SelectValue placeholder="Keep current status" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="resolved_at_techteam">Resolved at Tech Team</SelectItem>
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
                         <SelectItem value="pending_feedback">Pending Feedback</SelectItem>

@@ -4601,16 +4601,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalTickets = allTickets.length;
       const assignedCount = allTickets.filter(t => t.assignedEngineerId).length;
       // Unassigned should exclude closed/resolved tickets since they don't need assignment
-      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId && t.status !== 'closed' && t.status !== 'resolved').length;
+      const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
+      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId && !resolvedStatuses.includes(t.status)).length;
       const inProcessCount = allTickets.filter(t => t.status === 'in_progress').length;
       
-      // Calculate completed counts - all time and today only
-      const completedCount = allTickets.filter(t => t.status === 'closed').length;
+      // Calculate completed counts - all time and today only (includes all resolved variants)
+      const completedCount = allTickets.filter(t => resolvedStatuses.includes(t.status)).length;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const completedTodayCount = allTickets.filter(t => 
-        t.status === 'closed' && 
-        t.closedAt && new Date(t.closedAt) >= today
+        resolvedStatuses.includes(t.status) && 
+        (t.closedAt && new Date(t.closedAt) >= today || t.updatedAt && new Date(t.updatedAt) >= today)
       ).length;
       const reopenedCount = allTickets.filter(t => t.status === 'reopened' || t.reopenedFromTicketId).length;
       const openCount = allTickets.filter(t => t.status === 'open').length;
@@ -4686,9 +4687,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const myTickets = allTickets.filter(t => t.assignedEngineerId === userId);
       
       // Sort: open/in_progress first, then by created date
+      const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
       myTickets.sort((a, b) => {
-        const aOpen = a.status !== 'closed' && a.status !== 'resolved';
-        const bOpen = b.status !== 'closed' && b.status !== 'resolved';
+        const aOpen = !resolvedStatuses.includes(a.status);
+        const bOpen = !resolvedStatuses.includes(b.status);
         if (aOpen && !bOpen) return -1;
         if (!aOpen && bOpen) return 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -5076,13 +5078,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? allTickets.filter(t => departmentMembers.some(m => m.id === t.assignedEngineerId) || t.assignedEngineerId === userId)
           : allTickets.filter(t => t.assignedEngineerId === userId);
         
+        const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
         departmentStats.stats = {
           type: 'support',
           totalTickets: userTickets.length,
           openTickets: userTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length,
-          resolvedTickets: userTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
-          criticalTickets: userTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
-          overdueTickets: userTickets.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'closed').length
+          resolvedTickets: userTickets.filter(t => resolvedStatuses.includes(t.status)).length,
+          criticalTickets: userTickets.filter(t => t.priority === 'critical' && !resolvedStatuses.includes(t.status)).length,
+          overdueTickets: userTickets.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && !resolvedStatuses.includes(t.status)).length
         };
       }
       
@@ -7501,34 +7504,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Support Stats
+      const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
       const overdueTickets = allTickets.filter(t => {
-        if (t.status === 'closed') return false;
+        if (resolvedStatuses.includes(t.status)) return false;
         return t.dueDate && new Date(t.dueDate) < now;
       });
       
+      const resolvedTickets = allTickets.filter(t => resolvedStatuses.includes(t.status));
       const supportStats = {
         today: {
           opened: filterByPeriod(allTickets, 'createdAt', 'today').length,
-          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'today').length,
+          closed: filterByPeriod(resolvedTickets, 'closedAt', 'today').length + filterByPeriod(resolvedTickets.filter(t => !t.closedAt), 'updatedAt', 'today').length,
         },
         week: {
           opened: filterByPeriod(allTickets, 'createdAt', 'week').length,
-          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'week').length,
+          closed: filterByPeriod(resolvedTickets, 'closedAt', 'week').length + filterByPeriod(resolvedTickets.filter(t => !t.closedAt), 'updatedAt', 'week').length,
         },
         month: {
           opened: filterByPeriod(allTickets, 'createdAt', 'month').length,
-          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'month').length,
+          closed: filterByPeriod(resolvedTickets, 'closedAt', 'month').length + filterByPeriod(resolvedTickets.filter(t => !t.closedAt), 'updatedAt', 'month').length,
         },
         year: {
           opened: filterByPeriod(allTickets, 'createdAt', 'year').length,
-          closed: filterByPeriod(allTickets.filter(t => t.status === 'closed'), 'closedAt', 'year').length,
+          closed: filterByPeriod(resolvedTickets, 'closedAt', 'year').length + filterByPeriod(resolvedTickets.filter(t => !t.closedAt), 'updatedAt', 'year').length,
         },
         total: {
           tickets: allTickets.length,
           open: allTickets.filter(t => t.status === 'open').length,
           inProgress: allTickets.filter(t => t.status === 'in_progress').length,
           escalated: allTickets.filter(t => t.status === 'escalated').length,
-          critical: allTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
+          critical: allTickets.filter(t => t.priority === 'critical' && !resolvedStatuses.includes(t.status)).length,
           overdue: overdueTickets.length,
         }
       };
@@ -7935,12 +7940,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return date && date >= ws && date <= we;
           });
           
+          const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
           buckets.push({
             period: `W${weekNum}`,
             label: `Week ${weekNum}`,
             weekNumber: weekNum,
             opened: weekTickets.length,
-            closed: weekTickets.filter(t => t.status === 'closed').length,
+            closed: weekTickets.filter(t => resolvedStatuses.includes(t.status)).length,
             critical: weekTickets.filter(t => t.priority === 'critical').length,
             overdue: weekTickets.filter(t => t.isOverdue).length,
           });
@@ -7977,8 +7983,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           open: allTickets.filter(t => t.status === 'open').length,
           inProgress: allTickets.filter(t => t.status === 'in_progress').length,
           escalated: allTickets.filter(t => t.status === 'escalated').length,
-          closed: allTickets.filter(t => t.status === 'closed').length,
-          critical: allTickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length,
+          closed: allTickets.filter(t => ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'].includes(t.status)).length,
+          critical: allTickets.filter(t => t.priority === 'critical' && !['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'].includes(t.status)).length,
           overdue: overdueTickets.length,
         },
       });
@@ -8070,14 +8076,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         // Support metrics
+        const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
         const userTickets = allTickets.filter(t => t.assignedEngineerId === user.id);
         const periodTicketsClosed = userTickets.filter(t => {
-          if (t.status !== 'closed') return false;
-          const date = t.closedAt ? new Date(t.closedAt) : null;
+          if (!resolvedStatuses.includes(t.status)) return false;
+          const date = t.closedAt || t.updatedAt ? new Date(t.closedAt || t.updatedAt) : null;
           return date && date >= startDate && date < endDate;
         });
         const overdueTickets = userTickets.filter(t => {
-          if (t.status === 'closed') return false;
+          if (resolvedStatuses.includes(t.status)) return false;
           return t.dueDate && new Date(t.dueDate) < new Date();
         });
         
@@ -8107,7 +8114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               projectsCompleted: periodProjectsCompleted.length,
             },
             support: {
-              ticketsAssigned: userTickets.filter(t => t.status !== 'closed').length,
+              ticketsAssigned: userTickets.filter(t => !resolvedStatuses.includes(t.status)).length,
               ticketsClosed: periodTicketsClosed.length,
               overdueTickets: overdueTickets.length,
             },
