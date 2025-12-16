@@ -50,6 +50,7 @@ export default function Support() {
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [sortOrder, setSortOrder] = useState<string>("status");
+  const [categoryTab, setCategoryTab] = useState<string>("support"); // support or development
   const [activeTab, setActiveTab] = useState<string>("all");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
@@ -60,11 +61,22 @@ export default function Support() {
   // Resolved statuses for counting completed tickets
   const RESOLVED_STATUSES = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
   
-  // Calculate counts for tabs
-  const allCount = tickets?.length || 0;
-  const openCount = tickets?.filter(t => t.status === "open").length || 0;
-  const inProgressCount = tickets?.filter(t => t.status === "in_progress" || t.status === "escalated" || t.status === "pending_customer").length || 0;
-  const completedCount = tickets?.filter(t => RESOLVED_STATUSES.includes(t.status)).length || 0;
+  // Filter tickets by category first (Support = level 1-2, Development = level 3)
+  const categoryFilteredTickets = tickets?.filter(t => {
+    if (categoryTab === "support") return (t.escalationLevel || 1) < 3;
+    if (categoryTab === "development") return t.escalationLevel === 3;
+    return true;
+  }) || [];
+
+  // Category counts
+  const supportCount = tickets?.filter(t => (t.escalationLevel || 1) < 3).length || 0;
+  const developmentCount = tickets?.filter(t => t.escalationLevel === 3).length || 0;
+  
+  // Calculate counts for status tabs (based on category-filtered tickets)
+  const allCount = categoryFilteredTickets.length;
+  const openCount = categoryFilteredTickets.filter(t => t.status === "open").length;
+  const inProgressCount = categoryFilteredTickets.filter(t => t.status === "in_progress" || t.status === "escalated" || t.status === "pending_customer").length;
+  const completedCount = categoryFilteredTickets.filter(t => RESOLVED_STATUSES.includes(t.status)).length;
 
   // Status order for sorting: in_progress first, then open, then others, closed last
   const STATUS_ORDER: Record<string, number> = {
@@ -76,7 +88,7 @@ export default function Support() {
     closed: 5,
   };
 
-  const filteredTickets = tickets?.filter((ticket) => {
+  const filteredTickets = categoryFilteredTickets.filter((ticket) => {
     // Tab filtering
     if (activeTab === "open" && ticket.status !== "open") return false;
     if (activeTab === "in_progress" && !["in_progress", "escalated", "pending_customer"].includes(ticket.status)) return false;
@@ -153,21 +165,34 @@ export default function Support() {
         </Dialog>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex-wrap" data-testid="tabs-status">
-          <TabsTrigger value="all" data-testid="tab-all">
-            All ({allCount})
+      {/* Category Tabs - Support vs Development */}
+      <Tabs value={categoryTab} onValueChange={(val) => { setCategoryTab(val); setActiveTab("all"); }} className="space-y-4">
+        <TabsList className="flex-wrap" data-testid="tabs-category">
+          <TabsTrigger value="support" data-testid="tab-support">
+            Support ({supportCount})
           </TabsTrigger>
-          <TabsTrigger value="open" data-testid="tab-open">
-            Open ({openCount})
-          </TabsTrigger>
-          <TabsTrigger value="in_progress" data-testid="tab-in-progress">
-            In Progress ({inProgressCount})
-          </TabsTrigger>
-          <TabsTrigger value="completed" data-testid="tab-completed">
-            Completed ({completedCount})
+          <TabsTrigger value="development" data-testid="tab-development">
+            Development ({developmentCount})
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value={categoryTab} className="space-y-4">
+          {/* Status Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList className="flex-wrap" data-testid="tabs-status">
+              <TabsTrigger value="all" data-testid="tab-all">
+                All ({allCount})
+              </TabsTrigger>
+              <TabsTrigger value="open" data-testid="tab-open">
+                Open ({openCount})
+              </TabsTrigger>
+              <TabsTrigger value="in_progress" data-testid="tab-in-progress">
+                In Progress ({inProgressCount})
+              </TabsTrigger>
+              <TabsTrigger value="completed" data-testid="tab-completed">
+                Completed ({completedCount})
+              </TabsTrigger>
+            </TabsList>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -387,6 +412,8 @@ export default function Support() {
           />
         )}
       </div>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
 
