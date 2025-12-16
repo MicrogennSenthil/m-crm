@@ -385,22 +385,12 @@ export default function DevelopmentTasks() {
     return true;
   }) || [];
   
-  // Sort tasks: overdue first, then by priority (critical > high > medium > low), then by deadline
-  const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  // Sort tasks by task number in descending order (latest first)
   const sortedTasks = [...filteredTasks].sort((a, b) => {
-    // Overdue tasks first
-    const aOverdue = a.isOverdue || (new Date(a.deadline) < new Date() && a.status !== "completed");
-    const bOverdue = b.isOverdue || (new Date(b.deadline) < new Date() && b.status !== "completed");
-    if (aOverdue && !bOverdue) return -1;
-    if (!aOverdue && bOverdue) return 1;
-    
-    // Then by priority
-    const aPriority = priorityOrder[a.priority] || 0;
-    const bPriority = priorityOrder[b.priority] || 0;
-    if (aPriority !== bPriority) return bPriority - aPriority;
-    
-    // Then by deadline
-    return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    // Extract numeric part from task number (DEV-XXXXXX format)
+    const aNum = parseInt(a.taskNumber.replace(/\D/g, '')) || 0;
+    const bNum = parseInt(b.taskNumber.replace(/\D/g, '')) || 0;
+    return bNum - aNum; // Descending order - higher number first
   });
 
   const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string) => {
