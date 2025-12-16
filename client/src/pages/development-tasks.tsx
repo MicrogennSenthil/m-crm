@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { useForm } from "react-hook-form";
@@ -35,6 +36,9 @@ import {
   XCircle,
   Upload,
   ImagePlus,
+  User,
+  ArrowUpDown,
+  Filter,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -97,7 +101,10 @@ export default function DevelopmentTasks() {
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [engineerFilter, setEngineerFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -340,9 +347,30 @@ export default function DevelopmentTasks() {
     );
   }
 
+  // Helper function to calculate age
+  const calculateAge = (date: Date | string | null): string => {
+    if (!date) return "—";
+    const now = new Date();
+    const taskDate = new Date(date);
+    const diffMs = now.getTime() - taskDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (diffDays > 0) {
+      return `${diffDays}d ${diffHours}h`;
+    } else if (diffHours > 0) {
+      return `${diffHours}h`;
+    } else {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `${diffMinutes}m`;
+    }
+  };
+
   const filteredTasks = tasks?.filter(task => {
     if (searchTerm && !task.title.toLowerCase().includes(searchTerm.toLowerCase()) && 
-        !task.taskNumber.toLowerCase().includes(searchTerm.toLowerCase())) {
+        !task.taskNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !(task.assignee?.firstName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        !(task.assignee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()))) {
       return false;
     }
     if (activeTab === "pending" && task.status !== "pending") return false;
@@ -351,8 +379,29 @@ export default function DevelopmentTasks() {
     if (activeTab === "overdue" && task.status !== "overdue" && !task.isOverdue) return false;
     if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
     if (sourceFilter !== "all" && task.sourceType !== sourceFilter) return false;
+    if (statusFilter !== "all" && task.status !== statusFilter) return false;
+    if (engineerFilter === "unassigned" && task.assignedTo) return false;
+    if (engineerFilter !== "all" && engineerFilter !== "unassigned" && task.assignedTo !== engineerFilter) return false;
     return true;
   }) || [];
+  
+  // Sort tasks: overdue first, then by priority (critical > high > medium > low), then by deadline
+  const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    // Overdue tasks first
+    const aOverdue = a.isOverdue || (new Date(a.deadline) < new Date() && a.status !== "completed");
+    const bOverdue = b.isOverdue || (new Date(b.deadline) < new Date() && b.status !== "completed");
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    
+    // Then by priority
+    const aPriority = priorityOrder[a.priority] || 0;
+    const bPriority = priorityOrder[b.priority] || 0;
+    if (aPriority !== bPriority) return bPriority - aPriority;
+    
+    // Then by deadline
+    return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+  });
 
   const handleStatusChange = (task: DevelopmentTaskWithDetails, newStatus: string) => {
     if (!isAdmin && !canEdit("development_tasks")) {
@@ -439,13 +488,39 @@ export default function DevelopmentTasks() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search tasks..."
+              placeholder="Search by task#, title, or engineer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8"
               data-testid="input-search-tasks"
             />
           </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={engineerFilter} onValueChange={setEngineerFilter}>
+            <SelectTrigger className="w-[160px]" data-testid="select-engineer-filter">
+              <SelectValue placeholder="Engineer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Engineers</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {developers.map((dev) => (
+                <SelectItem key={dev.id} value={dev.id}>
+                  {dev.firstName} {dev.lastName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-[140px]" data-testid="select-priority-filter">
               <SelectValue placeholder="Priority" />
@@ -473,7 +548,7 @@ export default function DevelopmentTasks() {
         </div>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {filteredTasks.length === 0 ? (
+          {sortedTasks.length === 0 ? (
             <Card data-testid="card-no-tasks">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Code2 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -482,89 +557,130 @@ export default function DevelopmentTasks() {
             </Card>
           ) : (
             <div className="space-y-3" data-testid="task-list">
-              {paginateData(filteredTasks).map(task => {
-                const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
-                const StatusIcon = statusConfig.icon;
-                const deadline = new Date(task.deadline);
-                const isOverdue = task.isOverdue || deadline < new Date();
-                
-                return (
-                  <Card 
-                    key={task.id} 
-                    className={`cursor-pointer hover-elevate ${isOverdue && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}`}
-                    onClick={() => {
-                      setSelectedTask(task);
-                      setIsDetailDialogOpen(true);
-                    }}
-                    data-testid={`card-task-${task.id}`}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <StatusIcon className={`h-5 w-5 mt-0.5 ${isOverdue && task.status !== "completed" ? "text-red-500" : ""}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs text-muted-foreground" data-testid={`text-task-number-${task.id}`}>{task.taskNumber}</span>
-                              <Badge variant="outline" className={SOURCE_CONFIG[task.sourceType]?.color || ""} data-testid={`badge-source-${task.id}`}>
-                                {SOURCE_CONFIG[task.sourceType]?.label || task.sourceType}
+              <Card>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[100px]">Task #</TableHead>
+                        <TableHead className="min-w-[200px]">Title</TableHead>
+                        <TableHead className="w-[100px]">Status</TableHead>
+                        <TableHead className="w-[150px]">Engineer</TableHead>
+                        <TableHead className="w-[100px]">Priority</TableHead>
+                        <TableHead className="w-[100px]">Source</TableHead>
+                        <TableHead className="w-[140px]">Assigned</TableHead>
+                        <TableHead className="w-[140px]">Completed</TableHead>
+                        <TableHead className="w-[80px]">Age</TableHead>
+                        <TableHead className="w-[140px]">Due Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginateData(sortedTasks).map(task => {
+                        const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
+                        const deadline = new Date(task.deadline);
+                        const isOverdue = task.isOverdue || (deadline < new Date() && task.status !== "completed");
+                        
+                        return (
+                          <TableRow 
+                            key={task.id} 
+                            className={`cursor-pointer ${isOverdue ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50" : "hover:bg-muted/50"}`}
+                            onClick={() => {
+                              setSelectedTask(task);
+                              setIsDetailDialogOpen(true);
+                            }}
+                            data-testid={`row-task-${task.id}`}
+                          >
+                            <TableCell className="font-mono text-xs" data-testid={`text-task-number-${task.id}`}>
+                              <div className="flex items-center gap-1">
+                                {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
+                                {task.taskNumber}
+                              </div>
+                            </TableCell>
+                            <TableCell data-testid={`text-task-title-${task.id}`}>
+                              <div className="max-w-[200px] truncate font-medium" title={task.title}>
+                                {task.title}
+                              </div>
+                              {task.sourceReference && (
+                                <div className="text-xs text-muted-foreground truncate" title={task.sourceReference}>
+                                  Ref: {task.sourceReference}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`${statusConfig.color} text-xs`} data-testid={`badge-status-${task.id}`}>
+                                {statusConfig.label}
                               </Badge>
-                              <Badge variant="outline" className={PRIORITY_CONFIG[task.priority]?.color || ""} data-testid={`badge-priority-${task.id}`}>
+                            </TableCell>
+                            <TableCell data-testid={`assignee-${task.id}`}>
+                              {task.assignee ? (
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarFallback className="text-xs">
+                                      {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm truncate max-w-[100px]" title={`${task.assignee.firstName} ${task.assignee.lastName}`}>
+                                    {task.assignee.firstName} {task.assignee.lastName}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">Unassigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={`${PRIORITY_CONFIG[task.priority]?.color || ""} text-xs`} data-testid={`badge-priority-${task.id}`}>
                                 {PRIORITY_CONFIG[task.priority]?.label || task.priority}
                               </Badge>
-                            </div>
-                            <h3 className="font-medium mt-1" data-testid={`text-task-title-${task.id}`}>{task.title}</h3>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2" data-testid={`text-task-description-${task.id}`}>
-                                {task.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
-                              <span className="flex items-center gap-1" data-testid={`text-deadline-${task.id}`}>
-                                <Calendar className="h-3 w-3" />
-                                Due: {format(deadline, "MMM d, yyyy")}
-                              </span>
-                              {task.sourceReference && (
-                                <span className="flex items-center gap-1" data-testid={`text-reference-${task.id}`}>
-                                  Ref: {task.sourceReference}
-                                </span>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={`${SOURCE_CONFIG[task.sourceType]?.color || ""} text-xs`} data-testid={`badge-source-${task.id}`}>
+                                {SOURCE_CONFIG[task.sourceType]?.label || task.sourceType}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-assigned-${task.id}`}>
+                              {task.assignedAt ? (
+                                <div>
+                                  <div>{format(new Date(task.assignedAt), "dd MMM yyyy")}</div>
+                                  <div className="text-muted-foreground">{format(new Date(task.assignedAt), "HH:mm")}</div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
                               )}
-                              {task.estimatedHours && (
-                                <span data-testid={`text-estimated-${task.id}`}>Est: {task.estimatedHours}h</span>
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-completed-${task.id}`}>
+                              {task.completedAt ? (
+                                <div>
+                                  <div>{format(new Date(task.completedAt), "dd MMM yyyy")}</div>
+                                  <div className="text-muted-foreground">{format(new Date(task.completedAt), "HH:mm")}</div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
                               )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          {task.assignee && (
-                            <div className="flex items-center gap-2" data-testid={`assignee-${task.id}`}>
-                              <Avatar className="h-6 w-6">
-                                <AvatarFallback className="text-xs">
-                                  {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-xs text-muted-foreground hidden sm:inline">
-                                {task.assignee.firstName} {task.assignee.lastName}
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-age-${task.id}`}>
+                              <span className={isOverdue ? "text-red-600 font-medium" : ""}>
+                                {calculateAge(task.createdAt)}
                               </span>
-                            </div>
-                          )}
-                          <Badge className={statusConfig.color} data-testid={`badge-status-${task.id}`}>
-                            {statusConfig.label}
-                          </Badge>
-                          {task.penaltyPoints && task.penaltyPoints > 0 && (
-                            <span className="text-xs text-red-500" data-testid={`text-penalty-${task.id}`}>-{task.penaltyPoints} pts</span>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-              {filteredTasks.length > 0 && (
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-deadline-${task.id}`}>
+                              <div className={isOverdue ? "text-red-600 font-medium" : ""}>
+                                <div>{format(deadline, "dd MMM yyyy")}</div>
+                                <div className="text-muted-foreground">{format(deadline, "HH:mm")}</div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </Card>
+              {sortedTasks.length > 0 && (
                 <DataTablePagination
                   currentPage={currentPage}
-                  totalPages={getTotalPages(filteredTasks.length)}
+                  totalPages={getTotalPages(sortedTasks.length)}
                   pageSize={pageSize}
-                  totalItems={filteredTasks.length}
+                  totalItems={sortedTasks.length}
                   onPageChange={handlePageChange}
                   onPageSizeChange={handlePageSizeChange}
                 />
