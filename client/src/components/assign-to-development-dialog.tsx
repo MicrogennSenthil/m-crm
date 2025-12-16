@@ -176,16 +176,18 @@ export function AssignToDevelopmentDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-            <span className={`px-2 py-1 rounded text-xs font-medium ${getSourceColor()}`}>
+          {/* Source reference banner */}
+          <div className="flex items-center gap-3 p-3 bg-muted rounded-md">
+            <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getSourceColor()}`}>
               {getSourceLabel()}
             </span>
-            <span className="text-sm text-muted-foreground truncate">
+            <span className="text-sm text-muted-foreground truncate flex-1">
               {sourceTitle}
             </span>
           </div>
 
-          <div className="space-y-2">
+          {/* Task Title */}
+          <div className="space-y-1.5">
             <Label htmlFor="dev-task-title">Task Title</Label>
             <Input
               id="dev-task-title"
@@ -196,20 +198,22 @@ export function AssignToDevelopmentDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          {/* Description */}
+          <div className="space-y-1.5">
             <Label htmlFor="dev-task-description">Description</Label>
             <Textarea
               id="dev-task-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the development work needed"
-              className="min-h-20"
+              className="min-h-20 resize-none"
               data-testid="textarea-dev-task-description"
             />
           </div>
 
+          {/* Priority & Deadline Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="dev-task-priority">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger id="dev-task-priority" data-testid="select-dev-task-priority">
@@ -224,24 +228,21 @@ export function AssignToDevelopmentDialog({
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="dev-task-deadline">Deadline</Label>
-              <div className="relative">
-                <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="dev-task-deadline"
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                  className="pl-8"
-                  data-testid="input-dev-task-deadline"
-                />
-              </div>
+              <Input
+                id="dev-task-deadline"
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                data-testid="input-dev-task-deadline"
+              />
             </div>
           </div>
 
+          {/* Assign To & Estimated Hours Row */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="dev-task-assignee">Assign To</Label>
               <Select value={assignedTo} onValueChange={setAssignedTo}>
                 <SelectTrigger id="dev-task-assignee" data-testid="select-dev-task-assignee">
@@ -266,7 +267,7 @@ export function AssignToDevelopmentDialog({
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="dev-task-hours">Estimated Hours</Label>
               <Input
                 id="dev-task-hours"
@@ -281,9 +282,10 @@ export function AssignToDevelopmentDialog({
             </div>
           </div>
 
+          {/* Default deadline warning */}
           {!deadline && (
-            <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-md text-sm text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-4 w-4" />
+            <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-md text-sm text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               <span>Default deadline: 7 days from now</span>
             </div>
           )}
