@@ -54,6 +54,9 @@ import {
   type InsertDemoDateHistory,
   type NegotiationDateHistory,
   type InsertNegotiationDateHistory,
+  type LeadStageHistory,
+  type InsertLeadStageHistory,
+  leadStageHistory,
   type Quote,
   type InsertQuote,
   type Project,
@@ -208,6 +211,8 @@ export interface IStorage {
   // Demo Date History operations
   getDemoDateHistory(leadId: string): Promise<DemoDateHistory[]>;
   createDemoDateHistory(history: InsertDemoDateHistory): Promise<DemoDateHistory>;
+  getLeadStageHistory(leadId: string): Promise<LeadStageHistory[]>;
+  createLeadStageHistory(history: InsertLeadStageHistory): Promise<LeadStageHistory>;
 
   // Negotiation Date History operations
   getNegotiationDateHistory(leadId: string): Promise<NegotiationDateHistory[]>;
@@ -1023,6 +1028,20 @@ export class DatabaseStorage implements IStorage {
 
   async createDemoDateHistory(history: InsertDemoDateHistory): Promise<DemoDateHistory> {
     const [newHistory] = await db.insert(demoDateHistory).values(history).returning();
+    return newHistory;
+  }
+
+  // Lead Stage History operations
+  async getLeadStageHistory(leadId: string): Promise<LeadStageHistory[]> {
+    return await db
+      .select()
+      .from(leadStageHistory)
+      .where(eq(leadStageHistory.leadId, leadId))
+      .orderBy(desc(leadStageHistory.createdAt));
+  }
+
+  async createLeadStageHistory(history: InsertLeadStageHistory): Promise<LeadStageHistory> {
+    const [newHistory] = await db.insert(leadStageHistory).values(history).returning();
     return newHistory;
   }
 

@@ -279,6 +279,25 @@ export const insertNegotiationDateHistorySchema = createInsertSchema(negotiation
 export type InsertNegotiationDateHistory = z.infer<typeof insertNegotiationDateHistorySchema>;
 export type NegotiationDateHistory = typeof negotiationDateHistory.$inferSelect;
 
+// Lead Stage History table - Track all stage changes
+export const leadStageHistory = pgTable("lead_stage_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  fromStage: text("from_stage"), // previous stage (null for initial stage)
+  toStage: text("to_stage").notNull(), // new stage
+  changedById: varchar("changed_by_id").references(() => users.id),
+  changeReason: text("change_reason"), // optional reason for the change
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLeadStageHistorySchema = createInsertSchema(leadStageHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLeadStageHistory = z.infer<typeof insertLeadStageHistorySchema>;
+export type LeadStageHistory = typeof leadStageHistory.$inferSelect;
+
 // Quotes table - Sales quotes sent to leads
 export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
