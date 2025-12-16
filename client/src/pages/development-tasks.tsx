@@ -31,6 +31,10 @@ import {
   FileText,
   Paperclip,
   ExternalLink,
+  Loader2,
+  XCircle,
+  Upload,
+  ImagePlus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -97,6 +101,12 @@ export default function DevelopmentTasks() {
   const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCompletionDialogOpen, setIsCompletionDialogOpen] = useState(false);
+  const [completionType, setCompletionType] = useState<"complete" | "incomplete">("complete");
+  const [completionDescription, setCompletionDescription] = useState("");
+  const [completionImageFile, setCompletionImageFile] = useState<File | null>(null);
+  const [completionImagePreview, setCompletionImagePreview] = useState<string | null>(null);
+  const [isUploadingCompletion, setIsUploadingCompletion] = useState(false);
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const form = useForm<CreateTaskFormData>({
@@ -177,6 +187,111 @@ export default function DevelopmentTasks() {
       toast({ title: "Error", description: "Failed to delete task", variant: "destructive" });
     },
   });
+
+  const completionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { completionStatus: string; completionDescription: string; completionImageUrl: string } }) => {
+      return await apiRequest("POST", `/api/development/tasks/${id}/complete`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: `Task marked as ${completionType}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/development/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      setIsCompletionDialogOpen(false);
+      setIsDetailDialogOpen(false);
+      resetCompletionForm();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to complete task", variant: "destructive" });
+    },
+  });
+
+  const resetCompletionForm = () => {
+    setCompletionDescription("");
+    setCompletionImageFile(null);
+    setCompletionImagePreview(null);
+    setCompletionType("complete");
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "Error", description: "Image must be less than 10MB", variant: "destructive" });
+        return;
+      }
+      setCompletionImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCompletionImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleOpenCompletionDialog = (type: "complete" | "incomplete") => {
+    setCompletionType(type);
+    resetCompletionForm();
+    setIsCompletionDialogOpen(true);
+  };
+
+  const handleSubmitCompletion = async () => {
+    if (!selectedTask) return;
+    
+    if (!completionDescription.trim()) {
+      toast({ title: "Required", description: "Please provide a description", variant: "destructive" });
+      return;
+    }
+    
+    if (!completionImageFile) {
+      toast({ title: "Required", description: "Please upload an image", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingCompletion(true);
+    
+    try {
+      // Upload image first
+      const uploadUrlResponse = await fetch("/api/objects/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fileName: completionImageFile.name }),
+      });
+      
+      if (!uploadUrlResponse.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+      
+      const { uploadURL, objectPath } = await uploadUrlResponse.json();
+      
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: completionImageFile,
+        headers: {
+          "Content-Type": completionImageFile.type || "application/octet-stream",
+        },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload image");
+      }
+
+      // Now complete the task with the image URL
+      completionMutation.mutate({
+        id: selectedTask.id,
+        data: {
+          completionStatus: completionType,
+          completionDescription: completionDescription.trim(),
+          completionImageUrl: objectPath,
+        },
+      });
+    } catch (error) {
+      console.error("Completion error:", error);
+      toast({ title: "Error", description: "Failed to upload image", variant: "destructive" });
+    } finally {
+      setIsUploadingCompletion(false);
+    }
+  };
 
   // Permission checks - placed after all hooks
   if (permissionsLoading || !user) {
@@ -647,10 +762,16 @@ export default function DevelopmentTasks() {
                   </Button>
                 )}
                 {selectedTask.status === "in_progress" && (isAdmin || canEdit("development_tasks")) && (
-                  <Button variant="secondary" onClick={() => handleStatusChange(selectedTask, "completed")} data-testid="button-mark-complete">
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Mark Complete
-                  </Button>
+                  <>
+                    <Button variant="outline" onClick={() => handleOpenCompletionDialog("incomplete")} data-testid="button-mark-incomplete">
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Mark Incomplete
+                    </Button>
+                    <Button variant="secondary" onClick={() => handleOpenCompletionDialog("complete")} data-testid="button-mark-complete">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Mark Complete
+                    </Button>
+                  </>
                 )}
                 {(isAdmin || canDelete("development_tasks")) && (
                   <Button 
@@ -807,6 +928,120 @@ export default function DevelopmentTasks() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Completion Dialog */}
+      <Dialog open={isCompletionDialogOpen} onOpenChange={(open) => {
+        if (!open) resetCompletionForm();
+        setIsCompletionDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-md" data-testid="dialog-completion">
+          <DialogHeader>
+            <DialogTitle data-testid="text-completion-title">
+              {completionType === "complete" ? "Mark Task Complete" : "Mark Task Incomplete"}
+            </DialogTitle>
+            <DialogDescription>
+              {completionType === "complete" 
+                ? "Please provide evidence and description for task completion."
+                : "Please provide reason and evidence for marking this task as incomplete."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Image Upload */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Evidence Image <span className="text-destructive">*</span>
+              </Label>
+              <div className="border-2 border-dashed rounded-lg p-4 text-center hover-elevate cursor-pointer relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  data-testid="input-completion-image"
+                />
+                {completionImagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={completionImagePreview} 
+                      alt="Preview" 
+                      className="max-h-40 mx-auto rounded-md"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-0 right-0 h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCompletionImageFile(null);
+                        setCompletionImagePreview(null);
+                      }}
+                      data-testid="button-remove-image"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="py-4">
+                    <ImagePlus className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Click or drag to upload image</p>
+                    <p className="text-xs text-muted-foreground mt-1">Max 10MB</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Description <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                value={completionDescription}
+                onChange={(e) => setCompletionDescription(e.target.value)}
+                placeholder={completionType === "complete" 
+                  ? "Describe what was completed and any notes..."
+                  : "Describe the reason for incompletion and any issues encountered..."}
+                rows={4}
+                data-testid="textarea-completion-description"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                resetCompletionForm();
+                setIsCompletionDialogOpen(false);
+              }}
+              disabled={isUploadingCompletion || completionMutation.isPending}
+              data-testid="button-cancel-completion"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitCompletion}
+              disabled={isUploadingCompletion || completionMutation.isPending || !completionDescription.trim() || !completionImageFile}
+              data-testid="button-submit-completion"
+            >
+              {isUploadingCompletion || completionMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  {completionType === "complete" ? <CheckCircle2 className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                  {completionType === "complete" ? "Mark Complete" : "Mark Incomplete"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

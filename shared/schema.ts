@@ -1233,6 +1233,12 @@ export const developmentTasks = pgTable("development_tasks", {
   actualHours: integer("actual_hours"),
   notes: text("notes"),
   attachments: text("attachments").array(),
+  // Completion workflow fields
+  completionStatus: text("completion_status"), // 'complete' or 'incomplete'
+  completionDescription: text("completion_description"), // Mandatory description when marking complete/incomplete
+  completionImageUrl: text("completion_image_url"), // Mandatory image evidence when marking complete/incomplete
+  reassignToSupport: boolean("reassign_to_support").default(false), // Flag to indicate task should be reassigned to support
+  supportTicketId: varchar("support_ticket_id"), // Linked support ticket after completion
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
