@@ -188,7 +188,17 @@ export default function SupportDashboard() {
           t.updatedAt && new Date(t.updatedAt) < thirtyMinAgo
         );
       default:
-        return tickets;
+        // For 'all' view: exclude old closed tickets, only show today's closed tickets
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        return tickets.filter(t => {
+          // Include all non-closed tickets
+          if (t.status !== 'closed') return true;
+          // For closed tickets, only show if closed today
+          if (!t.updatedAt) return false;
+          const closedDate = new Date(t.updatedAt);
+          return closedDate >= todayStart;
+        });
     }
   };
 
