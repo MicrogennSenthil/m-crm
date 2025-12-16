@@ -42,6 +42,7 @@ interface SupportDashboardStats {
   openCount: number;
   inProcessCount: number;
   completedCount: number;
+  completedTodayCount: number;
   pendingCustomerCount: number;
   escalatedCount: number;
   reassignedCount: number;
@@ -93,6 +94,7 @@ export default function SupportDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<TicketWithAssignee | null>(null);
   const [newComment, setNewComment] = useState("");
+  const [showTodayCompleted, setShowTodayCompleted] = useState(true); // Default to Today only
 
   if (!hasAccess(user)) {
     return (
@@ -153,7 +155,8 @@ export default function SupportDashboard() {
       case 'assigned':
         return tickets.filter(t => t.assignedEngineerId);
       case 'unassigned':
-        return tickets.filter(t => !t.assignedEngineerId);
+        // Exclude closed/resolved tickets from unassigned since they don't need assignment
+        return tickets.filter(t => !t.assignedEngineerId && t.status !== 'closed' && t.status !== 'resolved');
       case 'open':
         return tickets.filter(t => t.status === 'open');
       case 'in_progress':
@@ -276,14 +279,26 @@ export default function SupportDashboard() {
           isActive={activeFilter === 'in_progress'}
           onClick={() => setActiveFilter('in_progress')}
         />
-        <StatCard
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          label="Completed"
-          count={stats?.completedCount || 0}
-          color="bg-green-500"
-          isActive={activeFilter === 'completed'}
-          onClick={() => setActiveFilter('completed')}
-        />
+        <div className="relative">
+          <StatCard
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label={showTodayCompleted ? "Completed Today" : "Completed (All)"}
+            count={showTodayCompleted ? (stats?.completedTodayCount || 0) : (stats?.completedCount || 0)}
+            color="bg-green-500"
+            isActive={activeFilter === 'completed'}
+            onClick={() => setActiveFilter('completed')}
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowTodayCompleted(!showTodayCompleted);
+            }}
+            className="absolute -top-1 -right-1 text-[10px] bg-background border rounded-full px-1.5 py-0.5 shadow-sm hover:bg-muted transition-colors"
+            data-testid="button-toggle-completed-view"
+          >
+            {showTodayCompleted ? "All" : "Today"}
+          </button>
+        </div>
         <StatCard
           icon={<RefreshCcw className="h-5 w-5" />}
           label="Reassigned"

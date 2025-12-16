@@ -4586,9 +4586,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate stats
       const totalTickets = allTickets.length;
       const assignedCount = allTickets.filter(t => t.assignedEngineerId).length;
-      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId).length;
+      // Unassigned should exclude closed/resolved tickets since they don't need assignment
+      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId && t.status !== 'closed' && t.status !== 'resolved').length;
       const inProcessCount = allTickets.filter(t => t.status === 'in_progress').length;
+      
+      // Calculate completed counts - all time and today only
       const completedCount = allTickets.filter(t => t.status === 'closed').length;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completedTodayCount = allTickets.filter(t => 
+        t.status === 'closed' && 
+        t.closedAt && new Date(t.closedAt) >= today
+      ).length;
       const reopenedCount = allTickets.filter(t => t.status === 'reopened' || t.reopenedFromTicketId).length;
       const openCount = allTickets.filter(t => t.status === 'open').length;
       const pendingCustomerCount = allTickets.filter(t => t.status === 'pending_customer').length;
@@ -4625,6 +4634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           openCount,
           inProcessCount,
           completedCount,
+          completedTodayCount,
           pendingCustomerCount,
           escalatedCount,
           reassignedCount,
