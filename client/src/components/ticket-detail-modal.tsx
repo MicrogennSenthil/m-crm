@@ -62,6 +62,16 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
     enabled: open,
   });
 
+  // Check if ticket has active development task (not completed/cancelled)
+  const { data: developmentTasks } = useQuery<{ id: string; status: string }[]>({
+    queryKey: ["/api/development-tasks", { sourceType: "support", sourceId: ticket.id }],
+    enabled: open,
+  });
+  
+  const hasActiveDevelopmentTask = developmentTasks?.some(
+    task => task.status !== "completed" && task.status !== "cancelled"
+  ) || false;
+
   const addCommentMutation = useMutation({
     mutationFn: async () => {
       if (!newComment.trim()) return;
