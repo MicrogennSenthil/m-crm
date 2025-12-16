@@ -50,9 +50,10 @@ import {
   FileText,
   CalendarDays,
   Users,
+  History,
 } from "lucide-react";
 import type { Lead, Customer } from "@shared/schema";
-import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
@@ -205,14 +206,26 @@ export default function SalesReports() {
     return Array.from(new Set(leads.map(l => l.leadSource).filter(Boolean)));
   }, [leads]);
 
-  const stats = useMemo(() => ({
-    fresh: filteredLeads.filter(l => l.stage === "new" || l.stage === "contacted").length,
-    pending: filteredLeads.filter(l => l.stage === "demo_scheduled" || l.stage === "proposal_sent").length,
-    completed: filteredLeads.filter(l => l.stage === "closed_won" || l.stage === "closed_lost").length,
-    all: filteredLeads.length,
-    won: filteredLeads.filter(l => l.stage === "closed_won").length,
-    lost: filteredLeads.filter(l => l.stage === "closed_lost").length,
-  }), [filteredLeads]);
+  const stats = useMemo(() => {
+    const today = startOfDay(new Date());
+    const pendingUptoYesterday = leads?.filter(l => {
+      // Not closed
+      if (l.stage === "closed_won" || l.stage === "closed_lost") return false;
+      // Created before today (up to yesterday)
+      if (l.createdAt && new Date(l.createdAt) < today) return true;
+      return false;
+    }).length || 0;
+    
+    return {
+      fresh: filteredLeads.filter(l => l.stage === "new" || l.stage === "contacted").length,
+      pending: filteredLeads.filter(l => l.stage === "demo_scheduled" || l.stage === "proposal_sent").length,
+      completed: filteredLeads.filter(l => l.stage === "closed_won" || l.stage === "closed_lost").length,
+      all: filteredLeads.length,
+      won: filteredLeads.filter(l => l.stage === "closed_won").length,
+      lost: filteredLeads.filter(l => l.stage === "closed_lost").length,
+      pendingUptoYesterday,
+    };
+  }, [filteredLeads, leads]);
 
   const prepareExportData = () => {
     return reportData.map(lead => ({
@@ -395,7 +408,7 @@ export default function SalesReports() {
       </Card>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card className="cursor-pointer hover-elevate" onClick={() => setActiveTab("fresh")}>
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
@@ -437,6 +450,17 @@ export default function SalesReports() {
                 <p className="text-2xl font-bold">{stats.all}</p>
               </div>
               <Users className="h-8 w-8 text-primary opacity-50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800">
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Pending (Upto Yesterday)</p>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.pendingUptoYesterday}</p>
+              </div>
+              <History className="h-8 w-8 text-orange-500 opacity-50" />
             </div>
           </CardContent>
         </Card>
