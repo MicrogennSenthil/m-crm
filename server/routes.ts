@@ -9781,6 +9781,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get tickets for a specific period (week) in Support tab drill-down
+  app.get("/api/analytics/support-period-tickets", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { year, month, period } = req.query;
+      const yearNum = parseInt(year as string) || new Date().getFullYear();
+      const monthNum = month ? parseInt(month as string) : null;
+      
+      if (!period) {
+        return res.status(400).json({ message: "Period is required" });
+      }
+
+      // Calculate date range based on period (e.g., "W1", "W2", "W3", etc.)
+      let startDate: Date;
+      let endDate: Date;
+
+      if (monthNum) {
+        // Weekly period within a month (W1, W2, W3, W4, W5)
+        const weekMatch = (period as string).match(/W(\d+)/);
+        if (weekMatch) {
+          const weekNum = parseInt(weekMatch[1]);
+          const monthStart = new Date(yearNum, monthNum - 1, 1);
+          startDate = new Date(monthStart);
+          startDate.setDate(startDate.getDate() + (weekNum - 1) * 7);
+          endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 7);
+          // Make sure endDate doesn't go past month end
+          const nextMonth = new Date(yearNum, monthNum, 1);
+          if (endDate > nextMonth) {
+            endDate = nextMonth;
+          }
+        } else {
+          // Fallback to entire month
+          startDate = new Date(yearNum, monthNum - 1, 1);
+          endDate = new Date(yearNum, monthNum, 1);
+        }
+      } else {
+        // Monthly period within a year (2025-01, 2025-02, etc.)
+        const monthMatch = (period as string).match(/\d{4}-(\d{2})/);
+        if (monthMatch) {
+          const periodMonth = parseInt(monthMatch[1]);
+          startDate = new Date(yearNum, periodMonth - 1, 1);
+          endDate = new Date(yearNum, periodMonth, 1);
+        } else {
+          startDate = new Date(yearNum, 0, 1);
+          endDate = new Date(yearNum + 1, 0, 1);
+        }
+      }
+
+      // Fetch tickets for this period
+      const periodTickets = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        customerName: tickets.customerName,
+        customerId: tickets.customerId,
+        issueSummary: tickets.issueSummary,
+        priority: tickets.priority,
+        status: tickets.status,
+        createdAt: tickets.createdAt,
+        resolvedAt: tickets.resolvedAt,
+        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        moduleName: sql<string>`(SELECT name FROM modules WHERE id = ${tickets.moduleId})`,
+      })
+        .from(tickets)
+        .where(and(
+          gte(tickets.createdAt, startDate),
+          sql`${tickets.createdAt} < ${endDate}`
+        ))
+        .orderBy(sql`${tickets.createdAt} DESC`);
+
+      // Calculate summary
+      const summary = {
+        total: periodTickets.length,
+        open: periodTickets.filter(t => ['open', 'new', 'in_progress'].includes(t.status)).length,
+        closed: periodTickets.filter(t => ['resolved', 'closed'].includes(t.status)).length,
+        critical: periodTickets.filter(t => t.priority === 'critical').length,
+      };
+
+      res.json({
+        tickets: periodTickets,
+        summary,
+        period: { start: startDate, end: endDate },
+      });
+    } catch (error) {
+      console.error("Error fetching period tickets:", error);
+      res.status(500).json({ message: "Failed to fetch period tickets" });
+    }
+  });
+
   // Get ticket detail with comments (solutions/remedies) and engineer report
   app.get("/api/analytics/ticket-detail/:ticketId", isAuthenticated, isAdmin, async (req, res) => {
     try {

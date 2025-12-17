@@ -1136,6 +1136,8 @@ function ImplementationDrilldown({ viewMode }: { viewMode: ViewMode }) {
 function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState<number | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<{ period: string; label: string } | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   
   const bucket = month ? 'month' : 'year';
   
@@ -1145,16 +1147,67 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
   const { data, isLoading } = useQuery<{ buckets: SupportBucket[]; items: any[]; overdueTickets: any[]; summary: any }>({
     queryKey: [`/api/admin/dashboard/support?${queryParams.toString()}`],
   });
+
+  // Fetch tickets for selected period
+  const { data: periodTickets, isLoading: isLoadingPeriodTickets } = useQuery<{ tickets: any[]; summary: any }>({
+    queryKey: ['/api/analytics/support-period-tickets', year, month, selectedPeriod?.period],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        year: year.toString(),
+        period: selectedPeriod?.period || '',
+      });
+      if (month) params.set('month', month.toString());
+      const res = await fetch(`/api/analytics/support-period-tickets?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch period tickets');
+      return res.json();
+    },
+    enabled: !!selectedPeriod,
+  });
+
+  // Fetch ticket details for the second level drill-down
+  const { data: ticketDetail, isLoading: isLoadingTicketDetail } = useQuery<any>({
+    queryKey: ['/api/analytics/ticket-detail', selectedTicketId],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/ticket-detail/${selectedTicketId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch ticket detail');
+      return res.json();
+    },
+    enabled: !!selectedTicketId,
+  });
   
-  const handleDrillDown = (period: string) => {
+  const handleDrillDown = (period: string, label: string) => {
     if (!month) {
+      // First level: Year → Month (weeks)
       const m = parseInt(period.split('-')[1]);
       setMonth(m);
+    } else {
+      // Second level: Show tickets for this week
+      setSelectedPeriod({ period, label });
     }
   };
   
   const handleBack = () => {
     if (month) setMonth(null);
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority?.toLowerCase()) {
+      case 'critical': return 'bg-red-100 text-red-700 border-red-200';
+      case 'high': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'resolved': case 'closed': return 'bg-green-100 text-green-700 border-green-200';
+      case 'in_progress': case 'in progress': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'open': case 'new': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'escalated': return 'bg-purple-100 text-purple-700 border-purple-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
   };
   
   return (
@@ -1275,7 +1328,7 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
                 {data.buckets.map((bucket) => {
                   const rate = bucket.opened > 0 ? ((bucket.closed / bucket.opened) * 100).toFixed(0) : '-';
                   return (
-                    <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period)}>
+                    <TableRow key={bucket.period} className="cursor-pointer hover:bg-muted/50" onClick={() => handleDrillDown(bucket.period, bucket.label)}>
                       <TableCell className="font-medium">{bucket.label}</TableCell>
                       <TableCell className="text-right text-blue-600">{bucket.opened}</TableCell>
                       <TableCell className="text-right text-green-600">{bucket.closed}</TableCell>
@@ -1335,6 +1388,308 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
           </CardContent>
         </Card>
       )}
+
+      {/* Period Tickets Dialog - Level 2 */}
+      <Dialog open={!!selectedPeriod} onOpenChange={(open) => !open && setSelectedPeriod(null)}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HeadphonesIcon className="h-5 w-5 text-primary" />
+              Support Tickets - {selectedPeriod?.label} ({year}{month ? ` / ${new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long' })}` : ''})
+            </DialogTitle>
+            <DialogDescription>
+              {periodTickets?.summary && (
+                <div className="flex gap-4 mt-2 flex-wrap">
+                  <Badge variant="outline">Total: {periodTickets.summary.total}</Badge>
+                  <Badge variant="outline" className="text-green-600">Closed: {periodTickets.summary.closed}</Badge>
+                  <Badge variant="outline" className="text-blue-600">Open: {periodTickets.summary.open}</Badge>
+                  {periodTickets.summary.critical > 0 && (
+                    <Badge variant="outline" className="text-red-600">Critical: {periodTickets.summary.critical}</Badge>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingPeriodTickets ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ticket #</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Issue Summary</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Assigned To</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(periodTickets?.tickets || []).map((ticket: any) => (
+                    <TableRow key={ticket.id} className="hover:bg-muted/50">
+                      <TableCell className="font-mono text-sm">{ticket.ticketNumber}</TableCell>
+                      <TableCell className="text-sm">{ticket.customerName}</TableCell>
+                      <TableCell className="max-w-[200px] truncate text-sm" title={ticket.issueSummary}>{ticket.issueSummary}</TableCell>
+                      <TableCell>
+                        <Badge className={getPriorityBadge(ticket.priority)}>{ticket.priority}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadge(ticket.status)}>{ticket.status?.replace(/_/g, ' ')}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{ticket.assignedEngineerName || 'Unassigned'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(ticket.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => setSelectedTicketId(ticket.id)}
+                          data-testid={`btn-view-ticket-${ticket.id}`}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!periodTickets?.tickets || periodTickets.tickets.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        No tickets found for this period
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Ticket Detail Dialog - Level 3 */}
+      <Dialog open={!!selectedTicketId} onOpenChange={(open) => !open && setSelectedTicketId(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Ticket Details - {ticketDetail?.ticket?.ticketNumber}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {isLoadingTicketDetail ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : ticketDetail?.ticket && (
+            <div className="space-y-6">
+              {/* Ticket Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Customer Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">{ticketDetail.ticket.customerName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3 w-3 text-muted-foreground" />
+                      <span>{ticketDetail.ticket.customerEmail}</span>
+                    </div>
+                    {ticketDetail.ticket.customerPhone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-3 w-3 text-muted-foreground" />
+                        <span>{ticketDetail.ticket.customerPhone}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Assigned Engineer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">{ticketDetail.ticket.assignedEngineerName || 'Unassigned'}</span>
+                    </div>
+                    {ticketDetail.ticket.assignedEngineerEmail && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        <span>{ticketDetail.ticket.assignedEngineerEmail}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Issue Details */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Issue Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={getPriorityBadge(ticketDetail.ticket.priority)}>
+                      {ticketDetail.ticket.priority?.toUpperCase()}
+                    </Badge>
+                    <Badge className={getStatusBadge(ticketDetail.ticket.status)}>
+                      {ticketDetail.ticket.status?.replace(/_/g, ' ').toUpperCase()}
+                    </Badge>
+                    {ticketDetail.ticket.moduleName && (
+                      <Badge variant="outline">{ticketDetail.ticket.moduleName}</Badge>
+                    )}
+                    {ticketDetail.ticket.escalationLevel > 1 && (
+                      <Badge className="bg-purple-100 text-purple-700">Level {ticketDetail.ticket.escalationLevel} Escalation</Badge>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm mb-1">Summary:</div>
+                    <p className="text-sm text-muted-foreground">{ticketDetail.ticket.issueSummary}</p>
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm mb-1">Description:</div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticketDetail.ticket.issueDescription}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    <span>Created: {new Date(ticketDetail.ticket.createdAt).toLocaleString()}</span>
+                    {ticketDetail.ticket.assignedAt && (
+                      <span>Assigned: {new Date(ticketDetail.ticket.assignedAt).toLocaleString()}</span>
+                    )}
+                    {ticketDetail.ticket.resolvedAt && (
+                      <span className="text-green-600">Resolved: {new Date(ticketDetail.ticket.resolvedAt).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {ticketDetail.resolutionTime && (
+                    <div className="text-sm">
+                      <span className="font-medium">Resolution Time: </span>
+                      <Badge variant="outline" className="text-green-600">
+                        {ticketDetail.resolutionTime.days > 0 && `${ticketDetail.resolutionTime.days}d `}
+                        {ticketDetail.resolutionTime.hours > 0 && `${ticketDetail.resolutionTime.hours}h `}
+                        {ticketDetail.resolutionTime.minutes}m
+                      </Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Solution & Engineer Reports (Comments) */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Solution & Engineer Reports ({ticketDetail.comments?.length || 0})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {ticketDetail.comments && ticketDetail.comments.length > 0 ? (
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-4">
+                        {ticketDetail.comments.map((comment: any) => (
+                          <div key={comment.id} className={`p-3 rounded-lg border ${comment.isInternal ? 'bg-yellow-50 border-yellow-200' : 'bg-muted/50'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <User className="h-3 w-3 text-muted-foreground" />
+                                <span className="font-medium text-sm">{comment.userName || 'System'}</span>
+                                {comment.isInternal && (
+                                  <Badge variant="outline" className="text-xs">Internal</Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm whitespace-pre-wrap">{comment.comment}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-8 text-sm">
+                      No solution or engineer reports available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Escalation History */}
+              {ticketDetail.escalations && ticketDetail.escalations.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-500" />
+                      Escalation History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {ticketDetail.escalations.map((esc: any) => (
+                        <div key={esc.id} className="flex items-center justify-between p-2 rounded border bg-orange-50">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline">Level {esc.fromLevel}</Badge>
+                            <ChevronRight className="h-4 w-4" />
+                            <Badge className="bg-orange-100 text-orange-700">Level {esc.toLevel}</Badge>
+                            {esc.reason && <span className="text-muted-foreground">- {esc.reason}</span>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {esc.escalatedByName && <span>by {esc.escalatedByName} | </span>}
+                            {new Date(esc.escalatedAt).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Customer Feedback */}
+              {ticketDetail.feedback && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Star className="h-4 w-4 text-yellow-500" />
+                      Customer Feedback
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-4 mb-2">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star 
+                            key={star} 
+                            className={`h-5 w-5 ${star <= ticketDetail.feedback!.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`} 
+                          />
+                        ))}
+                      </div>
+                      <Badge variant={ticketDetail.feedback.satisfied ? 'default' : 'outline'}>
+                        {ticketDetail.feedback.satisfied ? 'Satisfied' : 'Not Satisfied'}
+                      </Badge>
+                    </div>
+                    {ticketDetail.feedback.comments && (
+                      <p className="text-sm text-muted-foreground">{ticketDetail.feedback.comments}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
