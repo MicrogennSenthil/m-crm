@@ -1241,6 +1241,12 @@ export const developmentTasks = pgTable("development_tasks", {
   completionImageUrl: text("completion_image_url"), // Mandatory image evidence when marking complete/incomplete
   reassignToSupport: boolean("reassign_to_support").default(false), // Flag to indicate task should be reassigned to support
   supportTicketId: varchar("support_ticket_id"), // Linked support ticket after completion
+  // Incomplete and reassignment tracking
+  previousAssignedTo: varchar("previous_assigned_to").references(() => users.id), // Track previous assignee for penalty
+  incompleteMarkedAt: timestamp("incomplete_marked_at"),
+  incompleteMarkedBy: varchar("incomplete_marked_by").references(() => users.id),
+  incompleteReason: text("incomplete_reason"),
+  reassignmentCount: integer("reassignment_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1253,6 +1259,12 @@ export const insertDevelopmentTaskSchema = createInsertSchema(developmentTasks).
   penaltyPoints: true,
   penaltyReason: true,
   actualHours: true,
+  actualMinutes: true,
+  previousAssignedTo: true,
+  incompleteMarkedAt: true,
+  incompleteMarkedBy: true,
+  incompleteReason: true,
+  reassignmentCount: true,
   createdAt: true,
   updatedAt: true,
 });
