@@ -2376,10 +2376,18 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
   
   const [year, setYear] = useState<number>(currentYear);
   const [month, setMonth] = useState<number | null>(currentMonth);
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  const [fromDay, setFromDay] = useState<number | null>(null);
+  const [toDay, setToDay] = useState<number | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
+  
+  // Calculate days in the selected month
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+  const daysInMonth = month ? getDaysInMonth(year, month) : 31;
+  
+  // Build date strings from day selections
+  const fromDate = fromDay && month ? `${year}-${String(month).padStart(2, '0')}-${String(fromDay).padStart(2, '0')}` : '';
+  const toDate = toDay && month ? `${year}-${String(month).padStart(2, '0')}-${String(toDay).padStart(2, '0')}` : '';
 
   // Build query parameters with validation
   const buildQueryParams = () => {
@@ -2401,7 +2409,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
   const queryParams = buildQueryParams();
   
   const { data, isLoading } = useQuery<FrequentCallersData>({
-    queryKey: ['/api/analytics/frequent-callers', year, month, fromDate, toDate],
+    queryKey: ['/api/analytics/frequent-callers', year, month, fromDay, toDay],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/frequent-callers?${queryParams}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
@@ -2410,7 +2418,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
   });
 
   const { data: customerCalls, isLoading: isLoadingCalls } = useQuery<CustomerCallsData>({
-    queryKey: ['/api/analytics/customer-calls', selectedCustomer?.id, year, month, fromDate, toDate],
+    queryKey: ['/api/analytics/customer-calls', selectedCustomer?.id, year, month, fromDay, toDay],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/customer-calls/${selectedCustomer?.id}?${queryParams}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
@@ -2497,18 +2505,19 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                 <HeadphonesIcon className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-semibold">Frequent Caller Analysis</h2>
               </div>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Year:</span>
-                <Select value={year.toString()} onValueChange={(v) => { setYear(parseInt(v)); setFromDate(''); setToDate(''); }}>
-                  <SelectTrigger className="w-24" data-testid="select-year">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[2023, 2024, 2025, 2026].map(y => (
-                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="ml-auto flex items-center gap-1">
+                <span className="text-sm text-muted-foreground mr-2">Year:</span>
+                {[2023, 2024, 2025, 2026].map(y => (
+                  <Button
+                    key={y}
+                    size="sm"
+                    variant={year === y ? 'default' : 'outline'}
+                    onClick={() => { setYear(y); setFromDay(null); setToDay(null); }}
+                    data-testid={`btn-year-${y}`}
+                  >
+                    {y}
+                  </Button>
+                ))}
               </div>
             </div>
             
@@ -2519,7 +2528,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                 <Button
                   size="sm"
                   variant={month === null ? 'default' : 'outline'}
-                  onClick={() => { setMonth(null); setFromDate(''); setToDate(''); }}
+                  onClick={() => { setMonth(null); setFromDay(null); setToDay(null); }}
                   data-testid="btn-month-all"
                 >
                   All
@@ -2529,7 +2538,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                     key={m.value}
                     size="sm"
                     variant={month === m.value ? 'default' : 'outline'}
-                    onClick={() => { setMonth(m.value); setFromDate(''); setToDate(''); }}
+                    onClick={() => { setMonth(m.value); setFromDay(null); setToDay(null); }}
                     data-testid={`btn-month-${m.value}`}
                   >
                     {m.label.slice(0, 3)}
@@ -2538,52 +2547,64 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
               </div>
             </div>
             
-            {/* Row 3: Date Range */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-sm text-muted-foreground">Date Range:</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => { 
-                    const val = e.target.value;
-                    setFromDate(val);
-                    if (val) setMonth(null);
-                  }}
-                  className="px-3 py-1.5 text-sm border rounded-md bg-background"
-                  data-testid="input-from-date"
-                />
-                <span className="text-muted-foreground">to</span>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => { 
-                    const val = e.target.value;
-                    setToDate(val);
-                    if (val) setMonth(null);
-                  }}
-                  className="px-3 py-1.5 text-sm border rounded-md bg-background"
-                  data-testid="input-to-date"
-                />
-                {(fromDate || toDate) && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => { 
-                      setFromDate(''); 
-                      setToDate(''); 
-                      setMonth(currentMonth); // Reset to current month
-                    }}
-                    data-testid="btn-clear-dates"
-                  >
-                    Clear
-                  </Button>
+            {/* Row 3: Day Selection (only show when month is selected) */}
+            {month && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-sm text-muted-foreground w-16">From:</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+                      <Button
+                        key={`from-${day}`}
+                        size="sm"
+                        variant={fromDay === day ? 'default' : 'outline'}
+                        onClick={() => setFromDay(day)}
+                        className="w-8 h-8 p-0 text-xs"
+                        data-testid={`btn-from-day-${day}`}
+                      >
+                        {day}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-sm text-muted-foreground w-16">To:</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
+                      <Button
+                        key={`to-${day}`}
+                        size="sm"
+                        variant={toDay === day ? 'default' : 'outline'}
+                        onClick={() => setToDay(day)}
+                        className="w-8 h-8 p-0 text-xs"
+                        disabled={fromDay !== null && day < fromDay}
+                        data-testid={`btn-to-day-${day}`}
+                      >
+                        {day}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {(fromDay || toDay) && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      Selected: {fromDay ? `${fromDay}` : '--'} to {toDay ? `${toDay}` : '--'} {monthNames[month - 1]?.label} {year}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setFromDay(null); setToDay(null); }}
+                      data-testid="btn-clear-days"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                )}
+                {fromDay && toDay && fromDay > toDay && (
+                  <span className="text-xs text-red-500">From date must be before To date</span>
                 )}
               </div>
-              {fromDate && toDate && fromDate > toDate && (
-                <span className="text-xs text-red-500">From date must be before To date</span>
-              )}
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
