@@ -6445,11 +6445,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk re-index all unindexed knowledge base sources
   app.post("/api/knowledge-base/reindex-all", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      // Get all unindexed sources
-      const allSources = await storage.getKnowledgeBaseSources();
-      const unindexedSources = allSources.filter(s => !s.isIndexed && s.isActive);
+      const { force } = req.body || {};
       
-      if (unindexedSources.length === 0) {
+      // Get all sources - also check for missing embeddings
+      const allSources = await storage.getKnowledgeBaseSources();
+      
+      // Check which sources need reindexing: either not indexed OR have chunks without embeddings
+      let sourcesToIndex: typeof allSources = [];
+      
+      if (force) {
+        // Force mode: reindex all active sources
+        sourcesToIndex = allSources.filter(s => s.isActive);
+      } else {
+        // Check for sources that are unindexed OR have chunks without embeddings
+        for (const source of allSources.filter(s => s.isActive)) {
+          if (!source.isIndexed) {
+            sourcesToIndex.push(source);
+          } else {
+            // Check if any chunks are missing embeddings
+            const result = await db.execute(sql`
+              SELECT COUNT(*) as missing_count 
+              FROM knowledge_base_chunks 
+              WHERE source_id = ${source.id} AND embedding IS NULL
+            `);
+            const missingCount = parseInt((result.rows[0] as any)?.missing_count || '0');
+            if (missingCount > 0) {
+              sourcesToIndex.push(source);
+            }
+          }
+        }
+      }
+      
+      if (sourcesToIndex.length === 0) {
         return res.json({ message: "All documents are already indexed", indexed: 0 });
       }
 
@@ -6457,7 +6484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let totalChunks = 0;
       const errors: string[] = [];
 
-      for (const source of unindexedSources) {
+      for (const source of sourcesToIndex) {
         try {
           // Delete existing chunks if any
           await storage.deleteKnowledgeBaseChunksBySource(source.id);
