@@ -8847,13 +8847,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Determine final status
       const finalStatus = completionStatus === 'complete' ? 'completed' : 'incomplete';
       
+      // If marking as incomplete, apply penalty to the current assignee
+      if (completionStatus === 'incomplete' && existingTask.assignedTo) {
+        // Apply penalty points for incomplete work
+        const penaltyPoints = 5; // Configurable penalty points for incomplete work
+        await storage.updateDevelopmentTask(id, {
+          previousAssignedTo: existingTask.assignedTo,
+          incompleteMarkedAt: new Date(),
+          incompleteMarkedBy: userId,
+          incompleteReason: completionDescription.trim(),
+          penaltyApplied: true,
+          penaltyPoints: (existingTask.penaltyPoints || 0) + penaltyPoints,
+          penaltyReason: `Work marked incomplete: ${completionDescription.trim()}`,
+        });
+        
+        // Log penalty activity
+        await storage.logActivity({
+          userId,
+          entityType: 'development_task',
+          entityId: id,
+          action: 'penalty_applied',
+          description: `${penaltyPoints} penalty points applied to previous assignee for incomplete work on ${existingTask.taskNumber}`,
+        });
+      }
+      
       // Update task with completion details
       const updated = await storage.updateDevelopmentTask(id, {
         status: finalStatus,
         completionStatus,
         completionDescription: completionDescription.trim(),
         completionImageUrl,
-        completedAt: new Date(),
+        completedAt: completionStatus === 'complete' ? new Date() : null,
       });
       
       // Log activity
@@ -8909,6 +8933,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error completing development task:", error);
       res.status(500).json({ message: "Failed to complete development task" });
+    }
+  });
+
+  // Reassign incomplete development task to another engineer
+  app.post("/api/development/tasks/:id/reassign", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      const { assignedTo, deadline, notes } = req.body;
+      
+      if (!assignedTo) {
+        return res.status(400).json({ message: "New assignee is required" });
+      }
+      
+      const existingTask = await storage.getDevelopmentTask(id);
+      if (!existingTask) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Can only reassign incomplete tasks
+      if (existingTask.status !== 'incomplete') {
+        return res.status(400).json({ message: "Only incomplete tasks can be reassigned" });
+      }
+      
+      // Update task with new assignment
+      const updated = await storage.updateDevelopmentTask(id, {
+        assignedTo,
+        assignedBy: userId,
+        assignedAt: new Date(),
+        deadline: deadline ? new Date(deadline) : existingTask.deadline,
+        status: 'pending', // Reset to pending for new assignee
+        completionStatus: null, // Clear previous completion status
+        completionDescription: null,
+        completionImageUrl: null,
+        notes: notes || existingTask.notes,
+        reassignmentCount: (existingTask.reassignmentCount || 0) + 1,
+      });
+      
+      // Log activity
+      await storage.logActivity({
+        userId,
+        entityType: 'development_task',
+        entityId: id,
+        action: 'reassigned',
+        description: `Development task ${updated.taskNumber} reassigned after incomplete status`,
+      });
+      
+      // Add comment about reassignment
+      await storage.createDevelopmentTaskComment({
+        developmentTaskId: id,
+        userId,
+        content: `Task reassigned. Previous work was marked incomplete. ${notes ? `Notes: ${notes}` : ''}`,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error reassigning development task:", error);
+      res.status(500).json({ message: "Failed to reassign development task" });
     }
   });
 
