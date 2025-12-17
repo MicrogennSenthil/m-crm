@@ -8644,7 +8644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create development task (from Implementation, Support, or Tasks)
+  // Create development task (from Implementation, Support, Tasks, or Manual)
   app.post("/api/development/tasks", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -8652,10 +8652,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Parse deadline string to Date if provided
       const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
       
+      // For manual tasks, generate a sourceId if not provided
+      const sourceId = req.body.sourceId || (req.body.sourceType === 'manual' ? `manual-${Date.now()}` : null);
+      
+      if (!sourceId) {
+        return res.status(400).json({ message: "Source ID is required" });
+      }
+      
       const taskData = {
         ...req.body,
+        sourceId,
         deadline,
         assignedBy: userId,
+        assignedAt: req.body.assignedTo ? new Date() : null,
         status: 'pending',
         isOverdue: false,
         penaltyApplied: false,
