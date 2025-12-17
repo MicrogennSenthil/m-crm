@@ -4803,14 +4803,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertTicketSchema.parse(req.body);
       
-      // Auto-assignment if not specified - use configurable assignment settings
-      if (!validatedData.assignedEngineerId) {
-        const nextUser = await storage.getNextAssignableUser("tickets");
-        if (nextUser) {
-          validatedData.assignedEngineerId = nextUser.id;
-          // Update last assigned user for round-robin tracking
-          await storage.updateLastAssignedUser("tickets", nextUser.id);
-        }
+      // NO immediate auto-assignment - tickets stay unassigned for 10 minutes
+      // to allow manual allocation. After 10 minutes, the scheduler will auto-assign.
+      // Only mark as manual assignment if explicitly assigned by user
+      if (validatedData.assignedEngineerId) {
+        (validatedData as any).assignmentMethod = "manual";
       }
       
       const newTicket = await storage.createTicket(validatedData);
