@@ -60,6 +60,7 @@ const STATUS_CONFIG: Record<string, { color: string; icon: typeof Clock; label: 
   pending: { color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", icon: Clock, label: "Pending" },
   in_progress: { color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", icon: Code2, label: "In Progress" },
   completed: { color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", icon: CheckCircle2, label: "Completed" },
+  incomplete: { color: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", icon: XCircle, label: "Incomplete" },
   overdue: { color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", icon: AlertTriangle, label: "Overdue" },
 };
 
@@ -130,6 +131,9 @@ export default function DevelopmentTasks() {
   const [sourceTicketStatus, setSourceTicketStatus] = useState("");
   const [editingDeadline, setEditingDeadline] = useState(false);
   const [newDeadline, setNewDeadline] = useState("");
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [reassignToUserId, setReassignToUserId] = useState("");
+  const [reassignNotes, setReassignNotes] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const form = useForm<CreateTaskFormData>({
@@ -229,6 +233,38 @@ export default function DevelopmentTasks() {
       toast({ title: "Error", description: error?.message || "Failed to complete task", variant: "destructive" });
     },
   });
+
+  const reassignMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { assignedTo: string; notes?: string; deadline?: string } }) => {
+      return await apiRequest("POST", `/api/development/tasks/${id}/reassign`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Task reassigned successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/development/tasks"] });
+      setIsReassignDialogOpen(false);
+      setIsDetailDialogOpen(false);
+      setReassignToUserId("");
+      setReassignNotes("");
+      setSelectedTask(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to reassign task", variant: "destructive" });
+    },
+  });
+
+  const handleReassignTask = () => {
+    if (!selectedTask || !reassignToUserId) {
+      toast({ title: "Required", description: "Please select an engineer to assign", variant: "destructive" });
+      return;
+    }
+    reassignMutation.mutate({
+      id: selectedTask.id,
+      data: {
+        assignedTo: reassignToUserId,
+        notes: reassignNotes || undefined,
+      },
+    });
+  };
 
   const resetCompletionForm = () => {
     setCompletionDescription("");
@@ -393,6 +429,7 @@ export default function DevelopmentTasks() {
     if (activeTab === "pending" && task.status !== "pending") return false;
     if (activeTab === "in_progress" && task.status !== "in_progress") return false;
     if (activeTab === "completed" && task.status !== "completed") return false;
+    if (activeTab === "incomplete" && task.status !== "incomplete") return false;
     if (activeTab === "overdue" && task.status !== "overdue" && !task.isOverdue) return false;
     // Source tab filtering
     if (activeSourceTab !== "all" && task.sourceType !== activeSourceTab) return false;
@@ -467,6 +504,7 @@ export default function DevelopmentTasks() {
   const pendingCount = sourceFilteredTasks.filter(t => t.status === "pending").length;
   const inProgressCount = sourceFilteredTasks.filter(t => t.status === "in_progress").length;
   const completedCount = sourceFilteredTasks.filter(t => t.status === "completed").length;
+  const incompleteCount = sourceFilteredTasks.filter(t => t.status === "incomplete").length;
   const overdueCount = sourceFilteredTasks.filter(t => t.status === "overdue" || t.isOverdue).length;
 
   // Use development department users from API, fallback to all active users if none found
@@ -530,6 +568,9 @@ export default function DevelopmentTasks() {
           <TabsTrigger value="completed" data-testid="tab-completed">
             Completed ({completedCount})
           </TabsTrigger>
+          <TabsTrigger value="incomplete" data-testid="tab-incomplete" className={incompleteCount > 0 ? "text-orange-600" : ""}>
+            Incomplete ({incompleteCount})
+          </TabsTrigger>
           <TabsTrigger value="overdue" data-testid="tab-overdue" className={overdueCount > 0 ? "text-red-600" : ""}>
             Overdue ({overdueCount})
           </TabsTrigger>
@@ -555,6 +596,7 @@ export default function DevelopmentTasks() {
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="incomplete">Incomplete</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
             </SelectContent>
           </Select>
@@ -1021,6 +1063,15 @@ export default function DevelopmentTasks() {
                     </Button>
                   </>
                 )}
+                {selectedTask.status === "incomplete" && isAdmin && (
+                  <Button 
+                    onClick={() => setIsReassignDialogOpen(true)} 
+                    data-testid="button-reassign-task"
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    Reassign Task
+                  </Button>
+                )}
                 {(isAdmin || canDelete("development_tasks")) && (
                   <Button 
                     variant="destructive" 
@@ -1368,6 +1419,89 @@ export default function DevelopmentTasks() {
                 <>
                   {completionType === "complete" ? <CheckCircle2 className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
                   {completionType === "complete" ? "Mark Complete" : "Mark Incomplete"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassignment Dialog for Incomplete Tasks */}
+      <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-reassign-task">
+          <DialogHeader>
+            <DialogTitle data-testid="text-reassign-title">Reassign Incomplete Task</DialogTitle>
+            <DialogDescription>
+              Reassign this task to another engineer. The previous assignee has been penalized for incomplete work.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {selectedTask?.previousAssignedTo && (
+              <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                <p className="text-sm text-orange-700 dark:text-orange-300">
+                  <AlertTriangle className="h-4 w-4 inline mr-1" />
+                  Penalty applied: {selectedTask.penaltyPoints || 5} points for incomplete work
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label>Assign To Engineer *</Label>
+              <Select value={reassignToUserId} onValueChange={setReassignToUserId}>
+                <SelectTrigger data-testid="select-reassign-to">
+                  <SelectValue placeholder="Select engineer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {developers?.map(dev => (
+                    <SelectItem key={dev.id} value={dev.id}>
+                      {dev.firstName} {dev.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                value={reassignNotes}
+                onChange={(e) => setReassignNotes(e.target.value)}
+                placeholder="Add notes about the reassignment..."
+                rows={3}
+                data-testid="textarea-reassign-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setIsReassignDialogOpen(false);
+                setReassignToUserId("");
+                setReassignNotes("");
+              }}
+              disabled={reassignMutation.isPending}
+              data-testid="button-cancel-reassign"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleReassignTask}
+              disabled={reassignMutation.isPending || !reassignToUserId}
+              data-testid="button-confirm-reassign"
+            >
+              {reassignMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reassigning...
+                </>
+              ) : (
+                <>
+                  <User className="h-4 w-4 mr-2" />
+                  Reassign Task
                 </>
               )}
             </Button>
