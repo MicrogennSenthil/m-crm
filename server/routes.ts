@@ -9820,6 +9820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/support-period-tickets", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const { year, month, period } = req.query;
+      const { gte, and } = await import('drizzle-orm');
       const yearNum = parseInt(year as string) || new Date().getFullYear();
       const monthNum = month ? parseInt(month as string) : null;
       
