@@ -435,16 +435,24 @@ export default function DevelopmentTasks() {
     );
   }
 
-  const pendingCount = tasks?.filter(t => t.status === "pending").length || 0;
-  const inProgressCount = tasks?.filter(t => t.status === "in_progress").length || 0;
-  const completedCount = tasks?.filter(t => t.status === "completed").length || 0;
-  const overdueCount = tasks?.filter(t => t.status === "overdue" || t.isOverdue).length || 0;
-  
-  // Source type counts for categorization tabs
+  // Source type counts for categorization tabs (based on full task list)
   const supportCount = tasks?.filter(t => t.sourceType === "support").length || 0;
   const implementationCount = tasks?.filter(t => t.sourceType === "implementation").length || 0;
-  const taskCount = tasks?.filter(t => t.sourceType === "task").length || 0;
+  const taskModuleCount = tasks?.filter(t => t.sourceType === "task").length || 0;
   const manualCount = tasks?.filter(t => t.sourceType === "manual").length || 0;
+  
+  // First filter by source tab
+  const sourceFilteredTasks = tasks?.filter(t => {
+    if (activeSourceTab === "all") return true;
+    return t.sourceType === activeSourceTab;
+  }) || [];
+  
+  // Status counts should be based on source-filtered tasks
+  const sourceFilteredCount = sourceFilteredTasks.length;
+  const pendingCount = sourceFilteredTasks.filter(t => t.status === "pending").length;
+  const inProgressCount = sourceFilteredTasks.filter(t => t.status === "in_progress").length;
+  const completedCount = sourceFilteredTasks.filter(t => t.status === "completed").length;
+  const overdueCount = sourceFilteredTasks.filter(t => t.status === "overdue" || t.isOverdue).length;
 
   // Use development department users from API, fallback to all active users if none found
   const developers = (developmentUsers && developmentUsers.length > 0)
@@ -484,7 +492,7 @@ export default function DevelopmentTasks() {
             Implementation ({implementationCount})
           </TabsTrigger>
           <TabsTrigger value="task" data-testid="tab-source-task" className="text-green-600 dark:text-green-400">
-            Tasks ({taskCount})
+            Tasks ({taskModuleCount})
           </TabsTrigger>
           <TabsTrigger value="manual" data-testid="tab-source-manual">
             Manual ({manualCount})
@@ -496,7 +504,7 @@ export default function DevelopmentTasks() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex-wrap" data-testid="tabs-status">
           <TabsTrigger value="all" data-testid="tab-all">
-            All ({tasks?.length || 0})
+            All ({sourceFilteredCount})
           </TabsTrigger>
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending ({pendingCount})
