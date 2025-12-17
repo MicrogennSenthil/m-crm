@@ -282,6 +282,17 @@ export default function Support() {
                   <h3 className="font-medium text-sm mb-1 leading-tight">{ticket.customerName}</h3>
                   <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{ticket.issueSummary}</p>
                   <div className="flex flex-wrap items-center gap-2">
+                    {categoryTab === "all" && (
+                      <Badge 
+                        variant="outline" 
+                        className={isDevelopmentTicket(ticket) 
+                          ? "bg-purple-600/20 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400" 
+                          : "bg-blue-600/20 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
+                        }
+                      >
+                        {isDevelopmentTicket(ticket) ? "Development" : "Support"}
+                      </Badge>
+                    )}
                     <Badge variant={priorityConfig.variant} className={priorityConfig.className}>
                       {priorityConfig.label}
                     </Badge>
@@ -321,6 +332,7 @@ export default function Support() {
                   <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
               </TableHead>
+              {categoryTab === "all" && <TableHead>Source</TableHead>}
               <TableHead>Customer</TableHead>
               <TableHead>Issue Summary</TableHead>
               <TableHead>Priority</TableHead>
@@ -369,6 +381,19 @@ export default function Support() {
                         )}
                       </div>
                     </TableCell>
+                    {categoryTab === "all" && (
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={isDevelopmentTicket(ticket) 
+                            ? "bg-purple-600/20 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400" 
+                            : "bg-blue-600/20 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
+                          }
+                        >
+                          {isDevelopmentTicket(ticket) ? "Development" : "Support"}
+                        </Badge>
+                      </TableCell>
+                    )}
                     <TableCell>{ticket.customerName}</TableCell>
                     <TableCell className="max-w-xs truncate">{ticket.issueSummary}</TableCell>
                     <TableCell>
