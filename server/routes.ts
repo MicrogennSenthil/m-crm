@@ -9983,10 +9983,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all handlers (unique people who worked on this ticket via comments)
       const handlers = await db.select({
         userId: ticketComments.userId,
-        userName: sql<string>`DISTINCT ON (${ticketComments.userId}) (SELECT first_name || ' ' || last_name FROM users WHERE id = ${ticketComments.userId})`,
+        userName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${ticketComments.userId})`,
         userEmail: sql<string>`(SELECT email FROM users WHERE id = ${ticketComments.userId})`,
-        firstAction: sql<string>`MIN(${ticketComments.createdAt})`,
-        lastAction: sql<string>`MAX(${ticketComments.createdAt})`,
+        firstAction: sql<string>`MIN(${ticketComments.createdAt})::text`,
+        lastAction: sql<string>`MAX(${ticketComments.createdAt})::text`,
         actionCount: sql<number>`COUNT(*)::int`,
       })
         .from(ticketComments)
