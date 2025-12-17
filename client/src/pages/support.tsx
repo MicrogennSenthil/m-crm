@@ -100,6 +100,11 @@ export default function Support() {
     closed: 5,
   };
 
+  // Calculate age helper - defined before use
+  const calculateAge = (createdAt: Date | string) => {
+    return formatDistanceToNow(new Date(createdAt), { addSuffix: false });
+  };
+
   const filteredTickets = categoryFilteredTickets.filter((ticket) => {
     // Tab filtering
     if (activeTab === "open" && ticket.status !== "open") return false;
@@ -144,10 +149,6 @@ export default function Support() {
         return 0;
     }
   });
-
-  const calculateAge = (createdAt: Date | string) => {
-    return formatDistanceToNow(new Date(createdAt), { addSuffix: false });
-  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
