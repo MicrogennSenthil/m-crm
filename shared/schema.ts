@@ -1230,7 +1230,9 @@ export const developmentTasks = pgTable("development_tasks", {
   penaltyPoints: integer("penalty_points").default(0),
   penaltyReason: text("penalty_reason"),
   estimatedHours: integer("estimated_hours"),
+  estimatedMinutes: integer("estimated_minutes").default(0),
   actualHours: integer("actual_hours"),
+  actualMinutes: integer("actual_minutes").default(0),
   notes: text("notes"),
   attachments: text("attachments").array(),
   // Completion workflow fields
