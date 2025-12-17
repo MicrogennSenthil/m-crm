@@ -35,6 +35,7 @@ import {
   Gauge,
   RefreshCw,
   Code2,
+  Wallet,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -182,6 +183,23 @@ const menuGroups = [
         color: "text-violet-500",
         bgColor: "bg-violet-500/10",
         module: "development_tasks",
+      },
+    ],
+  },
+  {
+    id: "accounts",
+    label: "Accounts",
+    icon: Wallet,
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
+    items: [
+      {
+        title: "Contracts",
+        url: "/accounts/contracts",
+        icon: FileText,
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+        module: "contracts",
       },
     ],
   },

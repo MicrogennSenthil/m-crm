@@ -1,7 +1,7 @@
 # M-CRM Application
 
 ## Overview
-M-CRM is a comprehensive Customer Relationship Management platform designed to streamline sales pipeline management, implementation projects, and customer support. It aims to integrate these core business workflows seamlessly within an enterprise-grade application. The project vision is to provide a robust, production-ready solution built with Material Design 3 principles, offering a complete overview of the customer lifecycle from lead generation to ongoing support. Its capabilities include lead tracking, project management, multi-level support ticket handling, and detailed analytics, positioning it as a scalable tool for businesses to manage customer interactions efficiently.
+M-CRM is a comprehensive Customer Relationship Management platform designed to streamline sales pipeline management, implementation projects, and customer support. It integrates core business workflows within an enterprise-grade application, offering a complete overview of the customer lifecycle from lead generation to ongoing support. Key capabilities include lead tracking, project management, multi-level support ticket handling, and detailed analytics, positioning it as a scalable solution for efficient customer interaction management. The project aims to be a robust, production-ready solution built with Material Design 3 principles.
 
 ## User Preferences
 I prefer an iterative development approach where we focus on one module or feature at a time, ensuring it's robust before moving on. Please provide detailed explanations for any significant changes or architectural decisions. I like to review the plan before implementation, especially for database schema modifications or new API endpoints. Do not make changes to the existing UI color scheme or typography without explicit approval.
@@ -9,161 +9,41 @@ I prefer an iterative development approach where we focus on one module or featu
 ## System Architecture
 
 ### UI/UX Decisions
-The application adheres to Material Design 3 principles, utilizing the official M-CRM branding. The primary color is navy blue (`#1a2b6d` / HSL: 228, 65%, 26%) with golden yellow (`#f5a623` / HSL: 42, 92%, 55%) as the accent color for highlights and interactive elements. The Inter typeface is used for body text and JetBrains Mono for code/IDs. A consistent 4px grid system ensures harmonious spacing. The sidebar features the M-CRM logo with a navy blue background and light text for contrast. Shadcn UI components, themed to Material Design 3, are used for the interface, supporting full dark mode with automatic color adaptation. Interactions include clear hover and active states with smooth transitions, and accessibility is maintained through semantic HTML and ARIA labels.
+The application adheres to Material Design 3 principles, using navy blue (`#1a2b6d`) as the primary color and golden yellow (`#f5a623`) as the accent. Inter and JetBrains Mono typefaces are used for body text and code, respectively. Shadcn UI components, themed to Material Design 3, are used for the interface, supporting full dark mode. Accessibility is maintained through semantic HTML and ARIA labels.
 
 ### Technical Implementations
-The system is a full-stack application. The **frontend** is built with React 18 and TypeScript, styled with Tailwind CSS and Shadcn UI. State management is handled by TanStack React Query, featuring optimistic updates. React Hook Form with Zod validation manages forms, while Recharts is used for data visualization. Wouter provides SPA navigation. The **backend** is an Express.js application interacting with a PostgreSQL database via Drizzle ORM. Authentication is managed through Replit Auth (OpenID Connect), supporting various providers and ensuring role-based access control. The backend exposes over 40 API endpoints for various modules.
+M-CRM is a full-stack application. The **frontend** uses React 18, TypeScript, Tailwind CSS, and Shadcn UI. State management is handled by TanStack React Query, form management by React Hook Form with Zod, and data visualization by Recharts. The **backend** is an Express.js application interacting with PostgreSQL via Drizzle ORM. Authentication is managed through Replit Auth (OpenID Connect) with role-based access control.
 
 ### Feature Specifications
 The CRM includes:
-- **Authentication**: Replit Auth integration with Google, GitHub, X, Apple, and email/password, supporting role-based access (Sales Executive, Engineer, Support, Admin) and protected routes.
-- **Sales Management**: Kanban board for lead visualization (5 stages), lead tracking by source, follow-up system, quote management, and sales executive assignment.
-- **Implementation Module**: Project cards with progress tracking, multi-engineer assignment, 8-module checklist (Front Office, Power Automation, POS, Inventory, HR & Payroll, Accounting, CRM Integration, Reporting), training record logging, and project status tracking. New projects automatically initialize all 8 module records atomically.
-- **Support Ticket System**: Priority-based ticket creation (TKT-XXXXXX auto-numbering), round-robin or manual assignment, multi-level escalation (L1 → L2 → L3), conversation threading, status management, and ticket closure workflow with feedback.
-- **Task/Followup Management**: Complete task management with voice recording, video recording (camera capture), photo capture, file attachments, reminder date/time, due date/time, status tracking (pending/followup/get_information/completed), team member mentions, task assignment with assignment timestamp tracking, commenting system, and super admin oversight. Tasks display dates with full time information.
-- **Dashboard & Analytics**: Metric cards (Active Leads, Ongoing Implementations, Open Tickets, Monthly Closures), activity feed, quick access panels, My Tasks section, and trend indicators.
-- **Reports & Analytics**: Enhanced reports module with collapsible sidebar menu and three dedicated report pages:
-  - **Sales Reports** (/reports/sales): Fresh/Pending/Completed calls tabs, date range filtering, customer/status filters, stage-based stats cards
-  - **Implementation Reports** (/reports/implementation): Planning/In Progress/Completed tabs, project status tracking
-  - **Support Reports** (/reports/support): Open/In Progress/Resolved tabs, priority filtering, ticket metrics
-  - All reports include: export to CSV/Excel functionality, send via email (using Resend), search, and comprehensive filtering
-- **Settings & Customization**: User profile display, light/dark mode toggle, and placeholder for notification preferences.
-- **Master Data Management (Admin Only)**: CRUD operations for customer records and implementation modules via a tabbed interface.
-- **User Management (Admin Only)**: Comprehensive user administration with 4 sub-modules accessible via collapsible sidebar menu:
-  - **User Master** (/admin/users): CRUD operations for system users, role assignment, active status management
-  - **User Role Master** (/admin/user-roles): Create and manage user roles with custom names and descriptions
-  - **User Rights Allocation** (/admin/user-rights): Configure module permissions per role (View/Create/Edit/Delete) with bulk update capability
-  - **User Approval** (/admin/user-approval): Approval workflow for new users - approve, reject, or revoke user access with audit logging
-- **Knowledge Base (Multilingual)**: AI-powered semantic search documentation system with pgvector:
-  - **Admin Page** (/knowledge-base): Document management with category, content type, and language selection
-  - **Search Page** (/knowledge-base/search): Natural language search with language filtering and cross-language toggle
-  - **Features**: OpenAI text-embedding-3-small (1536 dimensions), 800-1000 token chunks with 200 overlap, 15 supported languages (English, Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Tamil, Telugu, Russian, Italian, Dutch)
-  - **Multilingual Support**: Translation group IDs link documents across languages, language-specific embeddings for accurate retrieval, optional cross-language search
-- **Development Module**: Work assignment system for developers with cross-module integration:
-  - **Dashboard** (/development): Enhanced metrics with Work Status Categories (Yet to Work, On Process, Pending, Completed) and Source Breakdown (from Support, Implementation, Tasks, Manual). Shows task counts by status, priority, overdue status, and source type.
-  - **Tasks Page** (/development/tasks): Full CRUD operations with dual-tier tab filtering:
-    - **Source Categorization Tabs** (first row): All Sources, Support, Implementation, Tasks, Manual - filter by where the task originated
-    - **Status Tabs** (second row): All, Pending, In Progress, Completed, Overdue - filter by current task status
-    - Additional dropdown filters for priority, engineer assignment, and overdue status
-    - Supports attachment viewing (images, videos, voice recordings) from source modules
-  - **Cross-Module Integration**: "Assign to Development" button in Implementation projects, Support tickets, and Tasks modals. Tickets with active development tasks display "Development" status badge and cannot be closed until dev work completes.
-  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours (hours + minutes) and actual hours tracking, commenting system
-  - **Incomplete Status Workflow**: Tasks can be marked "incomplete" with 5-point penalty applied to assignee. Incomplete tasks can be reassigned by admin/superadmin to another engineer. Tracks previousAssignedTo and reassignmentCount for audit purposes.
-  - **Source Types**: implementation (from projects), support (from tickets), task (from tasks module), manual (created directly)
-  - **Shared Component**: AssignToDevelopmentDialog for consistent assignment workflow across modules
+-   **Authentication**: Replit Auth with various providers and role-based access (Sales Executive, Engineer, Support, Admin).
+-   **Sales Management**: Kanban board for leads, tracking, follow-ups, and quote management.
+-   **Implementation Module**: Project cards with progress tracking, multi-engineer assignment, 8-module checklist, and training record logging.
+-   **Support Ticket System**: Priority-based ticket creation, assignment, multi-level escalation, conversation threading, and status management.
+-   **Task/Followup Management**: Comprehensive task management with multimedia attachments, reminders, due dates, team mentions, and commenting.
+-   **Dashboard & Analytics**: Metric cards, activity feed, quick access panels, and trend indicators.
+-   **Reports & Analytics**: Sales, Implementation, and Support reports with filtering, export (CSV/Excel), and email functionality (Resend).
+-   **Settings & Customization**: User profiles and light/dark mode toggle.
+-   **Master Data Management (Admin Only)**: CRUD for customer records and implementation modules.
+-   **User Management (Admin Only)**: Comprehensive user administration including user master, role master, rights allocation, and approval workflows.
+-   **Knowledge Base (Multilingual)**: AI-powered semantic search documentation with pgvector, supporting 15 languages and cross-language search.
+-   **Development Module**: Work assignment system for developers integrated with Support, Implementation, and Tasks. Features include task tracking, penalty points for missed deadlines, and attachment viewing.
+-   **Contract Management Module**: Track customer contracts, renewals, payment follow-ups, with configurable contract types, billing frequencies, and email integration for reminders.
 
 ### System Design Choices
-The database schema consists of 14 tables, including `users` (with role-based access), `leads`, `projects`, `tickets`, `quotes`, `followUps`, and `trainingRecords`, among others, providing a comprehensive data model for the CRM. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, comprehensive activity logging for audit trails, and robust validation using Zod on both frontend and backend. Error handling is graceful with toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for quote emails, ticket closure feedback, training confirmations, and welcome emails for new users. The application is also optimized for mobile responsiveness across various viewports.
+The database schema comprises 14 tables. Core business logic includes round-robin assignment for support tickets, a three-tier escalation matrix, activity logging, and Zod validation. Error handling uses toast notifications, and optimistic updates enhance UI responsiveness. Email automation is integrated using Resend for various communications. The application is optimized for mobile responsiveness.
 
 ### Security Architecture
-- **Authorization Middleware**: 
-  - `isAdmin` middleware checks both legacy `users.role` field AND `user_role_assignments` table for admin role
-  - `requirePermission(moduleName, action)` middleware enforces module-level permissions (view/create/edit/delete) based on `user_role_rights` table
-  - Super admin (senthil@microgenn.com) bypasses all permission checks
-  - Permission caching: 5-minute TTL with automatic cache invalidation when role assignments or rights are modified
-- **Dual Role System Support**: 
-  - New users get roles via `user_role_assignments` table (preferred)
-  - Legacy users with `users.role` field are automatically recognized - the system looks up matching role in `user_roles` table
-  - Both systems work seamlessly together with no migration required
-- **Protected Routes**: 
-  - Leads, Projects, Tickets, Tasks: Now use `requirePermission` middleware for granular access control
-  - Users management, roles, departments require `isAdmin` for modifications
-- **Super Admin**: The super admin is permanently set as `senthil@microgenn.com` with full system access.
-- **Read Access**: Authenticated users can view user management data (for dropdown selections), but cannot modify it without admin role.
-- **Frontend Permission Hook**: `usePermissions` hook at `client/src/hooks/use-permissions.ts` provides `can(module, action)`, `canView`, `canCreate`, `canEdit`, `canDelete` helpers for UI permission gating.
+-   **Authorization Middleware**: `isAdmin` and `requirePermission(moduleName, action)` middlewares enforce role-based and module-level permissions.
+-   **Dual Role System Support**: Seamless integration for both new users (via `user_role_assignments`) and legacy users (via `users.role`).
+-   **Super Admin**: `senthil@microgenn.com` has full system access.
+-   **Frontend Permission Hook**: `usePermissions` hook provides UI permission gating.
 
 ## External Dependencies
-- **Authentication**: Replit Auth (OpenID Connect)
-- **Database**: PostgreSQL with pgvector extension (via Drizzle ORM)
-- **AI/Embeddings**: OpenAI text-embedding-3-small for semantic search
-- **Email Service**: SMTP (Gmail/Custom) or Resend (configurable)
-- **UI Components**: Shadcn UI (built on Radix UI)
-- **Icons**: Lucide React
-- **Hosting**: Replit (development) / Hostinger VPS (production)
-
-## Email Configuration
-
-The application supports two email providers with automatic fallback:
-
-### Option 1: SMTP (Gmail or Custom) - Recommended for Production
-Set these environment variables:
-```
-SMTP_HOST=smtp.gmail.com          # SMTP server hostname
-SMTP_PORT=587                      # 587 for TLS, 465 for SSL
-SMTP_USER=your-email@gmail.com     # Email username
-SMTP_PASS=your-app-password        # App Password (not regular password)
-SMTP_FROM="Microgenn CRM <your-email@gmail.com>"  # Sender display name
-SMTP_SECURE=false                  # "true" for SSL (port 465), "false" for TLS (port 587)
-```
-
-**Gmail App Password Setup:**
-1. Go to https://myaccount.google.com/apppasswords
-2. Sign in with 2-Factor Authentication enabled
-3. Select "Mail" as the app
-4. Copy the 16-character password
-
-### Option 2: Resend API (Fallback)
-Set this environment variable:
-```
-RESEND_API_KEY=re_xxxxxxxxxxxx
-```
-Note: Resend test domain only sends to verified email (snayagamk@gmail.com). Verify a custom domain at resend.com/domains for production use.
-
-### Priority
-SMTP takes priority if configured. Falls back to Resend if SMTP environment variables are not set.
-
-## VPS Deployment
-
-The application is now **VPS-ready** with dual-mode configuration for seamless deployment.
-
-### Deployment Guide
-See **DEPLOYMENT.md** for complete step-by-step VPS deployment instructions.
-
-### Key Configuration Modes
-
-**Authentication Mode:**
-- **Replit**: Uses Replit OIDC (auto-detected via REPL_ID)
-- **VPS**: Uses local email/password authentication only
-- Control: `USE_REPLIT_AUTH=true/false` (auto-detected)
-
-**Object Storage Mode:**
-- **Replit**: Uses Replit sidecar for GCS credentials
-- **VPS**: Uses GCS service account key (`GCS_SERVICE_ACCOUNT_KEY`)
-- Control: `USE_REPLIT_STORAGE=true/false` (auto-detected)
-
-**Session Cookies:**
-- **Production**: Secure cookies enabled by default
-- **Development**: Can disable with `SECURE_COOKIES=false`
-
-**Server Port:**
-- **Replit**: Port 5000 (default)
-- **VPS**: Port 3000 (default, configurable via PORT)
-
-### VPS Environment Variables
-```
-# Required
-DATABASE_URL=postgresql://user:pass@localhost:5432/mcrm_db
-SESSION_SECRET=your-64-char-secret
-NODE_ENV=production
-OPENAI_API_KEY=sk-xxx
-
-# Email (SMTP recommended)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=email@gmail.com
-SMTP_PASS=app-password
-SMTP_FROM="M-CRM <email@gmail.com>"
-
-# Optional - Object Storage
-GCS_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
-GCS_PROJECT_ID=your-project
-PUBLIC_OBJECT_SEARCH_PATHS=/bucket/public
-PRIVATE_OBJECT_DIR=/bucket/.private
-```
-
-### PM2 Production Commands
-```bash
-pm2 start ecosystem.config.js --env production
-pm2 logs mcrm
-pm2 restart mcrm
-```
+-   **Authentication**: Replit Auth (OpenID Connect)
+-   **Database**: PostgreSQL with pgvector extension (via Drizzle ORM)
+-   **AI/Embeddings**: OpenAI text-embedding-3-small
+-   **Email Service**: SMTP (Gmail/Custom) or Resend
+-   **UI Components**: Shadcn UI (built on Radix UI)
+-   **Icons**: Lucide React
+-   **Hosting**: Replit (development) / Hostinger VPS (production)

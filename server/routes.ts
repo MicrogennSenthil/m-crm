@@ -9005,7 +9005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
   
   // Get all contract types
-  app.get("/api/contract-types", isAuthenticated, async (req, res) => {
+  app.get("/api/contract-types", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const types = await db.select().from(contractTypes).orderBy(contractTypes.sortOrder);
       res.json(types);
@@ -9016,7 +9016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single contract type
-  app.get("/api/contract-types/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/contract-types/:id", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const [type] = await db.select().from(contractTypes).where(eq(contractTypes.id, req.params.id));
       if (!type) {
@@ -9029,8 +9029,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create contract type (admin only)
-  app.post("/api/contract-types", isAuthenticated, isAdmin, async (req: any, res) => {
+  // Create contract type (admin only with create permission)
+  app.post("/api/contract-types", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
     try {
       const validated = insertContractTypeSchema.parse(req.body);
       const [created] = await db.insert(contractTypes).values(validated).returning();
@@ -9053,8 +9053,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update contract type (admin only)
-  app.patch("/api/contract-types/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+  // Update contract type (with edit permission)
+  app.patch("/api/contract-types/:id", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
       const [updated] = await db.update(contractTypes)
         .set({ ...req.body, updatedAt: new Date() })
@@ -9080,8 +9080,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete contract type (admin only)
-  app.delete("/api/contract-types/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+  // Delete contract type (with delete permission)
+  app.delete("/api/contract-types/:id", isAuthenticated, requirePermission("contracts", "delete"), async (req: any, res) => {
     try {
       const [type] = await db.select().from(contractTypes).where(eq(contractTypes.id, req.params.id));
       if (!type) {
@@ -9117,7 +9117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Get all customer contracts with customer and type details
-  app.get("/api/customer-contracts", isAuthenticated, async (req, res) => {
+  app.get("/api/customer-contracts", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const { customerId, status, contractTypeId, expiringDays } = req.query;
       
@@ -9164,7 +9164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get contracts for a specific customer
-  app.get("/api/customers/:customerId/contracts", isAuthenticated, async (req, res) => {
+  app.get("/api/customers/:customerId/contracts", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const contracts = await db.select({
         contract: customerContracts,
@@ -9181,7 +9181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single contract with details
-  app.get("/api/customer-contracts/:id", isAuthenticated, async (req, res) => {
+  app.get("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const [contract] = await db.select({
         contract: customerContracts,
@@ -9203,7 +9203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create customer contract
-  app.post("/api/customer-contracts", isAuthenticated, async (req: any, res) => {
+  app.post("/api/customer-contracts", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
     try {
       const validated = insertCustomerContractSchema.parse(req.body);
       const contractNumber = await generateContractNumber();
@@ -9230,7 +9230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update customer contract
-  app.patch("/api/customer-contracts/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
       const [updated] = await db.update(customerContracts)
         .set({ ...req.body, updatedAt: new Date() })
@@ -9257,7 +9257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete customer contract
-  app.delete("/api/customer-contracts/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.delete("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "delete"), async (req: any, res) => {
     try {
       const [contract] = await db.select().from(customerContracts).where(eq(customerContracts.id, req.params.id));
       if (!contract) {
@@ -9282,7 +9282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get contracts expiring soon (for accounts dashboard)
-  app.get("/api/contracts/expiring", isAuthenticated, async (req, res) => {
+  app.get("/api/contracts/expiring", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
       const futureDate = new Date();
@@ -9314,7 +9314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
 
   // Get follow-ups for a contract
-  app.get("/api/customer-contracts/:contractId/followups", isAuthenticated, async (req, res) => {
+  app.get("/api/customer-contracts/:contractId/followups", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const { desc } = await import('drizzle-orm');
       const followups = await db.select()
@@ -9330,7 +9330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create contract follow-up (log payment or reminder)
-  app.post("/api/customer-contracts/:contractId/followups", isAuthenticated, async (req: any, res) => {
+  app.post("/api/customer-contracts/:contractId/followups", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
       const validated = insertContractFollowupSchema.parse({
         ...req.body,
@@ -9370,7 +9370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send renewal reminder email
-  app.post("/api/customer-contracts/:id/send-renewal", isAuthenticated, async (req: any, res) => {
+  app.post("/api/customer-contracts/:id/send-renewal", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
       const [result] = await db.select({
         contract: customerContracts,
@@ -9442,7 +9442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get contracts needing follow-up (for accounts team)
-  app.get("/api/contracts/pending-followup", isAuthenticated, async (req, res) => {
+  app.get("/api/contracts/pending-followup", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const { lte, or, isNull } = await import('drizzle-orm');
       const today = new Date();
