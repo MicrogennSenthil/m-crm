@@ -41,6 +41,12 @@ import {
   smtpConfigSchema,
   insertPointCategorySchema,
   insertPointCategoryDepartmentSettingSchema,
+  insertContractTypeSchema,
+  insertCustomerContractSchema,
+  insertContractFollowupSchema,
+  contractTypes,
+  customerContracts,
+  contractFollowups,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -8991,6 +8997,471 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error reassigning development task:", error);
       res.status(500).json({ message: "Failed to reassign development task" });
+    }
+  });
+
+  // =============================================
+  // CONTRACT TYPES MASTER ROUTES (Admin Only)
+  // =============================================
+  
+  // Get all contract types
+  app.get("/api/contract-types", isAuthenticated, async (req, res) => {
+    try {
+      const types = await db.select().from(contractTypes).orderBy(contractTypes.sortOrder);
+      res.json(types);
+    } catch (error) {
+      console.error("Error fetching contract types:", error);
+      res.status(500).json({ message: "Failed to fetch contract types" });
+    }
+  });
+
+  // Get single contract type
+  app.get("/api/contract-types/:id", isAuthenticated, async (req, res) => {
+    try {
+      const [type] = await db.select().from(contractTypes).where(eq(contractTypes.id, req.params.id));
+      if (!type) {
+        return res.status(404).json({ message: "Contract type not found" });
+      }
+      res.json(type);
+    } catch (error) {
+      console.error("Error fetching contract type:", error);
+      res.status(500).json({ message: "Failed to fetch contract type" });
+    }
+  });
+
+  // Create contract type (admin only)
+  app.post("/api/contract-types", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const validated = insertContractTypeSchema.parse(req.body);
+      const [created] = await db.insert(contractTypes).values(validated).returning();
+      
+      await storage.logActivity({
+        entityType: "contract_type",
+        entityId: created.id,
+        action: "created",
+        description: `Contract type created: ${created.displayName}`,
+        userId: req.user?.id,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating contract type:", error);
+      if (error.code === '23505') {
+        return res.status(400).json({ message: "A contract type with this name already exists" });
+      }
+      res.status(400).json({ message: "Failed to create contract type" });
+    }
+  });
+
+  // Update contract type (admin only)
+  app.patch("/api/contract-types/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const [updated] = await db.update(contractTypes)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(contractTypes.id, req.params.id))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Contract type not found" });
+      }
+      
+      await storage.logActivity({
+        entityType: "contract_type",
+        entityId: updated.id,
+        action: "updated",
+        description: `Contract type updated: ${updated.displayName}`,
+        userId: req.user?.id,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating contract type:", error);
+      res.status(400).json({ message: "Failed to update contract type" });
+    }
+  });
+
+  // Delete contract type (admin only)
+  app.delete("/api/contract-types/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const [type] = await db.select().from(contractTypes).where(eq(contractTypes.id, req.params.id));
+      if (!type) {
+        return res.status(404).json({ message: "Contract type not found" });
+      }
+      
+      await db.delete(contractTypes).where(eq(contractTypes.id, req.params.id));
+      
+      await storage.logActivity({
+        entityType: "contract_type",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Contract type deleted: ${type.displayName}`,
+        userId: req.user?.id,
+      });
+      
+      res.json({ message: "Contract type deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting contract type:", error);
+      res.status(500).json({ message: "Failed to delete contract type" });
+    }
+  });
+
+  // =============================================
+  // CUSTOMER CONTRACTS ROUTES
+  // =============================================
+
+  // Generate contract number
+  async function generateContractNumber(): Promise<string> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(customerContracts);
+    const count = Number(result[0]?.count || 0) + 1;
+    return `CON-${String(count).padStart(6, '0')}`;
+  }
+
+  // Get all customer contracts with customer and type details
+  app.get("/api/customer-contracts", isAuthenticated, async (req, res) => {
+    try {
+      const { customerId, status, contractTypeId, expiringDays } = req.query;
+      
+      let query = db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      }).from(customerContracts);
+      
+      const conditions = [];
+      if (customerId) {
+        conditions.push(eq(customerContracts.customerId, customerId as string));
+      }
+      if (status) {
+        conditions.push(eq(customerContracts.status, status as string));
+      }
+      if (contractTypeId) {
+        conditions.push(eq(customerContracts.contractTypeId, contractTypeId as string));
+      }
+      
+      if (conditions.length > 0) {
+        const { and } = await import('drizzle-orm');
+        query = query.where(and(...conditions)) as typeof query;
+      }
+      
+      let contracts = await query;
+      
+      // Filter by expiring within X days if specified
+      if (expiringDays) {
+        const days = parseInt(expiringDays as string);
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + days);
+        contracts = contracts.filter(c => {
+          const endDate = new Date(c.contract.endDate);
+          return endDate <= futureDate && endDate >= new Date();
+        });
+      }
+      
+      res.json(contracts);
+    } catch (error) {
+      console.error("Error fetching customer contracts:", error);
+      res.status(500).json({ message: "Failed to fetch customer contracts" });
+    }
+  });
+
+  // Get contracts for a specific customer
+  app.get("/api/customers/:customerId/contracts", isAuthenticated, async (req, res) => {
+    try {
+      const contracts = await db.select({
+        contract: customerContracts,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(eq(customerContracts.customerId, req.params.customerId));
+      
+      res.json(contracts);
+    } catch (error) {
+      console.error("Error fetching customer contracts:", error);
+      res.status(500).json({ message: "Failed to fetch customer contracts" });
+    }
+  });
+
+  // Get single contract with details
+  app.get("/api/customer-contracts/:id", isAuthenticated, async (req, res) => {
+    try {
+      const [contract] = await db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(eq(customerContracts.id, req.params.id));
+      
+      if (!contract) {
+        return res.status(404).json({ message: "Contract not found" });
+      }
+      
+      res.json(contract);
+    } catch (error) {
+      console.error("Error fetching contract:", error);
+      res.status(500).json({ message: "Failed to fetch contract" });
+    }
+  });
+
+  // Create customer contract
+  app.post("/api/customer-contracts", isAuthenticated, async (req: any, res) => {
+    try {
+      const validated = insertCustomerContractSchema.parse(req.body);
+      const contractNumber = await generateContractNumber();
+      
+      const [created] = await db.insert(customerContracts).values({
+        ...validated,
+        contractNumber,
+        createdBy: req.user?.id,
+      }).returning();
+      
+      await storage.logActivity({
+        entityType: "customer_contract",
+        entityId: created.id,
+        action: "created",
+        description: `Customer contract created: ${contractNumber}`,
+        userId: req.user?.id,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating customer contract:", error);
+      res.status(400).json({ message: error.message || "Failed to create customer contract" });
+    }
+  });
+
+  // Update customer contract
+  app.patch("/api/customer-contracts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const [updated] = await db.update(customerContracts)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(customerContracts.id, req.params.id))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Contract not found" });
+      }
+      
+      await storage.logActivity({
+        entityType: "customer_contract",
+        entityId: updated.id,
+        action: "updated",
+        description: `Customer contract updated: ${updated.contractNumber}`,
+        userId: req.user?.id,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating customer contract:", error);
+      res.status(400).json({ message: "Failed to update customer contract" });
+    }
+  });
+
+  // Delete customer contract
+  app.delete("/api/customer-contracts/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const [contract] = await db.select().from(customerContracts).where(eq(customerContracts.id, req.params.id));
+      if (!contract) {
+        return res.status(404).json({ message: "Contract not found" });
+      }
+      
+      await db.delete(customerContracts).where(eq(customerContracts.id, req.params.id));
+      
+      await storage.logActivity({
+        entityType: "customer_contract",
+        entityId: req.params.id,
+        action: "deleted",
+        description: `Customer contract deleted: ${contract.contractNumber}`,
+        userId: req.user?.id,
+      });
+      
+      res.json({ message: "Contract deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting customer contract:", error);
+      res.status(500).json({ message: "Failed to delete customer contract" });
+    }
+  });
+
+  // Get contracts expiring soon (for accounts dashboard)
+  app.get("/api/contracts/expiring", isAuthenticated, async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + days);
+      
+      const { and, gte, lte } = await import('drizzle-orm');
+      
+      const expiringContracts = await db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(and(
+          gte(customerContracts.endDate, new Date()),
+          lte(customerContracts.endDate, futureDate),
+          eq(customerContracts.status, 'active')
+        ));
+      
+      res.json(expiringContracts);
+    } catch (error) {
+      console.error("Error fetching expiring contracts:", error);
+      res.status(500).json({ message: "Failed to fetch expiring contracts" });
+    }
+  });
+
+  // =============================================
+  // CONTRACT FOLLOW-UP ROUTES
+  // =============================================
+
+  // Get follow-ups for a contract
+  app.get("/api/customer-contracts/:contractId/followups", isAuthenticated, async (req, res) => {
+    try {
+      const { desc } = await import('drizzle-orm');
+      const followups = await db.select()
+        .from(contractFollowups)
+        .where(eq(contractFollowups.contractId, req.params.contractId))
+        .orderBy(desc(contractFollowups.followupDate));
+      
+      res.json(followups);
+    } catch (error) {
+      console.error("Error fetching contract follow-ups:", error);
+      res.status(500).json({ message: "Failed to fetch contract follow-ups" });
+    }
+  });
+
+  // Create contract follow-up (log payment or reminder)
+  app.post("/api/customer-contracts/:contractId/followups", isAuthenticated, async (req: any, res) => {
+    try {
+      const validated = insertContractFollowupSchema.parse({
+        ...req.body,
+        contractId: req.params.contractId,
+      });
+      
+      const [created] = await db.insert(contractFollowups).values({
+        ...validated,
+        createdBy: req.user?.id,
+      }).returning();
+      
+      // If payment was recorded, update the contract's last payment info
+      if (validated.paymentStatus === 'paid' && validated.paymentAmount) {
+        await db.update(customerContracts)
+          .set({
+            lastPaymentDate: validated.paymentDate || new Date(),
+            lastPaymentAmount: validated.paymentAmount,
+            nextFollowupDate: validated.nextFollowupDate,
+            updatedAt: new Date(),
+          })
+          .where(eq(customerContracts.id, req.params.contractId));
+      }
+      
+      await storage.logActivity({
+        entityType: "contract_followup",
+        entityId: created.id,
+        action: "created",
+        description: `Contract follow-up logged: ${validated.followupType}`,
+        userId: req.user?.id,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating contract follow-up:", error);
+      res.status(400).json({ message: error.message || "Failed to create follow-up" });
+    }
+  });
+
+  // Send renewal reminder email
+  app.post("/api/customer-contracts/:id/send-renewal", isAuthenticated, async (req: any, res) => {
+    try {
+      const [result] = await db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(eq(customerContracts.id, req.params.id));
+      
+      if (!result) {
+        return res.status(404).json({ message: "Contract not found" });
+      }
+      
+      const { contract, customerName, contractTypeName } = result;
+      
+      if (!contract.contactEmail) {
+        return res.status(400).json({ message: "No contact email specified for this contract" });
+      }
+      
+      // Send renewal reminder email
+      const endDate = new Date(contract.endDate);
+      const emailHtml = `
+        <h2>Contract Renewal Reminder</h2>
+        <p>Dear ${contract.contactPerson || 'Valued Customer'},</p>
+        <p>This is a reminder that your <strong>${contractTypeName}</strong> contract is approaching renewal.</p>
+        <br/>
+        <table style="border-collapse: collapse; margin: 20px 0;">
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract Number:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${contract.contractNumber}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Company:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${customerName}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract Type:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${contractTypeName}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract Amount:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${contract.currency} ${contract.amount.toLocaleString()}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>End Date:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${endDate.toLocaleDateString()}</td></tr>
+        </table>
+        <br/>
+        <p>Please contact us to renew your contract and ensure uninterrupted service.</p>
+        <p>Best Regards,<br/>M-CRM Support Team</p>
+      `;
+      
+      await sendEmail({
+        to: contract.contactEmail,
+        subject: `Contract Renewal Reminder - ${contract.contractNumber}`,
+        html: emailHtml,
+      });
+      
+      // Log the follow-up
+      await db.insert(contractFollowups).values({
+        contractId: contract.id,
+        followupDate: new Date(),
+        followupType: 'renewal',
+        notes: `Renewal reminder email sent to ${contract.contactEmail}`,
+        emailSent: true,
+        emailSentAt: new Date(),
+        createdBy: req.user?.id,
+      });
+      
+      await storage.logActivity({
+        entityType: "customer_contract",
+        entityId: contract.id,
+        action: "renewal_reminder_sent",
+        description: `Renewal reminder sent for contract ${contract.contractNumber}`,
+        userId: req.user?.id,
+      });
+      
+      res.json({ message: "Renewal reminder sent successfully" });
+    } catch (error) {
+      console.error("Error sending renewal reminder:", error);
+      res.status(500).json({ message: "Failed to send renewal reminder" });
+    }
+  });
+
+  // Get contracts needing follow-up (for accounts team)
+  app.get("/api/contracts/pending-followup", isAuthenticated, async (req, res) => {
+    try {
+      const { lte, or, isNull } = await import('drizzle-orm');
+      const today = new Date();
+      
+      const pendingFollowups = await db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(or(
+          lte(customerContracts.nextFollowupDate, today),
+          isNull(customerContracts.nextFollowupDate)
+        ));
+      
+      res.json(pendingFollowups);
+    } catch (error) {
+      console.error("Error fetching pending follow-ups:", error);
+      res.status(500).json({ message: "Failed to fetch pending follow-ups" });
     }
   });
 
