@@ -316,7 +316,7 @@ function PasswordChangeCard({ user }: { user: any }) {
 }
 
 export default function Settings() {
-  const { user, refetch } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
   const [baseUrl, setBaseUrl] = useState("");
@@ -339,11 +339,8 @@ export default function Settings() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { firstName?: string; lastName?: string }) => {
-      const response = await apiRequest("/api/profile", {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      });
-      return response;
+      const response = await apiRequest("PATCH", "/api/profile", data);
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -351,7 +348,7 @@ export default function Settings() {
         description: "Your profile has been updated successfully.",
       });
       setIsEditingProfile(false);
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
     onError: () => {
       toast({
@@ -365,14 +362,12 @@ export default function Settings() {
   const handleSelfieCapture = async (blob: Blob) => {
     setIsUploadingImage(true);
     try {
-      const uploadUrlResponse = await apiRequest("/api/profile/upload-image", {
-        method: "POST",
-        body: JSON.stringify({ fileName: "profile.jpg" }),
-      });
+      // Get signed upload URL from backend
+      const uploadUrlResponse = await apiRequest("POST", "/api/profile/upload-image", { fileName: "profile.jpg" });
+      const { uploadURL, objectPath } = await uploadUrlResponse.json();
       
-      const { uploadURL, objectPath } = uploadUrlResponse;
-      
-      await fetch(uploadURL, {
+      // Upload the image to object storage
+      const uploadResult = await fetch(uploadURL, {
         method: "PUT",
         body: blob,
         headers: {
@@ -380,10 +375,12 @@ export default function Settings() {
         },
       });
       
-      await apiRequest("/api/profile/image", {
-        method: "PUT",
-        body: JSON.stringify({ objectPath }),
-      });
+      if (!uploadResult.ok) {
+        throw new Error("Failed to upload image to storage");
+      }
+      
+      // Save the image path to user profile
+      await apiRequest("PUT", "/api/profile/image", { objectPath });
       
       toast({
         title: "Profile Picture Updated",
@@ -391,7 +388,7 @@ export default function Settings() {
       });
       
       setShowSelfieCapture(false);
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     } catch (error) {
       console.error("Error uploading profile image:", error);
       toast({
