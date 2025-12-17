@@ -90,9 +90,20 @@ const createTaskFormSchema = insertDevelopmentTaskSchema.pick({
   title: z.string().min(1, "Title is required"),
   deadline: z.coerce.date(),
   estimatedHours: z.coerce.number().nullable().optional(),
+  estimatedMinutes: z.coerce.number().min(0).max(59).nullable().optional(),
 });
 
 type CreateTaskFormData = z.infer<typeof createTaskFormSchema>;
+
+// Helper to format duration in hours and minutes
+const formatDuration = (hours?: number | null, minutes?: number | null): string => {
+  const h = hours || 0;
+  const m = minutes || 0;
+  if (h === 0 && m === 0) return "-";
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+};
 
 export default function DevelopmentTasks() {
   const { user } = useAuth();
@@ -117,6 +128,8 @@ export default function DevelopmentTasks() {
   const [isUploadingCompletion, setIsUploadingCompletion] = useState(false);
   const [updateSourceTicket, setUpdateSourceTicket] = useState(true);
   const [sourceTicketStatus, setSourceTicketStatus] = useState("");
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [newDeadline, setNewDeadline] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const form = useForm<CreateTaskFormData>({
@@ -128,6 +141,7 @@ export default function DevelopmentTasks() {
       deadline: undefined,
       assignedTo: undefined,
       estimatedHours: undefined,
+      estimatedMinutes: undefined,
     },
   });
 
@@ -155,6 +169,7 @@ export default function DevelopmentTasks() {
         deadline: taskData.deadline,
         sourceType: "manual",
         estimatedHours: taskData.estimatedHours || null,
+        estimatedMinutes: taskData.estimatedMinutes || 0,
         assignedTo: taskData.assignedTo || null,
       };
       return await apiRequest("POST", "/api/development/tasks", payload);
@@ -770,9 +785,62 @@ export default function DevelopmentTasks() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Deadline</Label>
-                    <p className={`text-sm ${selectedTask.isOverdue ? "text-red-600 font-medium" : ""}`} data-testid="text-detail-deadline">
-                      {format(new Date(selectedTask.deadline), "MMM d, yyyy HH:mm")}
-                    </p>
+                    {editingDeadline && selectedTask.status !== "completed" && (isAdmin || user?.email === SUPER_ADMIN_EMAIL) ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="datetime-local"
+                          value={newDeadline}
+                          onChange={(e) => setNewDeadline(e.target.value)}
+                          className="h-8 text-sm"
+                          data-testid="input-edit-deadline"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (newDeadline) {
+                              updateTaskMutation.mutate({ 
+                                id: selectedTask.id, 
+                                data: { deadline: new Date(newDeadline) } 
+                              });
+                              setSelectedTask({ ...selectedTask, deadline: new Date(newDeadline) });
+                            }
+                            setEditingDeadline(false);
+                          }}
+                          data-testid="button-save-deadline"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingDeadline(false)}
+                          data-testid="button-cancel-deadline"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm ${selectedTask.isOverdue ? "text-red-600 font-medium" : ""}`} data-testid="text-detail-deadline">
+                          {format(new Date(selectedTask.deadline), "MMM d, yyyy HH:mm")}
+                        </p>
+                        {selectedTask.status !== "completed" && (isAdmin || user?.email === SUPER_ADMIN_EMAIL) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2"
+                            onClick={() => {
+                              setNewDeadline(format(new Date(selectedTask.deadline), "yyyy-MM-dd'T'HH:mm"));
+                              setEditingDeadline(true);
+                            }}
+                            data-testid="button-edit-deadline"
+                          >
+                            <Calendar className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Assigned To</Label>
@@ -797,16 +865,20 @@ export default function DevelopmentTasks() {
                       <p className="text-sm" data-testid="text-detail-reference">{selectedTask.sourceReference}</p>
                     </div>
                   )}
-                  {selectedTask.estimatedHours && (
+                  {(selectedTask.estimatedHours || selectedTask.estimatedMinutes) && (
                     <div>
-                      <Label className="text-xs text-muted-foreground">Estimated Hours</Label>
-                      <p className="text-sm" data-testid="text-detail-estimated">{selectedTask.estimatedHours}h</p>
+                      <Label className="text-xs text-muted-foreground">Required Time</Label>
+                      <p className="text-sm" data-testid="text-detail-estimated">
+                        {formatDuration(selectedTask.estimatedHours, selectedTask.estimatedMinutes)}
+                      </p>
                     </div>
                   )}
-                  {selectedTask.actualHours && (
+                  {(selectedTask.actualHours || selectedTask.actualMinutes) && (
                     <div>
-                      <Label className="text-xs text-muted-foreground">Actual Hours</Label>
-                      <p className="text-sm" data-testid="text-detail-actual">{selectedTask.actualHours}h</p>
+                      <Label className="text-xs text-muted-foreground">Actual Time</Label>
+                      <p className="text-sm" data-testid="text-detail-actual">
+                        {formatDuration(selectedTask.actualHours, selectedTask.actualMinutes)}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1079,19 +1151,56 @@ export default function DevelopmentTasks() {
                   )}
                 />
                 
-                <FormField
-                  control={form.control}
-                  name="estimatedHours"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Estimated Hours</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} value={field.value ?? ""} placeholder="Hours" data-testid="input-estimated-hours" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="col-span-2">
+                  <FormLabel>Required Time to Complete</FormLabel>
+                  <div className="flex items-center gap-2 mt-2">
+                    <FormField
+                      control={form.control}
+                      name="estimatedHours"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <div className="flex items-center gap-1">
+                              <Input 
+                                type="number" 
+                                min="0"
+                                {...field} 
+                                value={field.value ?? ""} 
+                                placeholder="0" 
+                                data-testid="input-estimated-hours" 
+                              />
+                              <span className="text-sm text-muted-foreground">hrs</span>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="estimatedMinutes"
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <div className="flex items-center gap-1">
+                              <Input 
+                                type="number" 
+                                min="0"
+                                max="59"
+                                {...field} 
+                                value={field.value ?? ""} 
+                                placeholder="0" 
+                                data-testid="input-estimated-minutes" 
+                              />
+                              <span className="text-sm text-muted-foreground">min</span>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
 
               <DialogFooter>
