@@ -45,8 +45,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2 } from "lucide-react";
-import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule } from "@shared/schema";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText } from "lucide-react";
+import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule, ContractType } from "@shared/schema";
 
 export default function Masters() {
   const [activeTab, setActiveTab] = useState("customers");
@@ -86,6 +86,10 @@ export default function Masters() {
             <Key className="w-4 h-4 mr-2" />
             Role Rights
           </TabsTrigger>
+          <TabsTrigger value="contract-types" data-testid="tab-contract-types" className="flex-1 sm:flex-none">
+            <FileText className="w-4 h-4 mr-2" />
+            Contract Types
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="customers">
@@ -110,6 +114,10 @@ export default function Masters() {
 
         <TabsContent value="rights">
           <RoleRightsTab />
+        </TabsContent>
+
+        <TabsContent value="contract-types">
+          <ContractTypesTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2352,6 +2360,355 @@ function RoleRightForm({
         </Button>
         <Button type="submit" disabled={isPending || !formData.roleId || !formData.module} data-testid="button-save-right">
           {isPending ? "Saving..." : right ? "Update" : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+// Contract Types Tab
+const BILLING_FREQUENCIES = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "half_yearly", label: "Half Yearly" },
+  { value: "yearly", label: "Yearly" },
+  { value: "one_time", label: "One Time" },
+];
+
+function ContractTypesTab() {
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingType, setEditingType] = useState<ContractType | null>(null);
+  const [deletingType, setDeletingType] = useState<ContractType | null>(null);
+
+  const { data: contractTypes = [], isLoading } = useQuery<ContractType[]>({
+    queryKey: ["/api/contract-types"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<ContractType>) =>
+      apiRequest("POST", "/api/contract-types", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contract-types"] });
+      toast({ title: "Contract type created successfully" });
+      setIsAddOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: string; updates: Partial<ContractType> }) =>
+      apiRequest("PATCH", `/api/contract-types/${data.id}`, data.updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contract-types"] });
+      toast({ title: "Contract type updated successfully" });
+      setEditingType(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/contract-types/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contract-types"] });
+      toast({ title: "Contract type deleted successfully" });
+      setDeletingType(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const filteredTypes = contractTypes.filter(type =>
+    type.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    type.displayName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div>
+          <CardTitle>Contract Types</CardTitle>
+          <CardDescription>Manage contract type definitions for customer contracts</CardDescription>
+        </div>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-contract-type">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Type
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Contract Type</DialogTitle>
+              <DialogDescription>Create a new contract type for customer contracts</DialogDescription>
+            </DialogHeader>
+            <ContractTypeForm
+              onSubmit={(data) => createMutation.mutate(data)}
+              isPending={createMutation.isPending}
+              onCancel={() => setIsAddOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Search contract types..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-contract-types"
+            />
+          </div>
+        </div>
+        <div className="border rounded-lg overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Display Name</TableHead>
+                <TableHead>Billing Frequency</TableHead>
+                <TableHead className="text-center">Duration</TableHead>
+                <TableHead className="text-center">Active</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTypes.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    No contract types found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredTypes.map((type) => (
+                  <TableRow key={type.id} data-testid={`row-contract-type-${type.id}`}>
+                    <TableCell className="font-medium">{type.name}</TableCell>
+                    <TableCell>{type.displayName}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {BILLING_FREQUENCIES.find(f => f.value === type.billingFrequency)?.label || type.billingFrequency}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline">
+                        {type.defaultDurationMonths || 12} months
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={type.isActive ? "default" : "secondary"}>
+                        {type.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingType(type)}
+                          data-testid={`button-edit-contract-type-${type.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingType(type)}
+                          data-testid={`button-delete-contract-type-${type.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingType} onOpenChange={(open) => !open && setEditingType(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Contract Type</DialogTitle>
+            <DialogDescription>Update the contract type details</DialogDescription>
+          </DialogHeader>
+          {editingType && (
+            <ContractTypeForm
+              contractType={editingType}
+              onSubmit={(data) => updateMutation.mutate({ id: editingType.id, updates: data })}
+              isPending={updateMutation.isPending}
+              onCancel={() => setEditingType(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deletingType} onOpenChange={(open) => !open && setDeletingType(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contract Type</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingType?.displayName}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingType && deleteMutation.mutate(deletingType.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-contract-type"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
+function ContractTypeForm({
+  contractType,
+  onSubmit,
+  isPending,
+  onCancel,
+}: {
+  contractType?: ContractType;
+  onSubmit: (data: Partial<ContractType>) => void;
+  isPending: boolean;
+  onCancel: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    name: contractType?.name || "",
+    displayName: contractType?.displayName || "",
+    description: contractType?.description || "",
+    billingFrequency: contractType?.billingFrequency || "monthly",
+    defaultDurationMonths: contractType?.defaultDurationMonths ?? 12,
+    isActive: contractType?.isActive ?? true,
+    sortOrder: contractType?.sortOrder || 0,
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="space-y-4">
+        <div className="grid gap-2">
+          <Label htmlFor="ct-name">Name (System Key) *</Label>
+          <Input
+            id="ct-name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+            placeholder="e.g., warranty, amc"
+            required
+            data-testid="input-contract-type-name"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="ct-displayName">Display Name *</Label>
+          <Input
+            id="ct-displayName"
+            value={formData.displayName}
+            onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+            placeholder="e.g., Warranty, AMC"
+            required
+            data-testid="input-contract-type-display-name"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="ct-description">Description</Label>
+          <Textarea
+            id="ct-description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            placeholder="Brief description of this contract type"
+            data-testid="input-contract-type-description"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="ct-billing">Billing Frequency *</Label>
+          <Select
+            value={formData.billingFrequency}
+            onValueChange={(value) => setFormData({ ...formData, billingFrequency: value })}
+          >
+            <SelectTrigger data-testid="select-contract-type-billing">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BILLING_FREQUENCIES.map((freq) => (
+                <SelectItem key={freq.value} value={freq.value}>
+                  {freq.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="ct-duration">Default Duration (months)</Label>
+            <Input
+              id="ct-duration"
+              type="number"
+              value={formData.defaultDurationMonths}
+              onChange={(e) => setFormData({ ...formData, defaultDurationMonths: parseInt(e.target.value) || 12 })}
+              data-testid="input-contract-type-duration"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="ct-sortOrder">Sort Order</Label>
+            <Input
+              id="ct-sortOrder"
+              type="number"
+              value={formData.sortOrder}
+              onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+              data-testid="input-contract-type-sort-order"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="ct-active"
+            checked={formData.isActive}
+            onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked === true })}
+            data-testid="checkbox-contract-type-active"
+          />
+          <Label htmlFor="ct-active">Active</Label>
+        </div>
+      </div>
+      <DialogFooter className="mt-6">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending || !formData.name || !formData.displayName} data-testid="button-save-contract-type">
+          {isPending ? "Saving..." : contractType ? "Update" : "Create"}
         </Button>
       </DialogFooter>
     </form>
