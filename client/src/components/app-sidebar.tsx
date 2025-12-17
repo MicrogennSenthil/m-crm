@@ -36,6 +36,8 @@ import {
   RefreshCw,
   Code2,
   Wallet,
+  UserSquare2,
+  MessageSquareHeart,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -200,6 +202,23 @@ const menuGroups = [
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
         module: "contracts",
+      },
+    ],
+  },
+  {
+    id: "hr",
+    label: "HR",
+    icon: UserSquare2,
+    color: "text-pink-500",
+    bgColor: "bg-pink-500/10",
+    items: [
+      {
+        title: "Feedback",
+        url: "/hr/feedback",
+        icon: MessageSquareHeart,
+        color: "text-pink-500",
+        bgColor: "bg-pink-500/10",
+        module: "hr_feedback",
       },
     ],
   },

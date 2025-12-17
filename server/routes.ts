@@ -9598,6 +9598,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== HR FEEDBACK MANAGEMENT ==================
+
+  // Get HR Feedback stats - summary of closed tickets feedback status
+  app.get("/api/hr/feedback/stats", isAuthenticated, async (req, res) => {
+    try {
+      const { and, or, isNull } = await import('drizzle-orm');
+      
+      // Get counts for all ticket status
+      const stats = await db.select({
+        totalOpen: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'open')`,
+        totalInProgress: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'in_progress')`,
+        totalPendingCustomer: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'pending_customer')`,
+        totalEscalated: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'escalated')`,
+        totalClosed: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed')`,
+        totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'resolved')`,
+        closedWithFeedback: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed' AND ${tickets.id} IN (SELECT ticket_id FROM feedback))`,
+        closedWithoutFeedback: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed' AND ${tickets.id} NOT IN (SELECT ticket_id FROM feedback))`,
+      }).from(tickets);
+      
+      res.json(stats[0] || {
+        totalOpen: 0,
+        totalInProgress: 0,
+        totalPendingCustomer: 0,
+        totalEscalated: 0,
+        totalClosed: 0,
+        totalResolved: 0,
+        closedWithFeedback: 0,
+        closedWithoutFeedback: 0,
+      });
+    } catch (error) {
+      console.error("Error fetching HR feedback stats:", error);
+      res.status(500).json({ message: "Failed to fetch feedback stats" });
+    }
+  });
+
+  // Get closed tickets without feedback for HR follow-up
+  app.get("/api/hr/feedback/pending", isAuthenticated, async (req, res) => {
+    try {
+      const { search, dateFrom, dateTo, priority } = req.query;
+      const { and, gte, lte, ilike, or } = await import('drizzle-orm');
+      
+      const conditions: any[] = [
+        eq(tickets.status, 'closed'),
+        sql`${tickets.id} NOT IN (SELECT ticket_id FROM feedback)`,
+      ];
+      
+      // Date range filter
+      if (dateFrom) {
+        conditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
+      }
+      if (dateTo) {
+        const to = new Date(dateTo as string);
+        to.setDate(to.getDate() + 1); // Include end date
+        conditions.push(lte(tickets.closedAt, to));
+      }
+      
+      // Priority filter
+      if (priority && priority !== 'all') {
+        conditions.push(eq(tickets.priority, priority as string));
+      }
+      
+      // Search filter
+      if (search) {
+        const searchLower = `%${(search as string).toLowerCase()}%`;
+        conditions.push(or(
+          sql`LOWER(${tickets.ticketNumber}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.customerName}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.issueSummary}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.customerPhone}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.customerEmail}) LIKE ${searchLower}`,
+        ));
+      }
+      
+      const pendingTickets = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        customerName: tickets.customerName,
+        customerEmail: tickets.customerEmail,
+        customerPhone: tickets.customerPhone,
+        issueSummary: tickets.issueSummary,
+        issueDescription: tickets.issueDescription,
+        priority: tickets.priority,
+        status: tickets.status,
+        createdAt: tickets.createdAt,
+        closedAt: tickets.closedAt,
+        resolvedAt: tickets.resolvedAt,
+        escalationLevel: tickets.escalationLevel,
+        assignedEngineerId: tickets.assignedEngineerId,
+        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        assignedEngineerEmail: sql<string>`(SELECT email FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        assignedEngineerPhone: sql<string>`(SELECT phone FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        daysSinceClosed: sql<number>`EXTRACT(DAY FROM NOW() - ${tickets.closedAt})::int`,
+      })
+        .from(tickets)
+        .where(and(...conditions))
+        .orderBy(sql`${tickets.closedAt} DESC`);
+      
+      res.json(pendingTickets);
+    } catch (error) {
+      console.error("Error fetching pending feedback tickets:", error);
+      res.status(500).json({ message: "Failed to fetch pending feedback tickets" });
+    }
+  });
+
+  // Get closed tickets WITH feedback (for comparison/tracking)
+  app.get("/api/hr/feedback/completed", isAuthenticated, async (req, res) => {
+    try {
+      const { search, dateFrom, dateTo } = req.query;
+      const { and, gte, lte, or } = await import('drizzle-orm');
+      
+      const conditions: any[] = [
+        eq(tickets.status, 'closed'),
+        sql`${tickets.id} IN (SELECT ticket_id FROM feedback)`,
+      ];
+      
+      // Date range filter
+      if (dateFrom) {
+        conditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
+      }
+      if (dateTo) {
+        const to = new Date(dateTo as string);
+        to.setDate(to.getDate() + 1);
+        conditions.push(lte(tickets.closedAt, to));
+      }
+      
+      // Search filter
+      if (search) {
+        const searchLower = `%${(search as string).toLowerCase()}%`;
+        conditions.push(or(
+          sql`LOWER(${tickets.ticketNumber}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.customerName}) LIKE ${searchLower}`,
+          sql`LOWER(${tickets.issueSummary}) LIKE ${searchLower}`,
+        ));
+      }
+      
+      const completedTickets = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        customerName: tickets.customerName,
+        customerEmail: tickets.customerEmail,
+        customerPhone: tickets.customerPhone,
+        issueSummary: tickets.issueSummary,
+        priority: tickets.priority,
+        closedAt: tickets.closedAt,
+        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        feedbackRating: sql<number>`(SELECT rating FROM feedback WHERE ticket_id = ${tickets.id})`,
+        feedbackComments: sql<string>`(SELECT comments FROM feedback WHERE ticket_id = ${tickets.id})`,
+        feedbackSatisfied: sql<boolean>`(SELECT satisfied FROM feedback WHERE ticket_id = ${tickets.id})`,
+        feedbackSubmittedAt: sql<string>`(SELECT submitted_at FROM feedback WHERE ticket_id = ${tickets.id})::text`,
+      })
+        .from(tickets)
+        .where(and(...conditions))
+        .orderBy(sql`${tickets.closedAt} DESC`)
+        .limit(100);
+      
+      res.json(completedTickets);
+    } catch (error) {
+      console.error("Error fetching completed feedback tickets:", error);
+      res.status(500).json({ message: "Failed to fetch completed feedback tickets" });
+    }
+  });
+
   // ================== FREQUENT CALLER ANALYSIS ==================
 
   // Get frequent callers analysis with time period filtering

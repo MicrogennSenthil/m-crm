@@ -51,6 +51,7 @@ import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 import DevelopmentDashboard from "@/pages/development-dashboard";
 import DevelopmentTasks from "@/pages/development-tasks";
 import AccountsContracts from "@/pages/accounts-contracts";
+import HRFeedback from "@/pages/hr-feedback";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -118,6 +119,7 @@ function AuthenticatedLayout() {
               <Route path="/development/dashboard" component={DevelopmentDashboard} />
               <Route path="/development/tasks" component={DevelopmentTasks} />
               <Route path="/accounts/contracts" component={AccountsContracts} />
+              <Route path="/hr/feedback" component={HRFeedback} />
               {/* Fallback to Home for any unmatched routes in authenticated layout */}
               <Route component={Home} />
             </Switch>
