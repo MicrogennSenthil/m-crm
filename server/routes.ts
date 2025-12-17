@@ -9124,6 +9124,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let query = db.select({
         contract: customerContracts,
         customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerModules: sql<string[]>`(SELECT selected_modules FROM customers WHERE id = ${customerContracts.customerId})`,
         contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
       }).from(customerContracts);
       
@@ -9293,6 +9295,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expiringContracts = await db.select({
         contract: customerContracts,
         customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerModules: sql<string[]>`(SELECT selected_modules FROM customers WHERE id = ${customerContracts.customerId})`,
         contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
       })
         .from(customerContracts)
@@ -9462,6 +9466,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching pending follow-ups:", error);
       res.status(500).json({ message: "Failed to fetch pending follow-ups" });
+    }
+  });
+
+  // Get contracts grouped by renewal month (for month-wise renewal view)
+  app.get("/api/contracts/renewals-by-month", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { gte, and } = await import('drizzle-orm');
+      const today = new Date();
+      const monthsAhead = parseInt(req.query.months as string) || 12;
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + monthsAhead);
+      
+      const allContracts = await db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(and(
+          gte(customerContracts.endDate, today),
+          sql`${customerContracts.endDate} <= ${futureDate}`
+        ))
+        .orderBy(customerContracts.endDate);
+      
+      // Group by month
+      const byMonth: Record<string, any[]> = {};
+      allContracts.forEach(c => {
+        if (c.contract.endDate) {
+          const monthKey = new Date(c.contract.endDate).toISOString().substring(0, 7); // YYYY-MM
+          if (!byMonth[monthKey]) byMonth[monthKey] = [];
+          byMonth[monthKey].push(c);
+        }
+      });
+      
+      // Convert to array and add summary
+      const result = Object.entries(byMonth).map(([month, contracts]) => ({
+        month,
+        monthDisplay: new Date(month + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        contractCount: contracts.length,
+        totalValue: contracts.reduce((sum, c) => sum + (c.contract.amount || 0), 0),
+        contracts,
+      }));
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching renewals by month:", error);
+      res.status(500).json({ message: "Failed to fetch renewals by month" });
+    }
+  });
+
+  // Get contract type summary with client counts
+  app.get("/api/contracts/type-summary", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const summary = await db.select({
+        contractTypeId: customerContracts.contractTypeId,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+        clientCount: sql<number>`COUNT(DISTINCT ${customerContracts.customerId})`,
+        contractCount: sql<number>`COUNT(*)`,
+        totalValue: sql<number>`SUM(${customerContracts.amount})`,
+        activeCount: sql<number>`SUM(CASE WHEN ${customerContracts.status} = 'active' THEN 1 ELSE 0 END)`,
+        expiringCount: sql<number>`SUM(CASE WHEN ${customerContracts.endDate} <= NOW() + INTERVAL '30 days' AND ${customerContracts.endDate} > NOW() THEN 1 ELSE 0 END)`,
+      })
+        .from(customerContracts)
+        .groupBy(customerContracts.contractTypeId);
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching contract type summary:", error);
+      res.status(500).json({ message: "Failed to fetch contract type summary" });
+    }
+  });
+
+  // Get contracts with advanced filtering (city, type, modules, date range)
+  app.get("/api/contracts/search", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { search, city, contractTypeId, startDate, endDate, status } = req.query;
+      const { and, gte, lte, ilike } = await import('drizzle-orm');
+      
+      const conditions: any[] = [];
+      
+      // Build dynamic query
+      let query = db.select({
+        contract: customerContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
+        customerModules: sql<string[]>`(SELECT selected_modules FROM customers WHERE id = ${customerContracts.customerId})`,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      }).from(customerContracts);
+      
+      // Apply filters
+      if (contractTypeId) {
+        conditions.push(eq(customerContracts.contractTypeId, contractTypeId as string));
+      }
+      if (status) {
+        conditions.push(eq(customerContracts.status, status as string));
+      }
+      if (startDate) {
+        conditions.push(gte(customerContracts.startDate, new Date(startDate as string)));
+      }
+      if (endDate) {
+        conditions.push(lte(customerContracts.endDate, new Date(endDate as string)));
+      }
+      
+      // Text search across multiple fields
+      if (search) {
+        const searchLower = `%${(search as string).toLowerCase()}%`;
+        conditions.push(sql`(
+          LOWER(${customerContracts.contractNumber}) LIKE ${searchLower}
+          OR LOWER((SELECT name FROM customers WHERE id = ${customerContracts.customerId})) LIKE ${searchLower}
+          OR LOWER((SELECT city FROM customers WHERE id = ${customerContracts.customerId})) LIKE ${searchLower}
+          OR LOWER((SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})) LIKE ${searchLower}
+          OR EXISTS (SELECT 1 FROM customers c WHERE c.id = ${customerContracts.customerId} AND ${searchLower} = ANY(c.selected_modules))
+        )`);
+      }
+      
+      // City filter
+      if (city) {
+        conditions.push(sql`LOWER((SELECT city FROM customers WHERE id = ${customerContracts.customerId})) = LOWER(${city})`);
+      }
+      
+      const results = conditions.length > 0
+        ? await query.where(and(...conditions)).orderBy(customerContracts.endDate)
+        : await query.orderBy(customerContracts.endDate);
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching contracts:", error);
+      res.status(500).json({ message: "Failed to search contracts" });
     }
   });
 

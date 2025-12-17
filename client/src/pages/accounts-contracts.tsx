@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -42,18 +42,46 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format, differenceInDays, addMonths } from "date-fns";
-import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3 } from "lucide-react";
 import type { Customer, ContractType, CustomerContract } from "@shared/schema";
 
 interface ContractWithDetails {
   contract: CustomerContract;
   customerName: string;
+  customerCity?: string;
+  customerModules?: string[];
   contractTypeName: string;
+}
+
+interface MonthlyRenewal {
+  month: string;
+  monthDisplay: string;
+  contractCount: number;
+  totalValue: number;
+  contracts: ContractWithDetails[];
+}
+
+interface TypeSummary {
+  contractTypeId: string;
+  contractTypeName: string;
+  clientCount: number;
+  contractCount: number;
+  totalValue: number;
+  activeCount: number;
+  expiringCount: number;
 }
 
 const STATUS_OPTIONS = [
@@ -78,12 +106,20 @@ const PAYMENT_STATUS = [
 export default function AccountsContracts() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
+  const [viewMode, setViewMode] = useState<"list" | "monthly">("list");
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
   const [deletingContract, setDeletingContract] = useState<ContractWithDetails | null>(null);
   const [viewingContract, setViewingContract] = useState<ContractWithDetails | null>(null);
   const [showFollowupDialog, setShowFollowupDialog] = useState(false);
+  
+  // Advanced filter state
+  const [filterCity, setFilterCity] = useState<string>("");
+  const [filterType, setFilterType] = useState<string>("");
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>();
+  const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
+  const [showFilters, setShowFilters] = useState(false);
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery<ContractWithDetails[]>({
     queryKey: ["/api/customer-contracts"],
@@ -101,12 +137,37 @@ export default function AccountsContracts() {
     queryKey: ["/api/contract-types"],
   });
 
+  // New queries for summary and monthly data
+  const { data: typeSummary = [] } = useQuery<TypeSummary[]>({
+    queryKey: ["/api/contracts/type-summary"],
+  });
+
+  const { data: renewalsByMonth = [] } = useQuery<MonthlyRenewal[]>({
+    queryKey: ["/api/contracts/renewals-by-month"],
+  });
+
+  // Extract unique cities from contracts for filter
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    contracts.forEach(c => {
+      if (c.customerCity) cities.add(c.customerCity);
+    });
+    return Array.from(cities).sort();
+  }, [contracts]);
+
+  // Helper to invalidate all contract-related queries
+  const invalidateContractQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/customer-contracts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/contracts/expiring"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/contracts/type-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/contracts/renewals-by-month"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: Partial<CustomerContract>) =>
       apiRequest("POST", "/api/customer-contracts", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customer-contracts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/contracts/expiring"] });
+      invalidateContractQueries();
       toast({ title: "Contract created successfully" });
       setIsAddOpen(false);
     },
@@ -119,8 +180,7 @@ export default function AccountsContracts() {
     mutationFn: (data: { id: string; updates: Partial<CustomerContract> }) =>
       apiRequest("PATCH", `/api/customer-contracts/${data.id}`, data.updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customer-contracts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/contracts/expiring"] });
+      invalidateContractQueries();
       toast({ title: "Contract updated successfully" });
       setEditingContract(null);
     },
@@ -133,8 +193,7 @@ export default function AccountsContracts() {
     mutationFn: (id: string) =>
       apiRequest("DELETE", `/api/customer-contracts/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customer-contracts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/contracts/expiring"] });
+      invalidateContractQueries();
       toast({ title: "Contract deleted successfully" });
       setDeletingContract(null);
     },
@@ -155,18 +214,49 @@ export default function AccountsContracts() {
     },
   });
 
+  // Check if any filters are active
+  const hasActiveFilters = filterCity || filterType || filterDateFrom || filterDateTo;
+  
+  // Clear all filters helper
+  const clearFilters = () => {
+    setSearchTerm("");
+    setFilterCity("");
+    setFilterType("");
+    setFilterDateFrom(undefined);
+    setFilterDateTo(undefined);
+  };
+
   const filteredContracts = contracts.filter(c => {
-    const matchesSearch = 
-      c.contract.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.contractTypeName?.toLowerCase().includes(searchTerm.toLowerCase());
+    // Text search across multiple fields
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm || 
+      c.contract.contractNumber.toLowerCase().includes(searchLower) ||
+      c.customerName?.toLowerCase().includes(searchLower) ||
+      c.contractTypeName?.toLowerCase().includes(searchLower) ||
+      c.customerCity?.toLowerCase().includes(searchLower) ||
+      c.customerModules?.some(m => m.toLowerCase().includes(searchLower));
     
-    if (activeTab === "all") return matchesSearch;
+    // City filter
+    const matchesCity = !filterCity || c.customerCity?.toLowerCase() === filterCity.toLowerCase();
+    
+    // Contract type filter
+    const matchesType = !filterType || c.contract.contractTypeId === filterType;
+    
+    // Date range filter (by end date / renewal date)
+    const contractEndDate = new Date(c.contract.endDate);
+    const matchesDateFrom = !filterDateFrom || contractEndDate >= filterDateFrom;
+    const matchesDateTo = !filterDateTo || contractEndDate <= filterDateTo;
+    
+    // Tab filter
+    let matchesTab = true;
     if (activeTab === "expiring") {
-      const daysUntilExpiry = differenceInDays(new Date(c.contract.endDate), new Date());
-      return matchesSearch && daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+      const daysUntilExpiry = differenceInDays(contractEndDate, new Date());
+      matchesTab = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+    } else if (activeTab !== "all") {
+      matchesTab = c.contract.status === activeTab;
     }
-    return matchesSearch && c.contract.status === activeTab;
+    
+    return matchesSearch && matchesCity && matchesType && matchesDateFrom && matchesDateTo && matchesTab;
   });
 
   const getStatusBadge = (status: string) => {
@@ -227,6 +317,41 @@ export default function AccountsContracts() {
         </Dialog>
       </div>
 
+      {/* Contract Type Summary Cards */}
+      {typeSummary.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {typeSummary.map((summary) => (
+            <Card 
+              key={summary.contractTypeId} 
+              className={`cursor-pointer hover-elevate transition-all ${
+                filterType === summary.contractTypeId ? 'ring-2 ring-primary' : ''
+              }`}
+              onClick={() => setFilterType(filterType === summary.contractTypeId ? "" : summary.contractTypeId)}
+              data-testid={`card-summary-${summary.contractTypeId}`}
+            >
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs sm:text-sm font-medium truncate">{summary.contractTypeName}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xl sm:text-2xl font-bold">{summary.clientCount}</span>
+                  <span className="text-xs text-muted-foreground">clients</span>
+                </div>
+                <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                  <span>{summary.activeCount} active</span>
+                  {summary.expiringCount > 0 && (
+                    <Badge variant="outline" className="text-yellow-600 border-yellow-500 px-1.5 py-0">
+                      {summary.expiringCount} expiring
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {expiringContracts.length > 0 && (
         <Card className="border-yellow-500/50">
           <CardHeader className="pb-3">
@@ -255,6 +380,147 @@ export default function AccountsContracts() {
         </Card>
       )}
 
+      {/* Unified Search and Filter Bar */}
+      <Card>
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="Search by contract#, customer, city, type, modules..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-contracts"
+                />
+              </div>
+              
+              {/* Filter Controls */}
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  variant={showFilters ? "secondary" : "outline"} 
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  data-testid="button-toggle-filters"
+                >
+                  <Filter className="w-4 h-4 mr-1" />
+                  Filters
+                  {hasActiveFilters && (
+                    <Badge variant="default" className="ml-1 px-1.5 py-0 text-xs">
+                      {[filterCity, filterType, filterDateFrom, filterDateTo].filter(Boolean).length}
+                    </Badge>
+                  )}
+                </Button>
+                
+                {/* View Mode Toggle */}
+                <div className="flex rounded-md border">
+                  <Button
+                    variant={viewMode === "list" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-r-none"
+                    onClick={() => setViewMode("list")}
+                    data-testid="button-view-list"
+                  >
+                    List
+                  </Button>
+                  <Button
+                    variant={viewMode === "monthly" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-l-none"
+                    onClick={() => setViewMode("monthly")}
+                    data-testid="button-view-monthly"
+                  >
+                    <CalendarDays className="w-4 h-4 mr-1" />
+                    Monthly
+                  </Button>
+                </div>
+                
+                {hasActiveFilters && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={clearFilters}
+                    data-testid="button-clear-filters"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+            
+            {/* Advanced Filters Row */}
+            {showFilters && (
+              <div className="flex flex-wrap gap-3 pt-2 border-t">
+                {/* City Filter */}
+                <Select value={filterCity} onValueChange={setFilterCity}>
+                  <SelectTrigger className="w-40" data-testid="select-filter-city">
+                    <SelectValue placeholder="All Cities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Cities</SelectItem>
+                    {uniqueCities.map(city => (
+                      <SelectItem key={city} value={city}>{city}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Contract Type Filter */}
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-44" data-testid="select-filter-type">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Types</SelectItem>
+                    {contractTypes.map(type => (
+                      <SelectItem key={type.id} value={type.id}>{type.displayName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Date From */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-36" data-testid="button-filter-date-from">
+                      <Calendar className="w-4 h-4 mr-1" />
+                      {filterDateFrom ? format(filterDateFrom, "MMM d, yyyy") : "From Date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={filterDateFrom}
+                      onSelect={setFilterDateFrom}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                
+                {/* Date To */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-36" data-testid="button-filter-date-to">
+                      <Calendar className="w-4 h-4 mr-1" />
+                      {filterDateTo ? format(filterDateTo, "MMM d, yyyy") : "To Date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={filterDateTo}
+                      onSelect={setFilterDateTo}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <TabsList className="w-full sm:w-auto flex-wrap">
@@ -266,90 +532,184 @@ export default function AccountsContracts() {
             <TabsTrigger value="pending_renewal" data-testid="tab-contracts-pending">Pending Renewal</TabsTrigger>
             <TabsTrigger value="expired" data-testid="tab-contracts-expired">Expired</TabsTrigger>
           </TabsList>
-          <div className="relative flex-1 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search contracts..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-              data-testid="input-search-contracts"
-            />
-          </div>
         </div>
 
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Contract #</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Expires In</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredContracts.length === 0 ? (
+        {/* List View */}
+        {viewMode === "list" && (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        No contracts found
-                      </TableCell>
+                      <TableHead>Contract #</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Expires In</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredContracts.map((item) => (
-                      <TableRow 
-                        key={item.contract.id} 
-                        className="cursor-pointer hover-elevate"
-                        onClick={() => setViewingContract(item)}
-                        data-testid={`row-contract-${item.contract.id}`}
-                      >
-                        <TableCell className="font-mono text-sm">{item.contract.contractNumber}</TableCell>
-                        <TableCell className="font-medium">{item.customerName}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.contractTypeName}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.contract.currency} {item.contract.amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {format(new Date(item.contract.startDate), "MMM d, yyyy")} - {format(new Date(item.contract.endDate), "MMM d, yyyy")}
-                        </TableCell>
-                        <TableCell>{getDaysUntilExpiry(item.contract.endDate)}</TableCell>
-                        <TableCell>{getStatusBadge(item.contract.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setEditingContract(item)}
-                              data-testid={`button-edit-contract-${item.contract.id}`}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeletingContract(item)}
-                              data-testid={`button-delete-contract-${item.contract.id}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredContracts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                          No contracts found
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                    ) : (
+                      filteredContracts.map((item) => (
+                        <TableRow 
+                          key={item.contract.id} 
+                          className="cursor-pointer hover-elevate"
+                          onClick={() => setViewingContract(item)}
+                          data-testid={`row-contract-${item.contract.id}`}
+                        >
+                          <TableCell className="font-mono text-sm">{item.contract.contractNumber}</TableCell>
+                          <TableCell className="font-medium">{item.customerName}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{item.customerCity || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.contractTypeName}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.contract.currency} {item.contract.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {format(new Date(item.contract.startDate), "MMM d, yyyy")} - {format(new Date(item.contract.endDate), "MMM d, yyyy")}
+                          </TableCell>
+                          <TableCell>{getDaysUntilExpiry(item.contract.endDate)}</TableCell>
+                          <TableCell>{getStatusBadge(item.contract.status)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setEditingContract(item)}
+                                data-testid={`button-edit-contract-${item.contract.id}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeletingContract(item)}
+                                data-testid={`button-delete-contract-${item.contract.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Month-wise Renewal View */}
+        {viewMode === "monthly" && (
+          <div className="space-y-4">
+            {renewalsByMonth.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <CalendarDays className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No upcoming renewals found in the next 12 months</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Accordion type="multiple" defaultValue={renewalsByMonth.slice(0, 3).map(m => m.month)} className="space-y-2">
+                {renewalsByMonth.map((monthData) => (
+                  <AccordionItem key={monthData.month} value={monthData.month} className="border rounded-lg overflow-hidden">
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline" data-testid={`accordion-month-${monthData.month}`}>
+                      <div className="flex items-center justify-between w-full pr-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+                            <CalendarDays className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="text-left">
+                            <span className="font-semibold">{monthData.monthDisplay}</span>
+                            <p className="text-sm text-muted-foreground">
+                              {monthData.contractCount} contract{monthData.contractCount !== 1 ? 's' : ''} due for renewal
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Badge variant="secondary" className="font-mono">
+                            {monthData.contracts[0]?.contract.currency || 'INR'} {monthData.totalValue.toLocaleString()}
+                          </Badge>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="px-4 pb-4">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Customer</TableHead>
+                              <TableHead>City</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Amount</TableHead>
+                              <TableHead>Renewal Date</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {monthData.contracts.map((item) => (
+                              <TableRow 
+                                key={item.contract.id}
+                                className="cursor-pointer hover-elevate"
+                                onClick={() => setViewingContract(item)}
+                                data-testid={`row-monthly-contract-${item.contract.id}`}
+                              >
+                                <TableCell className="font-medium">{item.customerName}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{item.customerCity || "-"}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{item.contractTypeName}</Badge>
+                                </TableCell>
+                                <TableCell className="text-right font-mono">
+                                  {item.contract.currency} {item.contract.amount.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  {format(new Date(item.contract.endDate), "MMM d, yyyy")}
+                                </TableCell>
+                                <TableCell>{getStatusBadge(item.contract.status)}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setEditingContract(item)}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setDeletingContract(item)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
+          </div>
+        )}
       </Tabs>
 
       {/* View Contract Details Dialog */}
