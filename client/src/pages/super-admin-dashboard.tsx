@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, RadarChart, PolarGrid, 
@@ -17,7 +18,7 @@ import {
   TrendingUp, TrendingDown, Users, Target, Briefcase, HeadphonesIcon,
   AlertTriangle, Calendar, ChevronRight, ChevronLeft, Trophy, Award,
   DollarSign, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown,
-  BarChart3, TableIcon, Percent, Activity
+  BarChart3, TableIcon, Percent, Activity, Eye, MessageSquare, User, Phone, Mail, Star
 } from "lucide-react";
 
 const COLORS = ['#1a2b6d', '#f5a623', '#4ade80', '#f87171', '#60a5fa', '#a78bfa'];
@@ -1953,8 +1954,72 @@ interface FrequentCallersData {
   priorityDistribution: { priority: string; count: number }[];
 }
 
+interface CustomerCallsData {
+  customerId: string;
+  customerSummary: { customerName: string; totalCalls: number; resolvedCalls: number; avgResolutionDays: number };
+  calls: {
+    id: string;
+    ticketNumber: string;
+    issueSummary: string;
+    priority: string;
+    status: string;
+    createdAt: string;
+    resolvedAt: string | null;
+    assignedEngineerName: string;
+    moduleName: string;
+  }[];
+}
+
+interface TicketDetailData {
+  ticket: {
+    id: string;
+    ticketNumber: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    issueSummary: string;
+    issueDescription: string;
+    priority: string;
+    status: string;
+    escalationLevel: number;
+    createdAt: string;
+    assignedAt: string;
+    resolvedAt: string | null;
+    closedAt: string | null;
+    dueDate: string | null;
+    assignedEngineerName: string;
+    assignedEngineerEmail: string;
+    moduleName: string;
+  };
+  comments: {
+    id: string;
+    comment: string;
+    isInternal: boolean;
+    createdAt: string;
+    userName: string;
+    userEmail: string;
+  }[];
+  escalations: {
+    id: string;
+    fromLevel: number;
+    toLevel: number;
+    reason: string;
+    escalatedAt: string;
+    escalatedByName: string;
+  }[];
+  feedback: {
+    rating: number;
+    comments: string;
+    satisfied: boolean;
+    submittedAt: string;
+  } | null;
+  resolutionTime: { days: number; hours: number; minutes: number } | null;
+}
+
 function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState<string>('month');
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   
   const { data, isLoading } = useQuery<FrequentCallersData>({
     queryKey: ['/api/analytics/frequent-callers', period],
@@ -1963,6 +2028,26 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     }
+  });
+
+  const { data: customerCalls, isLoading: isLoadingCalls } = useQuery<CustomerCallsData>({
+    queryKey: ['/api/analytics/customer-calls', selectedCustomer?.id, period],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/customer-calls/${selectedCustomer?.id}?period=${period}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+    enabled: !!selectedCustomer?.id,
+  });
+
+  const { data: ticketDetail, isLoading: isLoadingTicket } = useQuery<TicketDetailData>({
+    queryKey: ['/api/analytics/ticket-detail', selectedTicket],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/ticket-detail/${selectedTicket}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+    enabled: !!selectedTicket,
   });
 
   const priorityColors: Record<string, string> = {
@@ -1980,6 +2065,18 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
       low: 'bg-green-100 text-green-700 border-green-200',
     };
     return colors[priority] || 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const getStatusBadge = (status: string) => {
+    const colors: Record<string, string> = {
+      open: 'bg-blue-100 text-blue-700 border-blue-200',
+      in_progress: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+      pending_customer: 'bg-orange-100 text-orange-700 border-orange-200',
+      escalated: 'bg-purple-100 text-purple-700 border-purple-200',
+      resolved: 'bg-green-100 text-green-700 border-green-200',
+      closed: 'bg-gray-100 text-gray-700 border-gray-200',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
   if (isLoading) {
@@ -2136,11 +2233,12 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                     <TableHead className="text-center">Open</TableHead>
                     <TableHead className="text-center">Avg Resolution (Days)</TableHead>
                     <TableHead>Last Call</TableHead>
+                    <TableHead className="w-24 text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(data?.frequentCallers || []).map((caller, index) => (
-                    <TableRow key={caller.customerId || index}>
+                    <TableRow key={caller.customerId || index} className="hover:bg-muted/50">
                       <TableCell className="font-bold text-muted-foreground">
                         {index + 1}
                       </TableCell>
@@ -2166,11 +2264,23 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                       <TableCell className="text-sm text-muted-foreground">
                         {caller.lastCallDate ? new Date(caller.lastCallDate).toLocaleDateString() : '-'}
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => caller.customerId && setSelectedCustomer({ id: caller.customerId, name: caller.customerName })}
+                          disabled={!caller.customerId}
+                          data-testid={`btn-view-calls-${index}`}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                   {(!data?.frequentCallers || data.frequentCallers.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                         No call data available for the selected period
                       </TableCell>
                     </TableRow>
@@ -2255,6 +2365,307 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Customer Calls Drill-down Dialog */}
+      <Dialog open={!!selectedCustomer} onOpenChange={(open) => !open && setSelectedCustomer(null)}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HeadphonesIcon className="h-5 w-5 text-primary" />
+              Call History - {selectedCustomer?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {customerCalls?.customerSummary && (
+                <div className="flex gap-4 mt-2">
+                  <Badge variant="outline">Total: {customerCalls.customerSummary.totalCalls} calls</Badge>
+                  <Badge variant="outline" className="text-green-600">Resolved: {customerCalls.customerSummary.resolvedCalls}</Badge>
+                  {customerCalls.customerSummary.avgResolutionDays && (
+                    <Badge variant="outline">Avg Resolution: {customerCalls.customerSummary.avgResolutionDays} days</Badge>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingCalls ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <ScrollArea className="h-[400px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ticket #</TableHead>
+                    <TableHead>Issue Summary</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Module</TableHead>
+                    <TableHead>Engineer</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(customerCalls?.calls || []).map((call) => (
+                    <TableRow key={call.id} className="hover:bg-muted/50">
+                      <TableCell className="font-mono text-sm">{call.ticketNumber}</TableCell>
+                      <TableCell className="max-w-[200px] truncate" title={call.issueSummary}>{call.issueSummary}</TableCell>
+                      <TableCell>
+                        <Badge className={getPriorityBadge(call.priority)}>{call.priority}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadge(call.status)}>{call.status.replace(/_/g, ' ')}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{call.moduleName || '-'}</TableCell>
+                      <TableCell className="text-sm">{call.assignedEngineerName || 'Unassigned'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(call.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => setSelectedTicket(call.id)}
+                          data-testid={`btn-view-ticket-${call.id}`}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!customerCalls?.calls || customerCalls.calls.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        No calls found for this customer in the selected period
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Ticket Detail Dialog */}
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Ticket Details - {ticketDetail?.ticket?.ticketNumber}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {isLoadingTicket ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : ticketDetail?.ticket && (
+            <div className="space-y-6">
+              {/* Ticket Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Customer Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">{ticketDetail.ticket.customerName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3 w-3 text-muted-foreground" />
+                      <span>{ticketDetail.ticket.customerEmail}</span>
+                    </div>
+                    {ticketDetail.ticket.customerPhone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-3 w-3 text-muted-foreground" />
+                        <span>{ticketDetail.ticket.customerPhone}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Assigned Engineer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium">{ticketDetail.ticket.assignedEngineerName || 'Unassigned'}</span>
+                    </div>
+                    {ticketDetail.ticket.assignedEngineerEmail && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3 w-3 text-muted-foreground" />
+                        <span>{ticketDetail.ticket.assignedEngineerEmail}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Issue Details */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Issue Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className={getPriorityBadge(ticketDetail.ticket.priority)}>
+                      {ticketDetail.ticket.priority.toUpperCase()}
+                    </Badge>
+                    <Badge className={getStatusBadge(ticketDetail.ticket.status)}>
+                      {ticketDetail.ticket.status.replace(/_/g, ' ').toUpperCase()}
+                    </Badge>
+                    {ticketDetail.ticket.moduleName && (
+                      <Badge variant="outline">{ticketDetail.ticket.moduleName}</Badge>
+                    )}
+                    {ticketDetail.ticket.escalationLevel > 1 && (
+                      <Badge className="bg-purple-100 text-purple-700">Level {ticketDetail.ticket.escalationLevel} Escalation</Badge>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm mb-1">Summary:</div>
+                    <p className="text-sm text-muted-foreground">{ticketDetail.ticket.issueSummary}</p>
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm mb-1">Description:</div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ticketDetail.ticket.issueDescription}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    <span>Created: {new Date(ticketDetail.ticket.createdAt).toLocaleString()}</span>
+                    {ticketDetail.ticket.assignedAt && (
+                      <span>Assigned: {new Date(ticketDetail.ticket.assignedAt).toLocaleString()}</span>
+                    )}
+                    {ticketDetail.ticket.resolvedAt && (
+                      <span className="text-green-600">Resolved: {new Date(ticketDetail.ticket.resolvedAt).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {ticketDetail.resolutionTime && (
+                    <div className="text-sm">
+                      <span className="font-medium">Resolution Time: </span>
+                      <Badge variant="outline" className="text-green-600">
+                        {ticketDetail.resolutionTime.days > 0 && `${ticketDetail.resolutionTime.days}d `}
+                        {ticketDetail.resolutionTime.hours > 0 && `${ticketDetail.resolutionTime.hours}h `}
+                        {ticketDetail.resolutionTime.minutes}m
+                      </Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Solution & Engineer Reports (Comments) */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Solution & Engineer Reports ({ticketDetail.comments?.length || 0})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {ticketDetail.comments && ticketDetail.comments.length > 0 ? (
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-4">
+                        {ticketDetail.comments.map((comment) => (
+                          <div key={comment.id} className={`p-3 rounded-lg border ${comment.isInternal ? 'bg-yellow-50 border-yellow-200' : 'bg-muted/50'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <User className="h-3 w-3 text-muted-foreground" />
+                                <span className="font-medium text-sm">{comment.userName || 'System'}</span>
+                                {comment.isInternal && (
+                                  <Badge variant="outline" className="text-xs">Internal</Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-sm whitespace-pre-wrap">{comment.comment}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-8 text-sm">
+                      No solution or engineer reports available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Escalation History */}
+              {ticketDetail.escalations && ticketDetail.escalations.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-500" />
+                      Escalation History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {ticketDetail.escalations.map((esc) => (
+                        <div key={esc.id} className="flex items-center justify-between p-2 rounded border bg-orange-50">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline">Level {esc.fromLevel}</Badge>
+                            <ChevronRight className="h-4 w-4" />
+                            <Badge className="bg-orange-100 text-orange-700">Level {esc.toLevel}</Badge>
+                            {esc.reason && <span className="text-muted-foreground">- {esc.reason}</span>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {esc.escalatedByName && <span>by {esc.escalatedByName} | </span>}
+                            {new Date(esc.escalatedAt).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Customer Feedback */}
+              {ticketDetail.feedback && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Star className="h-4 w-4 text-yellow-500" />
+                      Customer Feedback
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-4 mb-2">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star 
+                            key={star} 
+                            className={`h-5 w-5 ${star <= ticketDetail.feedback!.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`} 
+                          />
+                        ))}
+                      </div>
+                      <Badge variant={ticketDetail.feedback.satisfied ? 'default' : 'outline'}>
+                        {ticketDetail.feedback.satisfied ? 'Satisfied' : 'Not Satisfied'}
+                      </Badge>
+                    </div>
+                    {ticketDetail.feedback.comments && (
+                      <p className="text-sm text-muted-foreground">{ticketDetail.feedback.comments}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

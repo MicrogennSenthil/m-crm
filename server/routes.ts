@@ -9781,6 +9781,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get ticket detail with comments (solutions/remedies) and engineer report
+  app.get("/api/analytics/ticket-detail/:ticketId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { ticketId } = req.params;
+      
+      // Get ticket with engineer info
+      const [ticket] = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        customerName: tickets.customerName,
+        customerEmail: tickets.customerEmail,
+        customerPhone: tickets.customerPhone,
+        issueSummary: tickets.issueSummary,
+        issueDescription: tickets.issueDescription,
+        priority: tickets.priority,
+        status: tickets.status,
+        escalationLevel: tickets.escalationLevel,
+        createdAt: tickets.createdAt,
+        assignedAt: tickets.assignedAt,
+        resolvedAt: tickets.resolvedAt,
+        closedAt: tickets.closedAt,
+        dueDate: tickets.dueDate,
+        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        assignedEngineerEmail: sql<string>`(SELECT email FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        moduleName: sql<string>`(SELECT name FROM modules WHERE id = ${tickets.moduleId})`,
+      })
+        .from(tickets)
+        .where(eq(tickets.id, ticketId));
+
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+
+      // Get all comments (solutions/engineer reports)
+      const comments = await db.select({
+        id: ticketComments.id,
+        comment: ticketComments.comment,
+        isInternal: ticketComments.isInternal,
+        createdAt: ticketComments.createdAt,
+        userName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${ticketComments.userId})`,
+        userEmail: sql<string>`(SELECT email FROM users WHERE id = ${ticketComments.userId})`,
+      })
+        .from(ticketComments)
+        .where(eq(ticketComments.ticketId, ticketId))
+        .orderBy(ticketComments.createdAt);
+
+      // Get escalation history
+      const escalations = await db.select({
+        id: escalationHistory.id,
+        fromLevel: escalationHistory.fromLevel,
+        toLevel: escalationHistory.toLevel,
+        reason: escalationHistory.reason,
+        escalatedAt: escalationHistory.escalatedAt,
+        escalatedByName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${escalationHistory.escalatedBy})`,
+      })
+        .from(escalationHistory)
+        .where(eq(escalationHistory.ticketId, ticketId))
+        .orderBy(escalationHistory.escalatedAt);
+
+      // Get feedback if any
+      const [ticketFeedback] = await db.select()
+        .from(feedback)
+        .where(eq(feedback.ticketId, ticketId));
+
+      // Calculate resolution time if resolved
+      let resolutionTime = null;
+      if (ticket.resolvedAt && ticket.createdAt) {
+        const diff = new Date(ticket.resolvedAt).getTime() - new Date(ticket.createdAt).getTime();
+        resolutionTime = {
+          days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+          minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+        };
+      }
+
+      res.json({
+        ticket,
+        comments,
+        escalations,
+        feedback: ticketFeedback || null,
+        resolutionTime,
+      });
+    } catch (error) {
+      console.error("Error fetching ticket detail:", error);
+      res.status(500).json({ message: "Failed to fetch ticket detail" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
