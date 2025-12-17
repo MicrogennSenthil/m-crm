@@ -116,7 +116,8 @@ function AuthenticatedLayout() {
               <Route path="/department-users" component={DepartmentUsers} />
               <Route path="/development/dashboard" component={DevelopmentDashboard} />
               <Route path="/development/tasks" component={DevelopmentTasks} />
-              <Route component={NotFound} />
+              {/* Fallback to Home for any unmatched routes in authenticated layout */}
+              <Route component={Home} />
             </Switch>
           </main>
           <BottomNav />
