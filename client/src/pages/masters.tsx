@@ -45,8 +45,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText } from "lucide-react";
-import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule, ContractType } from "@shared/schema";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText, Eye, Calendar, IndianRupee } from "lucide-react";
+import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule, ContractType, CustomerContract } from "@shared/schema";
+import { format } from "date-fns";
 
 export default function Masters() {
   const [activeTab, setActiveTab] = useState("customers");
@@ -130,9 +131,24 @@ function CustomersTab() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+  const [viewingContractsFor, setViewingContractsFor] = useState<Customer | null>(null);
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+  });
+
+  // Fetch contracts for the selected customer
+  const { data: customerContracts = [], isLoading: contractsLoading } = useQuery<{contract: CustomerContract, contractTypeName: string}[]>({
+    queryKey: ["/api/customers", viewingContractsFor?.id, "contracts"],
+    queryFn: async () => {
+      if (!viewingContractsFor?.id) return [];
+      const response = await fetch(`/api/customers/${viewingContractsFor.id}/contracts`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error("Failed to fetch contracts");
+      return response.json();
+    },
+    enabled: !!viewingContractsFor,
   });
 
   const createMutation = useMutation({
@@ -294,12 +310,22 @@ function CustomersTab() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setViewingContractsFor(customer)}
+                          data-testid={`button-view-contracts-${customer.id}`}
+                          title="View Contracts"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => setEditingCustomer(customer)}
                           data-testid={`button-edit-customer-${customer.id}`}
+                          title="Edit Customer"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -308,6 +334,7 @@ function CustomersTab() {
                           size="icon"
                           onClick={() => setDeletingCustomer(customer)}
                           data-testid={`button-delete-customer-${customer.id}`}
+                          title="Delete Customer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -353,6 +380,93 @@ function CustomersTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* View Customer Contracts Dialog */}
+      <Dialog open={!!viewingContractsFor} onOpenChange={() => setViewingContractsFor(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Contracts - {viewingContractsFor?.name}
+            </DialogTitle>
+            <DialogDescription>
+              View all contracts associated with this customer
+            </DialogDescription>
+          </DialogHeader>
+          
+          {contractsLoading ? (
+            <div className="space-y-2">
+              {Array(3).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          ) : customerContracts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No contracts found for this customer</p>
+              <p className="text-sm mt-1">Create contracts in the Accounts &gt; Contracts section</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {customerContracts.map(({ contract, contractTypeName }) => {
+                const endDate = contract.endDate ? new Date(contract.endDate) : null;
+                const daysRemaining = endDate ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+                const isExpiring = daysRemaining !== null && daysRemaining <= 30 && daysRemaining > 0;
+                const isExpired = daysRemaining !== null && daysRemaining <= 0;
+                
+                return (
+                  <Card key={contract.id} className={`${isExpired ? 'border-destructive/50' : isExpiring ? 'border-yellow-500/50' : ''}`}>
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{contract.contractNumber}</span>
+                            <Badge variant="outline">{contractTypeName}</Badge>
+                            <Badge 
+                              variant={
+                                contract.status === 'active' ? 'default' : 
+                                contract.status === 'expired' ? 'destructive' : 
+                                contract.status === 'pending_renewal' ? 'secondary' : 'outline'
+                              }
+                            >
+                              {contract.status?.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <IndianRupee className="w-3 h-3" />
+                              {Number(contract.amount || 0).toLocaleString('en-IN')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {contract.startDate ? format(new Date(contract.startDate), 'dd MMM yyyy') : '-'}
+                              {' - '}
+                              {endDate ? format(endDate, 'dd MMM yyyy') : 'Ongoing'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {daysRemaining !== null && (
+                            <span className={`text-sm font-medium ${isExpired ? 'text-destructive' : isExpiring ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                              {isExpired ? `Expired ${Math.abs(daysRemaining)} days ago` : `${daysRemaining} days remaining`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingContractsFor(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
