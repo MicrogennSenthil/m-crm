@@ -1289,3 +1289,107 @@ export const insertDevelopmentTaskCommentSchema = createInsertSchema(development
 
 export type InsertDevelopmentTaskComment = z.infer<typeof insertDevelopmentTaskCommentSchema>;
 export type DevelopmentTaskComment = typeof developmentTaskComments.$inferSelect;
+
+// Contract Types Master - Different types of customer contracts
+export const contractTypes = pgTable("contract_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(), // warranty, amc, percall, monthly, subscription
+  displayName: text("display_name").notNull(), // User-friendly name
+  description: text("description"),
+  billingFrequency: text("billing_frequency").notNull().default("yearly"), // monthly, quarterly, half_yearly, yearly, one_time
+  defaultDurationMonths: integer("default_duration_months").default(12), // Default contract duration
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertContractTypeSchema = createInsertSchema(contractTypes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContractType = z.infer<typeof insertContractTypeSchema>;
+export type ContractType = typeof contractTypes.$inferSelect;
+
+// Customer Contracts - Link customers to contract types with amount and period
+export const customerContracts = pgTable("customer_contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractNumber: text("contract_number").notNull().unique(), // CON-XXXXXX format
+  customerId: varchar("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  contractTypeId: varchar("contract_type_id").notNull().references(() => contractTypes.id),
+  // Amount Details
+  amount: integer("amount").notNull(), // Contract amount
+  currency: text("currency").notNull().default("INR"),
+  // Contract Period
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  billingCycleDay: integer("billing_cycle_day").default(1), // Day of month for billing
+  // Contact Details for this contract
+  contactPerson: text("contact_person"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  // Status and Options
+  status: text("status").notNull().default("active"), // active, expired, cancelled, pending_renewal
+  autoRenew: boolean("auto_renew").default(false),
+  // Payment Tracking
+  lastPaymentDate: timestamp("last_payment_date"),
+  lastPaymentAmount: integer("last_payment_amount"),
+  nextFollowupDate: timestamp("next_followup_date"),
+  // Additional Info
+  notes: text("notes"),
+  suggestionRequest: text("suggestion_request"), // Any suggestions or special requests
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerContractSchema = createInsertSchema(customerContracts).omit({
+  id: true,
+  contractNumber: true,
+  lastPaymentDate: true,
+  lastPaymentAmount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCustomerContract = z.infer<typeof insertCustomerContractSchema>;
+export type CustomerContract = typeof customerContracts.$inferSelect;
+
+// Contract Follow-ups - Track payment follow-ups and renewal reminders
+export const contractFollowups = pgTable("contract_followups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => customerContracts.id, { onDelete: "cascade" }),
+  // Follow-up Details
+  followupDate: timestamp("followup_date").notNull(),
+  followupType: text("followup_type").notNull().default("reminder"), // reminder, payment, renewal, general
+  // Payment Tracking
+  paymentStatus: text("payment_status"), // pending, partial, paid
+  paymentAmount: integer("payment_amount"),
+  paymentDate: timestamp("payment_date"),
+  paymentReference: text("payment_reference"), // Transaction reference or cheque number
+  // Next Follow-up
+  nextFollowupDate: timestamp("next_followup_date"),
+  // Communication
+  notes: text("notes"),
+  emailSent: boolean("email_sent").default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  // Suggestions/Requests from customer
+  suggestionRequest: text("suggestion_request"),
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertContractFollowupSchema = createInsertSchema(contractFollowups).omit({
+  id: true,
+  emailSent: true,
+  emailSentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContractFollowup = z.infer<typeof insertContractFollowupSchema>;
+export type ContractFollowup = typeof contractFollowups.$inferSelect;
