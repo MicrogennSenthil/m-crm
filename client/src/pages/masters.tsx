@@ -137,6 +137,17 @@ function CustomersTab() {
     queryKey: ["/api/customers"],
   });
 
+  // Fetch contract types for display
+  const { data: contractTypes = [] } = useQuery<ContractType[]>({
+    queryKey: ["/api/contract-types"],
+  });
+
+  // Create a lookup map for contract types
+  const contractTypeMap = contractTypes.reduce((acc, type) => {
+    acc[type.id] = type.displayName;
+    return acc;
+  }, {} as Record<string, string>);
+
   // Fetch contracts for the selected customer
   const { data: customerContracts = [], isLoading: contractsLoading } = useQuery<{contract: CustomerContract, contractTypeName: string}[]>({
     queryKey: ["/api/customers", viewingContractsFor?.id, "contracts"],
@@ -268,6 +279,7 @@ function CustomersTab() {
                   <TableHead className="hidden lg:table-cell">Phone</TableHead>
                   <TableHead className="hidden xl:table-cell">Industry</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead className="hidden lg:table-cell">Contract</TableHead>
                   <TableHead className="hidden md:table-cell">Modules</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -285,6 +297,15 @@ function CustomersTab() {
                       <Badge variant="outline" className="capitalize">
                         {customer.customerType || "prospect"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {customer.contractTypeId && contractTypeMap[customer.contractTypeId] ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {contractTypeMap[customer.contractTypeId]}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {customer.selectedModules && customer.selectedModules.length > 0 ? (
@@ -486,6 +507,10 @@ function CustomerForm({
     queryKey: ["/api/modules"],
   });
 
+  const { data: contractTypes = [] } = useQuery<ContractType[]>({
+    queryKey: ["/api/contract-types"],
+  });
+
   const [formData, setFormData] = useState({
     name: customer?.name || "",
     contactPerson: customer?.contactPerson || "",
@@ -505,6 +530,7 @@ function CustomerForm({
     pincode: customer?.pincode || "",
     status: customer?.status || "active",
     customerType: customer?.customerType || "prospect",
+    contractTypeId: customer?.contractTypeId || "",
     selectedModules: customer?.selectedModules || [] as string[],
     notes: customer?.notes || "",
   });
@@ -520,7 +546,12 @@ function CustomerForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    // Convert empty contractTypeId to null for proper database storage
+    const submitData = {
+      ...formData,
+      contractTypeId: formData.contractTypeId || null,
+    };
+    onSubmit(submitData);
   };
 
   return (
@@ -729,7 +760,7 @@ function CustomerForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="customerType">Customer Type</Label>
             <Select
@@ -743,6 +774,25 @@ function CustomerForm({
                 <SelectItem value="prospect">Prospect</SelectItem>
                 <SelectItem value="customer">Customer</SelectItem>
                 <SelectItem value="partner">Partner</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="contractType">Contract Type</Label>
+            <Select
+              value={formData.contractTypeId || "none"}
+              onValueChange={(value) => setFormData({ ...formData, contractTypeId: value === "none" ? "" : value })}
+            >
+              <SelectTrigger data-testid="select-contract-type">
+                <SelectValue placeholder="Select contract type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {contractTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.displayName}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

@@ -150,6 +150,7 @@ export const customers = pgTable("customers", {
   pincode: text("pincode"),
   status: text("status").notNull().default("active"), // active, inactive
   customerType: text("customer_type").default("prospect"), // prospect, customer, partner
+  contractTypeId: varchar("contract_type_id"), // Default contract type for the customer
   selectedModules: text("selected_modules").array(), // Modules the customer is interested in
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
