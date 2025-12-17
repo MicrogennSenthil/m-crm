@@ -47,7 +47,8 @@ The CRM includes:
     - Additional dropdown filters for priority, engineer assignment, and overdue status
     - Supports attachment viewing (images, videos, voice recordings) from source modules
   - **Cross-Module Integration**: "Assign to Development" button in Implementation projects, Support tickets, and Tasks modals. Tickets with active development tasks display "Development" status badge and cannot be closed until dev work completes.
-  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours and actual hours tracking, commenting system
+  - **Features**: Auto-generated task numbers (DEV-XXXXXX), deadline tracking with penalty points for missed deadlines, assignment to developers/engineers, estimated hours (hours + minutes) and actual hours tracking, commenting system
+  - **Incomplete Status Workflow**: Tasks can be marked "incomplete" with 5-point penalty applied to assignee. Incomplete tasks can be reassigned by admin/superadmin to another engineer. Tracks previousAssignedTo and reassignmentCount for audit purposes.
   - **Source Types**: implementation (from projects), support (from tickets), task (from tasks module), manual (created directly)
   - **Shared Component**: AssignToDevelopmentDialog for consistent assignment workflow across modules
 
