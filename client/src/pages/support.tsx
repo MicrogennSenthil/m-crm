@@ -59,7 +59,7 @@ export default function Support() {
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [sortOrder, setSortOrder] = useState<string>("status");
-  const [categoryTab, setCategoryTab] = useState<string>("support"); // support or development
+  const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
@@ -178,9 +178,12 @@ export default function Support() {
         </Dialog>
       </div>
 
-      {/* Category Tabs - Support vs Development */}
+      {/* Category Tabs - All, Support, Development */}
       <Tabs value={categoryTab} onValueChange={(val) => { setCategoryTab(val); setActiveTab("all"); }} className="space-y-4">
         <TabsList className="flex-wrap" data-testid="tabs-category">
+          <TabsTrigger value="all" data-testid="tab-all-categories">
+            All ({tickets?.length || 0})
+          </TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">
             Support ({supportCount})
           </TabsTrigger>
