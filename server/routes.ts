@@ -9598,6 +9598,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== FREQUENT CALLER ANALYSIS ==================
+
+  // Get frequent callers analysis with time period filtering
+  app.get("/api/analytics/frequent-callers", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { period = 'month' } = req.query;
+      const { gte, and } = await import('drizzle-orm');
+      
+      // Calculate date range based on period
+      const now = new Date();
+      let startDate: Date;
+      
+      switch (period) {
+        case 'day':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'week':
+          const dayOfWeek = now.getDay();
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - dayOfWeek);
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      // Get frequent callers by customer
+      const frequentCallers = await db.select({
+        customerId: tickets.customerId,
+        customerName: tickets.customerName,
+        callCount: sql<number>`COUNT(*)::int`,
+        criticalCount: sql<number>`SUM(CASE WHEN ${tickets.priority} = 'critical' THEN 1 ELSE 0 END)::int`,
+        highCount: sql<number>`SUM(CASE WHEN ${tickets.priority} = 'high' THEN 1 ELSE 0 END)::int`,
+        resolvedCount: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
+        openCount: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('open', 'in_progress', 'pending_customer') THEN 1 ELSE 0 END)::int`,
+        avgResolutionDays: sql<number>`ROUND(AVG(CASE WHEN ${tickets.resolvedAt} IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (${tickets.resolvedAt} - ${tickets.createdAt})) / 86400 
+          ELSE NULL END)::numeric, 1)`,
+        lastCallDate: sql<string>`MAX(${tickets.createdAt})::text`,
+      })
+        .from(tickets)
+        .where(gte(tickets.createdAt, startDate))
+        .groupBy(tickets.customerId, tickets.customerName)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(20);
+
+      // Get total calls in period
+      const [totalStats] = await db.select({
+        totalCalls: sql<number>`COUNT(*)::int`,
+        uniqueCustomers: sql<number>`COUNT(DISTINCT ${tickets.customerId})::int`,
+        criticalCalls: sql<number>`SUM(CASE WHEN ${tickets.priority} = 'critical' THEN 1 ELSE 0 END)::int`,
+        resolvedCalls: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
+      })
+        .from(tickets)
+        .where(gte(tickets.createdAt, startDate));
+
+      // Get employee call handling stats
+      const employeeStats = await db.select({
+        employeeId: tickets.assignedEngineerId,
+        employeeName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        employeeEmail: sql<string>`(SELECT email FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        callsHandled: sql<number>`COUNT(*)::int`,
+        resolvedCount: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
+        criticalHandled: sql<number>`SUM(CASE WHEN ${tickets.priority} = 'critical' THEN 1 ELSE 0 END)::int`,
+        avgResolutionDays: sql<number>`ROUND(AVG(CASE WHEN ${tickets.resolvedAt} IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (${tickets.resolvedAt} - ${tickets.createdAt})) / 86400 
+          ELSE NULL END)::numeric, 1)`,
+      })
+        .from(tickets)
+        .where(and(
+          gte(tickets.createdAt, startDate),
+          sql`${tickets.assignedEngineerId} IS NOT NULL`
+        ))
+        .groupBy(tickets.assignedEngineerId)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(10);
+
+      // Get calls by day for chart (last 30 days or within period)
+      const chartStartDate = period === 'day' ? startDate : 
+        period === 'week' ? startDate :
+        new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const dailyTrend = await db.select({
+        date: sql<string>`DATE(${tickets.createdAt})::text`,
+        callCount: sql<number>`COUNT(*)::int`,
+        resolvedCount: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
+      })
+        .from(tickets)
+        .where(gte(tickets.createdAt, chartStartDate))
+        .groupBy(sql`DATE(${tickets.createdAt})`)
+        .orderBy(sql`DATE(${tickets.createdAt})`);
+
+      // Get priority distribution
+      const priorityDistribution = await db.select({
+        priority: tickets.priority,
+        count: sql<number>`COUNT(*)::int`,
+      })
+        .from(tickets)
+        .where(gte(tickets.createdAt, startDate))
+        .groupBy(tickets.priority);
+
+      res.json({
+        period,
+        startDate: startDate.toISOString(),
+        endDate: now.toISOString(),
+        summary: totalStats || { totalCalls: 0, uniqueCustomers: 0, criticalCalls: 0, resolvedCalls: 0 },
+        frequentCallers,
+        employeeStats,
+        dailyTrend,
+        priorityDistribution,
+      });
+    } catch (error) {
+      console.error("Error fetching frequent callers:", error);
+      res.status(500).json({ message: "Failed to fetch frequent callers analysis" });
+    }
+  });
+
+  // Get detailed call history for a specific customer
+  app.get("/api/analytics/customer-calls/:customerId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const { period = 'month' } = req.query;
+      const { gte, and } = await import('drizzle-orm');
+      
+      const now = new Date();
+      let startDate: Date;
+      
+      switch (period) {
+        case 'day': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
+        case 'week': startDate = new Date(now); startDate.setDate(now.getDate() - now.getDay()); startDate.setHours(0,0,0,0); break;
+        case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+        case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
+        default: startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      const customerCalls = await db.select({
+        id: tickets.id,
+        ticketNumber: tickets.ticketNumber,
+        issueSummary: tickets.issueSummary,
+        priority: tickets.priority,
+        status: tickets.status,
+        createdAt: tickets.createdAt,
+        resolvedAt: tickets.resolvedAt,
+        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        moduleName: sql<string>`(SELECT name FROM modules WHERE id = ${tickets.moduleId})`,
+      })
+        .from(tickets)
+        .where(and(
+          eq(tickets.customerId, customerId),
+          gte(tickets.createdAt, startDate)
+        ))
+        .orderBy(sql`${tickets.createdAt} DESC`);
+
+      // Get customer summary
+      const [customerSummary] = await db.select({
+        customerName: tickets.customerName,
+        totalCalls: sql<number>`COUNT(*)::int`,
+        resolvedCalls: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
+        avgResolutionDays: sql<number>`ROUND(AVG(CASE WHEN ${tickets.resolvedAt} IS NOT NULL 
+          THEN EXTRACT(EPOCH FROM (${tickets.resolvedAt} - ${tickets.createdAt})) / 86400 
+          ELSE NULL END)::numeric, 1)`,
+      })
+        .from(tickets)
+        .where(and(eq(tickets.customerId, customerId), gte(tickets.createdAt, startDate)))
+        .groupBy(tickets.customerName);
+
+      res.json({
+        customerId,
+        customerSummary: customerSummary || { customerName: 'Unknown', totalCalls: 0, resolvedCalls: 0 },
+        calls: customerCalls,
+      });
+    } catch (error) {
+      console.error("Error fetching customer calls:", error);
+      res.status(500).json({ message: "Failed to fetch customer call history" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
