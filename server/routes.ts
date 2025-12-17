@@ -9603,32 +9603,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get frequent callers analysis with time period filtering
   app.get("/api/analytics/frequent-callers", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const { period = 'month' } = req.query;
-      const { gte, and } = await import('drizzle-orm');
+      const { year, month, fromDate, toDate } = req.query;
+      const { gte, and, lte } = await import('drizzle-orm');
       
-      // Calculate date range based on period
       const now = new Date();
       let startDate: Date;
+      let endDate: Date;
       
-      switch (period) {
-        case 'day':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'week':
-          const dayOfWeek = now.getDay();
-          startDate = new Date(now);
-          startDate.setDate(now.getDate() - dayOfWeek);
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        case 'year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          break;
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Priority: fromDate/toDate > month > year (only if both dates are provided and valid)
+      if (fromDate && toDate) {
+        // Parse dates in UTC to avoid timezone issues
+        const from = new Date(fromDate as string + 'T00:00:00.000Z');
+        const to = new Date(toDate as string + 'T00:00:00.000Z');
+        
+        // Validate date range
+        if (from > to) {
+          return res.status(400).json({ message: "From date must be before To date" });
+        }
+        
+        startDate = from;
+        endDate = new Date(to.getTime() + 24 * 60 * 60 * 1000); // Include end date
+      } else if (month && year) {
+        const yearNum = parseInt(year as string);
+        const monthNum = parseInt(month as string);
+        startDate = new Date(Date.UTC(yearNum, monthNum - 1, 1));
+        endDate = new Date(Date.UTC(yearNum, monthNum, 1));
+      } else if (year) {
+        const yearNum = parseInt(year as string);
+        startDate = new Date(Date.UTC(yearNum, 0, 1));
+        endDate = new Date(Date.UTC(yearNum + 1, 0, 1));
+      } else {
+        // Default to current month (UTC)
+        startDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+        endDate = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
       }
+
+      // Date range filter condition
+      const dateFilter = and(
+        gte(tickets.createdAt, startDate),
+        sql`${tickets.createdAt} < ${endDate}`
+      );
 
       // Get frequent callers by customer
       const frequentCallers = await db.select({
@@ -9645,7 +9659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastCallDate: sql<string>`MAX(${tickets.createdAt})::text`,
       })
         .from(tickets)
-        .where(gte(tickets.createdAt, startDate))
+        .where(dateFilter)
         .groupBy(tickets.customerId, tickets.customerName)
         .orderBy(sql`COUNT(*) DESC`)
         .limit(20);
@@ -9658,7 +9672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resolvedCalls: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
       })
         .from(tickets)
-        .where(gte(tickets.createdAt, startDate));
+        .where(dateFilter);
 
       // Get employee call handling stats
       const employeeStats = await db.select({
@@ -9674,25 +9688,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
         .from(tickets)
         .where(and(
-          gte(tickets.createdAt, startDate),
+          dateFilter,
           sql`${tickets.assignedEngineerId} IS NOT NULL`
         ))
         .groupBy(tickets.assignedEngineerId)
         .orderBy(sql`COUNT(*) DESC`)
         .limit(10);
 
-      // Get calls by day for chart (last 30 days or within period)
-      const chartStartDate = period === 'day' ? startDate : 
-        period === 'week' ? startDate :
-        new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      
+      // Get calls by day for chart within the selected period
       const dailyTrend = await db.select({
         date: sql<string>`DATE(${tickets.createdAt})::text`,
         callCount: sql<number>`COUNT(*)::int`,
         resolvedCount: sql<number>`SUM(CASE WHEN ${tickets.status} IN ('resolved', 'closed') THEN 1 ELSE 0 END)::int`,
       })
         .from(tickets)
-        .where(gte(tickets.createdAt, chartStartDate))
+        .where(dateFilter)
         .groupBy(sql`DATE(${tickets.createdAt})`)
         .orderBy(sql`DATE(${tickets.createdAt})`);
 
@@ -9702,13 +9712,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         count: sql<number>`COUNT(*)::int`,
       })
         .from(tickets)
-        .where(gte(tickets.createdAt, startDate))
+        .where(dateFilter)
         .groupBy(tickets.priority);
 
       res.json({
-        period,
         startDate: startDate.toISOString(),
-        endDate: now.toISOString(),
+        endDate: endDate.toISOString(),
         summary: totalStats || { totalCalls: 0, uniqueCustomers: 0, criticalCalls: 0, resolvedCalls: 0 },
         frequentCallers,
         employeeStats,
@@ -9725,19 +9734,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics/customer-calls/:customerId", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const { customerId } = req.params;
-      const { period = 'month' } = req.query;
+      const { year, month, fromDate, toDate } = req.query;
       const { gte, and } = await import('drizzle-orm');
       
       const now = new Date();
       let startDate: Date;
+      let endDate: Date;
       
-      switch (period) {
-        case 'day': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
-        case 'week': startDate = new Date(now); startDate.setDate(now.getDate() - now.getDay()); startDate.setHours(0,0,0,0); break;
-        case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
-        case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
-        default: startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Priority: fromDate/toDate > month > year (only if both dates are provided and valid)
+      if (fromDate && toDate) {
+        // Parse dates in UTC to avoid timezone issues
+        const from = new Date(fromDate as string + 'T00:00:00.000Z');
+        const to = new Date(toDate as string + 'T00:00:00.000Z');
+        
+        // Validate date range
+        if (from > to) {
+          return res.status(400).json({ message: "From date must be before To date" });
+        }
+        
+        startDate = from;
+        endDate = new Date(to.getTime() + 24 * 60 * 60 * 1000); // Include end date
+      } else if (month && year) {
+        const yearNum = parseInt(year as string);
+        const monthNum = parseInt(month as string);
+        startDate = new Date(Date.UTC(yearNum, monthNum - 1, 1));
+        endDate = new Date(Date.UTC(yearNum, monthNum, 1));
+      } else if (year) {
+        const yearNum = parseInt(year as string);
+        startDate = new Date(Date.UTC(yearNum, 0, 1));
+        endDate = new Date(Date.UTC(yearNum + 1, 0, 1));
+      } else {
+        // Default to current month (UTC)
+        startDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+        endDate = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
       }
+
+      const dateFilter = and(
+        gte(tickets.createdAt, startDate),
+        sql`${tickets.createdAt} < ${endDate}`
+      );
 
       const customerCalls = await db.select({
         id: tickets.id,
@@ -9753,7 +9788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(tickets)
         .where(and(
           eq(tickets.customerId, customerId),
-          gte(tickets.createdAt, startDate)
+          dateFilter
         ))
         .orderBy(sql`${tickets.createdAt} DESC`);
 
@@ -9767,7 +9802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ELSE NULL END)::numeric, 1)`,
       })
         .from(tickets)
-        .where(and(eq(tickets.customerId, customerId), gte(tickets.createdAt, startDate)))
+        .where(and(eq(tickets.customerId, customerId), dateFilter))
         .groupBy(tickets.customerName);
 
       res.json({

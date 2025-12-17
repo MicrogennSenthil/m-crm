@@ -2294,7 +2294,6 @@ interface EmployeeStat {
 }
 
 interface FrequentCallersData {
-  period: string;
   startDate: string;
   endDate: string;
   summary: {
@@ -2372,23 +2371,48 @@ interface TicketDetailData {
 }
 
 function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
-  const [period, setPeriod] = useState<string>('month');
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  
+  const [year, setYear] = useState<number>(currentYear);
+  const [month, setMonth] = useState<number | null>(currentMonth);
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string } | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
+
+  // Build query parameters with validation
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    params.set('year', year.toString());
+    
+    // Only use date range if both dates are set and valid
+    const hasValidDateRange = fromDate && toDate && fromDate <= toDate;
+    
+    if (hasValidDateRange) {
+      params.set('fromDate', fromDate);
+      params.set('toDate', toDate);
+    } else if (month) {
+      params.set('month', month.toString());
+    }
+    return params.toString();
+  };
+
+  const queryParams = buildQueryParams();
   
   const { data, isLoading } = useQuery<FrequentCallersData>({
-    queryKey: ['/api/analytics/frequent-callers', period],
+    queryKey: ['/api/analytics/frequent-callers', year, month, fromDate, toDate],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/frequent-callers?period=${period}`, { credentials: 'include' });
+      const res = await fetch(`/api/analytics/frequent-callers?${queryParams}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     }
   });
 
   const { data: customerCalls, isLoading: isLoadingCalls } = useQuery<CustomerCallsData>({
-    queryKey: ['/api/analytics/customer-calls', selectedCustomer?.id, period],
+    queryKey: ['/api/analytics/customer-calls', selectedCustomer?.id, year, month, fromDate, toDate],
     queryFn: async () => {
-      const res = await fetch(`/api/analytics/customer-calls/${selectedCustomer?.id}?period=${period}`, { credentials: 'include' });
+      const res = await fetch(`/api/analytics/customer-calls/${selectedCustomer?.id}?${queryParams}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
@@ -2442,26 +2466,127 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
     );
   }
 
+  // Month names for selector
+  const monthNames = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
+  ];
+
+  // Get period label for display
+  const getPeriodLabel = () => {
+    if (fromDate && toDate) {
+      return `${new Date(fromDate).toLocaleDateString()} - ${new Date(toDate).toLocaleDateString()}`;
+    }
+    if (month) {
+      return `${monthNames[month - 1]?.label} ${year}`;
+    }
+    return `Year ${year}`;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Period Selector */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-2">
-          <HeadphonesIcon className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Frequent Caller Analysis</h2>
-        </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-32" data-testid="select-period">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="day">Today</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
-            <SelectItem value="year">This Year</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Date Filters */}
+      <Card>
+        <CardContent className="pt-4">
+          <div className="space-y-4">
+            {/* Row 1: Year */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <HeadphonesIcon className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">Frequent Caller Analysis</h2>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Year:</span>
+                <Select value={year.toString()} onValueChange={(v) => { setYear(parseInt(v)); setFromDate(''); setToDate(''); }}>
+                  <SelectTrigger className="w-24" data-testid="select-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[2023, 2024, 2025, 2026].map(y => (
+                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Row 2: Month */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-sm text-muted-foreground">Month:</span>
+              <div className="flex gap-1 flex-wrap">
+                <Button
+                  size="sm"
+                  variant={month === null ? 'default' : 'outline'}
+                  onClick={() => { setMonth(null); setFromDate(''); setToDate(''); }}
+                  data-testid="btn-month-all"
+                >
+                  All
+                </Button>
+                {monthNames.map(m => (
+                  <Button
+                    key={m.value}
+                    size="sm"
+                    variant={month === m.value ? 'default' : 'outline'}
+                    onClick={() => { setMonth(m.value); setFromDate(''); setToDate(''); }}
+                    data-testid={`btn-month-${m.value}`}
+                  >
+                    {m.label.slice(0, 3)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Row 3: Date Range */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-sm text-muted-foreground">Date Range:</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => { 
+                    const val = e.target.value;
+                    setFromDate(val);
+                    if (val) setMonth(null);
+                  }}
+                  className="px-3 py-1.5 text-sm border rounded-md bg-background"
+                  data-testid="input-from-date"
+                />
+                <span className="text-muted-foreground">to</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => { 
+                    const val = e.target.value;
+                    setToDate(val);
+                    if (val) setMonth(null);
+                  }}
+                  className="px-3 py-1.5 text-sm border rounded-md bg-background"
+                  data-testid="input-to-date"
+                />
+                {(fromDate || toDate) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { 
+                      setFromDate(''); 
+                      setToDate(''); 
+                      setMonth(currentMonth); // Reset to current month
+                    }}
+                    data-testid="btn-clear-dates"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {fromDate && toDate && fromDate > toDate && (
+                <span className="text-xs text-red-500">From date must be before To date</span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2572,7 +2697,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
-                Frequent Callers ({period === 'day' ? 'Today' : period === 'week' ? 'This Week' : period === 'month' ? 'This Month' : 'This Year'})
+                Frequent Callers ({getPeriodLabel()})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2593,7 +2718,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
                 </TableHeader>
                 <TableBody>
                   {(data?.frequentCallers || []).map((caller, index) => (
-                    <TableRow key={caller.customerId || index} className="hover:bg-muted/50">
+                    <TableRow key={`caller-${caller.customerId || 'null'}-${index}`} className="hover:bg-muted/50">
                       <TableCell className="font-bold text-muted-foreground">
                         {index + 1}
                       </TableCell>
@@ -2685,7 +2810,7 @@ function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
               </TableHeader>
               <TableBody>
                 {(data?.employeeStats || []).map((emp, index) => (
-                  <TableRow key={emp.employeeId || index}>
+                  <TableRow key={`emp-${emp.employeeId || 'null'}-${index}`}>
                     <TableCell className="font-bold text-muted-foreground">{index + 1}</TableCell>
                     <TableCell className="font-medium">{emp.employeeName || 'Unknown'}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{emp.employeeEmail || '-'}</TableCell>
