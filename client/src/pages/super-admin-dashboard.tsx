@@ -18,7 +18,7 @@ import {
   TrendingUp, TrendingDown, Users, Target, Briefcase, HeadphonesIcon,
   AlertTriangle, Calendar, ChevronRight, ChevronLeft, Trophy, Award,
   DollarSign, CheckCircle, XCircle, Clock, ArrowUp, ArrowDown,
-  BarChart3, TableIcon, Percent, Activity, Eye, MessageSquare, User, Phone, Mail, Star
+  BarChart3, TableIcon, Percent, Activity, Eye, MessageSquare, User, Phone, Mail, Star, Layers
 } from "lucide-react";
 
 const COLORS = ['#1a2b6d', '#f5a623', '#4ade80', '#f87171', '#60a5fa', '#a78bfa'];
@@ -1683,6 +1683,85 @@ function SupportDrilldown({ viewMode }: { viewMode: ViewMode }) {
                     {ticketDetail.feedback.comments && (
                       <p className="text-sm text-muted-foreground">{ticketDetail.feedback.comments}</p>
                     )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Handlers - Who Worked on This Ticket */}
+              {ticketDetail.handlers && ticketDetail.handlers.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Users className="h-4 w-4 text-blue-500" />
+                      People Who Handled This Ticket ({ticketDetail.handlers.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {ticketDetail.handlers.map((handler: any) => (
+                        <div key={handler.userId} className="flex items-center justify-between p-2 rounded border bg-muted/30">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-sm">{handler.userName || 'Unknown'}</div>
+                              <div className="text-xs text-muted-foreground">{handler.userEmail}</div>
+                            </div>
+                          </div>
+                          <div className="text-right text-xs">
+                            <Badge variant="outline" className="mb-1">{handler.actionCount} action{handler.actionCount > 1 ? 's' : ''}</Badge>
+                            <div className="text-muted-foreground">
+                              Last: {new Date(handler.lastAction).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Similar Issues from Same Customer */}
+              {ticketDetail.similarTickets && ticketDetail.similarTickets.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-purple-500" />
+                      Similar Issues from This Customer ({ticketDetail.similarTickets.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ticket #</TableHead>
+                            <TableHead>Issue Summary</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Handler</TableHead>
+                            <TableHead>Created</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ticketDetail.similarTickets.map((t: any) => (
+                            <TableRow key={t.id} className="hover:bg-muted/50">
+                              <TableCell className="font-mono text-xs">{t.ticketNumber}</TableCell>
+                              <TableCell className="max-w-[150px] truncate text-sm" title={t.issueSummary}>
+                                {t.issueSummary}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={getStatusBadge(t.status)}>{t.status?.replace(/_/g, ' ')}</Badge>
+                              </TableCell>
+                              <TableCell className="text-sm">{t.assignedEngineerName || 'Unassigned'}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {new Date(t.createdAt).toLocaleDateString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
                   </CardContent>
                 </Card>
               )}

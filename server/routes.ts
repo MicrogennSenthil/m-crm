@@ -9980,12 +9980,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
 
+      // Get all handlers (unique people who worked on this ticket via comments)
+      const handlers = await db.select({
+        userId: ticketComments.userId,
+        userName: sql<string>`DISTINCT ON (${ticketComments.userId}) (SELECT first_name || ' ' || last_name FROM users WHERE id = ${ticketComments.userId})`,
+        userEmail: sql<string>`(SELECT email FROM users WHERE id = ${ticketComments.userId})`,
+        firstAction: sql<string>`MIN(${ticketComments.createdAt})`,
+        lastAction: sql<string>`MAX(${ticketComments.createdAt})`,
+        actionCount: sql<number>`COUNT(*)::int`,
+      })
+        .from(ticketComments)
+        .where(eq(ticketComments.ticketId, ticketId))
+        .groupBy(ticketComments.userId);
+
+      // Get similar issues from the same customer (matching keywords in issue summary)
+      const [currentTicket] = await db.select({ customerId: tickets.customerId, issueSummary: tickets.issueSummary })
+        .from(tickets)
+        .where(eq(tickets.id, ticketId));
+
+      let similarTickets: any[] = [];
+      if (currentTicket?.customerId) {
+        // Find tickets from same customer with similar issue summaries (basic keyword matching)
+        const allCustomerTickets = await db.select({
+          id: tickets.id,
+          ticketNumber: tickets.ticketNumber,
+          issueSummary: tickets.issueSummary,
+          status: tickets.status,
+          priority: tickets.priority,
+          createdAt: tickets.createdAt,
+          resolvedAt: tickets.resolvedAt,
+          assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
+        })
+          .from(tickets)
+          .where(and(
+            eq(tickets.customerId, currentTicket.customerId),
+            sql`${tickets.id} != ${ticketId}`
+          ))
+          .orderBy(sql`${tickets.createdAt} DESC`)
+          .limit(20);
+
+        // Group by similar keywords (basic grouping by first 3 words of issue summary)
+        similarTickets = allCustomerTickets.map(t => ({
+          ...t,
+          isSimilar: currentTicket.issueSummary && t.issueSummary ? 
+            currentTicket.issueSummary.toLowerCase().split(' ').slice(0, 3).some(
+              (word: string) => word.length > 3 && t.issueSummary.toLowerCase().includes(word)
+            ) : false,
+        })).filter(t => t.isSimilar);
+      }
+
       res.json({
         ticket,
         comments,
         escalations,
         feedback: ticketFeedback || null,
         resolutionTime,
+        handlers,
+        similarTickets,
       });
     } catch (error) {
       console.error("Error fetching ticket detail:", error);
