@@ -1914,6 +1914,351 @@ function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
+// Frequent Callers Analysis Types
+interface FrequentCaller {
+  customerId: string | null;
+  customerName: string;
+  callCount: number;
+  criticalCount: number;
+  highCount: number;
+  resolvedCount: number;
+  openCount: number;
+  avgResolutionDays: number | null;
+  lastCallDate: string;
+}
+
+interface EmployeeStat {
+  employeeId: string;
+  employeeName: string;
+  employeeEmail: string;
+  callsHandled: number;
+  resolvedCount: number;
+  criticalHandled: number;
+  avgResolutionDays: number | null;
+}
+
+interface FrequentCallersData {
+  period: string;
+  startDate: string;
+  endDate: string;
+  summary: {
+    totalCalls: number;
+    uniqueCustomers: number;
+    criticalCalls: number;
+    resolvedCalls: number;
+  };
+  frequentCallers: FrequentCaller[];
+  employeeStats: EmployeeStat[];
+  dailyTrend: { date: string; callCount: number; resolvedCount: number }[];
+  priorityDistribution: { priority: string; count: number }[];
+}
+
+function FrequentCallersTab({ viewMode }: { viewMode: ViewMode }) {
+  const [period, setPeriod] = useState<string>('month');
+  
+  const { data, isLoading } = useQuery<FrequentCallersData>({
+    queryKey: ['/api/analytics/frequent-callers', period],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/frequent-callers?period=${period}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    }
+  });
+
+  const priorityColors: Record<string, string> = {
+    critical: CHART_COLORS.danger,
+    high: CHART_COLORS.accent,
+    medium: CHART_COLORS.info,
+    low: CHART_COLORS.success,
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    const colors: Record<string, string> = {
+      critical: 'bg-red-100 text-red-700 border-red-200',
+      high: 'bg-orange-100 text-orange-700 border-orange-200',
+      medium: 'bg-blue-100 text-blue-700 border-blue-200',
+      low: 'bg-green-100 text-green-700 border-green-200',
+    };
+    return colors[priority] || 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Period Selector */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-2">
+          <HeadphonesIcon className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold">Frequent Caller Analysis</h2>
+        </div>
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-32" data-testid="select-period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="day">Today</SelectItem>
+            <SelectItem value="week">This Week</SelectItem>
+            <SelectItem value="month">This Month</SelectItem>
+            <SelectItem value="year">This Year</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard title="Total Calls" icon={HeadphonesIcon} iconColor="text-primary">
+          <div className="text-2xl font-bold">{data?.summary?.totalCalls || 0}</div>
+        </StatCard>
+        <StatCard title="Unique Customers" icon={Users} iconColor="text-blue-500">
+          <div className="text-2xl font-bold">{data?.summary?.uniqueCustomers || 0}</div>
+        </StatCard>
+        <StatCard title="Critical Calls" icon={AlertTriangle} iconColor="text-red-500">
+          <div className="text-2xl font-bold text-red-600">{data?.summary?.criticalCalls || 0}</div>
+        </StatCard>
+        <StatCard title="Resolved Calls" icon={CheckCircle} iconColor="text-green-500">
+          <div className="text-2xl font-bold text-green-600">{data?.summary?.resolvedCalls || 0}</div>
+          {data?.summary?.totalCalls ? (
+            <div className="text-xs text-muted-foreground">
+              {((data.summary.resolvedCalls / data.summary.totalCalls) * 100).toFixed(0)}% resolution rate
+            </div>
+          ) : null}
+        </StatCard>
+      </div>
+
+      {viewMode === 'graphical' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Daily Trend Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Daily Call Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={data?.dailyTrend || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  />
+                  <YAxis />
+                  <Tooltip 
+                    labelFormatter={(val) => new Date(val).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="callCount" name="Total Calls" stroke={CHART_COLORS.primary} fill={CHART_COLORS.primary} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="resolvedCount" name="Resolved" stroke={CHART_COLORS.success} fill={CHART_COLORS.success} fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Priority Distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Priority Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={data?.priorityDistribution || []}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="count"
+                    nameKey="priority"
+                    label={({ priority, count }) => `${priority}: ${count}`}
+                  >
+                    {(data?.priorityDistribution || []).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={priorityColors[entry.priority] || COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Top Frequent Callers Chart */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">Top 10 Frequent Callers</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart 
+                  data={(data?.frequentCallers || []).slice(0, 10)}
+                  layout="vertical"
+                  margin={{ left: 100 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="customerName" type="category" width={100} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="resolvedCount" name="Resolved" stackId="a" fill={CHART_COLORS.success} />
+                  <Bar dataKey="openCount" name="Open" stackId="a" fill={CHART_COLORS.info} />
+                  <Bar dataKey="criticalCount" name="Critical" fill={CHART_COLORS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Frequent Callers Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                Frequent Callers ({period === 'day' ? 'Today' : period === 'week' ? 'This Week' : period === 'month' ? 'This Month' : 'This Year'})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Customer Name</TableHead>
+                    <TableHead className="text-center">Total Calls</TableHead>
+                    <TableHead className="text-center">Critical</TableHead>
+                    <TableHead className="text-center">High</TableHead>
+                    <TableHead className="text-center">Resolved</TableHead>
+                    <TableHead className="text-center">Open</TableHead>
+                    <TableHead className="text-center">Avg Resolution (Days)</TableHead>
+                    <TableHead>Last Call</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(data?.frequentCallers || []).map((caller, index) => (
+                    <TableRow key={caller.customerId || index}>
+                      <TableCell className="font-bold text-muted-foreground">
+                        {index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium">{caller.customerName}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="font-bold">{caller.callCount}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {caller.criticalCount > 0 && (
+                          <Badge className="bg-red-100 text-red-700 border-red-200">{caller.criticalCount}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {caller.highCount > 0 && (
+                          <Badge className="bg-orange-100 text-orange-700 border-orange-200">{caller.highCount}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center text-green-600 font-medium">{caller.resolvedCount}</TableCell>
+                      <TableCell className="text-center text-blue-600 font-medium">{caller.openCount}</TableCell>
+                      <TableCell className="text-center">
+                        {caller.avgResolutionDays !== null ? `${caller.avgResolutionDays} days` : '-'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {caller.lastCallDate ? new Date(caller.lastCallDate).toLocaleDateString() : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!data?.frequentCallers || data.frequentCallers.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        No call data available for the selected period
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Employee Call Handling Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-500" />
+            Employee Call Handling Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {viewMode === 'graphical' ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data?.employeeStats || []}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="employeeName" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="callsHandled" name="Calls Handled" fill={CHART_COLORS.primary} />
+                <Bar dataKey="resolvedCount" name="Resolved" fill={CHART_COLORS.success} />
+                <Bar dataKey="criticalHandled" name="Critical Handled" fill={CHART_COLORS.danger} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Employee Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="text-center">Calls Handled</TableHead>
+                  <TableHead className="text-center">Resolved</TableHead>
+                  <TableHead className="text-center">Critical Handled</TableHead>
+                  <TableHead className="text-center">Avg Resolution (Days)</TableHead>
+                  <TableHead className="text-center">Resolution Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data?.employeeStats || []).map((emp, index) => (
+                  <TableRow key={emp.employeeId || index}>
+                    <TableCell className="font-bold text-muted-foreground">{index + 1}</TableCell>
+                    <TableCell className="font-medium">{emp.employeeName || 'Unknown'}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{emp.employeeEmail || '-'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-bold">{emp.callsHandled}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center text-green-600 font-medium">{emp.resolvedCount}</TableCell>
+                    <TableCell className="text-center">
+                      {emp.criticalHandled > 0 && (
+                        <Badge className="bg-red-100 text-red-700 border-red-200">{emp.criticalHandled}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {emp.avgResolutionDays !== null ? `${emp.avgResolutionDays} days` : '-'}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={emp.callsHandled > 0 && (emp.resolvedCount / emp.callsHandled) >= 0.8 ? 'default' : 'outline'}>
+                        {emp.callsHandled > 0 ? ((emp.resolvedCount / emp.callsHandled) * 100).toFixed(0) : 0}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {(!data?.employeeStats || data.employeeStats.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      No employee data available for the selected period
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function SuperAdminDashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('graphical');
   
@@ -1940,11 +2285,12 @@ export default function SuperAdminDashboard() {
       
       {/* Main Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full max-w-[720px] grid-cols-6">
+        <TabsList className="grid w-full max-w-[840px] grid-cols-7">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
           <TabsTrigger value="implementation" data-testid="tab-implementation">Implementation</TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">Support</TabsTrigger>
+          <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
           <TabsTrigger value="development" data-testid="tab-development">Development</TabsTrigger>
           <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
         </TabsList>
@@ -1975,6 +2321,10 @@ export default function SuperAdminDashboard() {
         
         <TabsContent value="support">
           <SupportDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="calls">
+          <FrequentCallersTab viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="development">
