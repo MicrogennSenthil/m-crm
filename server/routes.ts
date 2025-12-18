@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, contractTypes } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -9693,6 +9693,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Create audit log entry
+      const userId = req.user?.claims?.sub || req.user?.id || "system";
+      const userEmail = req.user?.claims?.email || req.user?.email || "unknown";
+      const userName = req.user?.claims?.first_name && req.user?.claims?.last_name
+        ? `${req.user.claims.first_name} ${req.user.claims.last_name}`
+        : userEmail;
+        
       await db.insert(contractTypeChangeLogs).values({
         customerId,
         previousContractTypeId: currentCustomer.contractTypeId,
@@ -9700,11 +9706,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         previousContractTypeName: previousTypeName,
         newContractTypeName: newTypeName,
         reason: reason || null,
-        changedBy: req.user?.id,
-        changedByName: req.user?.firstName && req.user?.lastName 
-          ? `${req.user.firstName} ${req.user.lastName}` 
-          : req.user?.email,
-        changedByEmail: req.user?.email,
+        changedBy: userId,
+        changedByName: userName,
+        changedByEmail: userEmail,
       });
       
       // Update customer contract type
@@ -9721,7 +9725,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: customerId,
         action: "contract_type_changed",
         description: `Contract type changed from "${previousTypeName || 'None'}" to "${newTypeName || 'None'}"`,
-        userId: req.user?.id,
+        userId,
       });
       
       res.json({ 
