@@ -1394,3 +1394,60 @@ export const insertContractFollowupSchema = createInsertSchema(contractFollowups
 
 export type InsertContractFollowup = z.infer<typeof insertContractFollowupSchema>;
 export type ContractFollowup = typeof contractFollowups.$inferSelect;
+
+// Contract Type Change Audit Log - Track when customer contract types are changed
+export const contractTypeChangeLogs = pgTable("contract_type_change_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  previousContractTypeId: varchar("previous_contract_type_id"),
+  newContractTypeId: varchar("new_contract_type_id"),
+  previousContractTypeName: text("previous_contract_type_name"),
+  newContractTypeName: text("new_contract_type_name"),
+  reason: text("reason"),
+  changedBy: varchar("changed_by").notNull().references(() => users.id),
+  changedByName: text("changed_by_name"),
+  changedByEmail: text("changed_by_email"),
+  changedAt: timestamp("changed_at").defaultNow().notNull(),
+});
+
+export const insertContractTypeChangeLogSchema = createInsertSchema(contractTypeChangeLogs).omit({
+  id: true,
+  changedAt: true,
+});
+
+export type InsertContractTypeChangeLog = z.infer<typeof insertContractTypeChangeLogSchema>;
+export type ContractTypeChangeLog = typeof contractTypeChangeLogs.$inferSelect;
+
+// Monthly Payment Reminder Schedule - Track monthly follow-up reminders
+export const monthlyPaymentReminders = pgTable("monthly_payment_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  contractId: varchar("contract_id").references(() => customerContracts.id, { onDelete: "cascade" }),
+  reminderMonth: integer("reminder_month").notNull(),
+  reminderYear: integer("reminder_year").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  amount: integer("amount"),
+  status: text("status").notNull().default("pending"),
+  emailSent: boolean("email_sent").default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  followedUpBy: varchar("followed_up_by").references(() => users.id),
+  followedUpAt: timestamp("followed_up_at"),
+  paymentStatus: text("payment_status").default("pending"),
+  paymentDate: timestamp("payment_date"),
+  paymentAmount: integer("payment_amount"),
+  paymentReference: text("payment_reference"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMonthlyPaymentReminderSchema = createInsertSchema(monthlyPaymentReminders).omit({
+  id: true,
+  emailSent: true,
+  emailSentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMonthlyPaymentReminder = z.infer<typeof insertMonthlyPaymentReminderSchema>;
+export type MonthlyPaymentReminder = typeof monthlyPaymentReminders.$inferSelect;
