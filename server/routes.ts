@@ -4721,11 +4721,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priority: priority as string,
       });
       
-      // Check if user is super admin
+      // Check if user is super admin or has admin role
       const currentUser = await storage.getUser(userId);
-      const isSuperAdminUser = currentUser?.email === "senthil@microgenn.com";
+      const isSuperAdminUser = currentUser?.email === "senthil@microgenn.com" || currentUser?.role === "admin";
       
-      // Super admin sees all tickets
+      // Super admin or admin role sees all tickets
       if (!isSuperAdminUser && currentUser?.departmentId) {
         const department = await storage.getDepartment(currentUser.departmentId);
         const departmentName = department?.name?.toLowerCase() || '';
