@@ -44,9 +44,11 @@ import {
   insertContractTypeSchema,
   insertCustomerContractSchema,
   insertContractFollowupSchema,
+  insertCustomerContractModuleSchema,
   contractTypes,
   customerContracts,
   contractFollowups,
+  customerContractModules,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -9182,7 +9184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single contract with details
+  // Get single contract with details and modules
   app.get("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const [contract] = await db.select({
@@ -9197,10 +9199,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contract not found" });
       }
       
-      res.json(contract);
+      // Get associated modules
+      const modules = await db.select()
+        .from(customerContractModules)
+        .where(eq(customerContractModules.contractId, req.params.id));
+      
+      res.json({ ...contract, modules });
     } catch (error) {
       console.error("Error fetching contract:", error);
       res.status(500).json({ message: "Failed to fetch contract" });
+    }
+  });
+  
+  // Get modules for a contract
+  app.get("/api/customer-contracts/:id/modules", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const modules = await db.select()
+        .from(customerContractModules)
+        .where(eq(customerContractModules.contractId, req.params.id));
+      res.json(modules);
+    } catch (error) {
+      console.error("Error fetching contract modules:", error);
+      res.status(500).json({ message: "Failed to fetch contract modules" });
     }
   });
 
@@ -9208,10 +9228,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/customer-contracts", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
     try {
       // Convert date strings to Date objects before validation
+      const { modules: moduleDetails, ...contractData } = req.body;
       const bodyWithDates = {
-        ...req.body,
-        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
-        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+        ...contractData,
+        startDate: contractData.startDate ? new Date(contractData.startDate) : undefined,
+        endDate: contractData.endDate ? new Date(contractData.endDate) : undefined,
       };
       const validated = insertCustomerContractSchema.parse(bodyWithDates);
       const contractNumber = await generateContractNumber();
@@ -9221,6 +9242,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contractNumber,
         createdBy: req.user?.id,
       }).returning();
+      
+      // Insert module details if provided
+      if (moduleDetails && Array.isArray(moduleDetails) && moduleDetails.length > 0) {
+        const modulesToInsert = moduleDetails.map((mod: any) => ({
+          contractId: created.id,
+          moduleName: mod.moduleName,
+          orderValue: parseInt(mod.orderValue) || 0,
+          amcAmount: parseInt(mod.amcAmount) || 0,
+          contractPeriodMonths: parseInt(mod.contractPeriodMonths) || 12,
+          startDate: mod.startDate ? new Date(mod.startDate) : null,
+          endDate: mod.endDate ? new Date(mod.endDate) : null,
+          notes: mod.notes || null,
+        }));
+        await db.insert(customerContractModules).values(modulesToInsert);
+      }
       
       await storage.logActivity({
         entityType: "customer_contract",
@@ -9241,9 +9277,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
       // Convert date strings to Date objects if present
-      const updateData: any = { ...req.body, updatedAt: new Date() };
-      if (req.body.startDate) updateData.startDate = new Date(req.body.startDate);
-      if (req.body.endDate) updateData.endDate = new Date(req.body.endDate);
+      const { modules: moduleDetails, ...contractData } = req.body;
+      const updateData: any = { ...contractData, updatedAt: new Date() };
+      if (contractData.startDate) updateData.startDate = new Date(contractData.startDate);
+      if (contractData.endDate) updateData.endDate = new Date(contractData.endDate);
+      
+      // Remove modules from updateData as it's handled separately
+      delete updateData.modules;
       
       const [updated] = await db.update(customerContracts)
         .set(updateData)
@@ -9252,6 +9292,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!updated) {
         return res.status(404).json({ message: "Contract not found" });
+      }
+      
+      // Update module details if provided (delete existing and re-insert)
+      if (moduleDetails && Array.isArray(moduleDetails)) {
+        await db.delete(customerContractModules)
+          .where(eq(customerContractModules.contractId, req.params.id));
+        
+        if (moduleDetails.length > 0) {
+          const modulesToInsert = moduleDetails.map((mod: any) => ({
+            contractId: req.params.id,
+            moduleName: mod.moduleName,
+            orderValue: parseInt(mod.orderValue) || 0,
+            amcAmount: parseInt(mod.amcAmount) || 0,
+            contractPeriodMonths: parseInt(mod.contractPeriodMonths) || 12,
+            startDate: mod.startDate ? new Date(mod.startDate) : null,
+            endDate: mod.endDate ? new Date(mod.endDate) : null,
+            notes: mod.notes || null,
+          }));
+          await db.insert(customerContractModules).values(modulesToInsert);
+        }
       }
       
       await storage.logActivity({
