@@ -9688,7 +9688,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assignedEngineerId: tickets.assignedEngineerId,
         assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
         assignedEngineerEmail: sql<string>`(SELECT email FROM users WHERE id = ${tickets.assignedEngineerId})`,
-        assignedEngineerPhone: sql<string>`(SELECT phone FROM users WHERE id = ${tickets.assignedEngineerId})`,
         daysSinceClosed: sql<number>`EXTRACT(DAY FROM NOW() - ${tickets.closedAt})::int`,
       })
         .from(tickets)
