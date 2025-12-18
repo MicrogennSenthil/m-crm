@@ -116,8 +116,8 @@ export default function AccountsContracts() {
   const [showFollowupDialog, setShowFollowupDialog] = useState(false);
   
   // Advanced filter state
-  const [filterCity, setFilterCity] = useState<string>("");
-  const [filterType, setFilterType] = useState<string>("");
+  const [filterCity, setFilterCity] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>();
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
@@ -216,13 +216,13 @@ export default function AccountsContracts() {
   });
 
   // Check if any filters are active
-  const hasActiveFilters = filterCity || filterType || filterDateFrom || filterDateTo;
+  const hasActiveFilters = (filterCity && filterCity !== "all") || (filterType && filterType !== "all") || filterDateFrom || filterDateTo;
   
   // Clear all filters helper
   const clearFilters = () => {
     setSearchTerm("");
-    setFilterCity("");
-    setFilterType("");
+    setFilterCity("all");
+    setFilterType("all");
     setFilterDateFrom(undefined);
     setFilterDateTo(undefined);
   };
@@ -238,10 +238,10 @@ export default function AccountsContracts() {
       c.customerModules?.some(m => m.toLowerCase().includes(searchLower));
     
     // City filter
-    const matchesCity = !filterCity || c.customerCity?.toLowerCase() === filterCity.toLowerCase();
+    const matchesCity = !filterCity || filterCity === "all" || c.customerCity?.toLowerCase() === filterCity.toLowerCase();
     
     // Contract type filter
-    const matchesType = !filterType || c.contract.contractTypeId === filterType;
+    const matchesType = !filterType || filterType === "all" || c.contract.contractTypeId === filterType;
     
     // Date range filter (by end date / renewal date)
     const contractEndDate = new Date(c.contract.endDate);
@@ -473,7 +473,7 @@ export default function AccountsContracts() {
                     <SelectValue placeholder="All Cities" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Cities</SelectItem>
+                    <SelectItem value="all">All Cities</SelectItem>
                     {uniqueCities.map(city => (
                       <SelectItem key={city} value={city}>{city}</SelectItem>
                     ))}
@@ -486,7 +486,7 @@ export default function AccountsContracts() {
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     {contractTypes.map(type => (
                       <SelectItem key={type.id} value={type.id}>{type.displayName}</SelectItem>
                     ))}
@@ -2241,10 +2241,10 @@ function UnallocatedCustomersTab({
   onCreateContract: (customerId: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
+  const [selectedCity, setSelectedCity] = useState("all");
 
   const { data: unallocatedCustomers = [], isLoading } = useQuery<UnallocatedCustomer[]>({
-    queryKey: ["/api/accounts/unallocated-customers", { search: searchQuery, city: selectedCity }],
+    queryKey: ["/api/accounts/unallocated-customers", { search: searchQuery, city: selectedCity === "all" ? "" : selectedCity }],
     staleTime: 0,
   });
 
@@ -2291,7 +2291,7 @@ function UnallocatedCustomersTab({
                 <SelectValue placeholder="All Cities" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Cities</SelectItem>
+                <SelectItem value="all">All Cities</SelectItem>
                 {cities.map((city) => (
                   <SelectItem key={city} value={city}>{city}</SelectItem>
                 ))}
