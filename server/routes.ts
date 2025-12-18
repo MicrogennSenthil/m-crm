@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -9595,6 +9595,387 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error searching contracts:", error);
       res.status(500).json({ message: "Failed to search contracts" });
+    }
+  });
+
+  // ================== CUSTOMER MASTER WITH CONTRACT TYPE (Accounts) ==================
+
+  // Get all customers with their contract type for Accounts department
+  app.get("/api/accounts/customer-master", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { search, contractTypeId, city } = req.query;
+      const { and, ilike, or } = await import('drizzle-orm');
+      
+      const conditions: any[] = [];
+      
+      // Search filter
+      if (search) {
+        const searchLower = `%${(search as string).toLowerCase()}%`;
+        conditions.push(or(
+          sql`LOWER(${customers.name}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.contactPerson}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.city}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.email}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.phone}) LIKE ${searchLower}`
+        ));
+      }
+      
+      // Contract type filter
+      if (contractTypeId) {
+        conditions.push(eq(customers.contractTypeId, contractTypeId as string));
+      }
+      
+      // City filter
+      if (city) {
+        conditions.push(sql`LOWER(${customers.city}) = LOWER(${city})`);
+      }
+      
+      const query = db.select({
+        id: customers.id,
+        name: customers.name,
+        contactPerson: customers.contactPerson,
+        designation: customers.designation,
+        email: customers.email,
+        phone: customers.phone,
+        city: customers.city,
+        state: customers.state,
+        country: customers.country,
+        status: customers.status,
+        customerType: customers.customerType,
+        contractTypeId: customers.contractTypeId,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customers.contractTypeId})`,
+        selectedModules: customers.selectedModules,
+        activeContractsCount: sql<number>`(SELECT COUNT(*) FROM customer_contracts WHERE customer_id = ${customers.id} AND status = 'active')`,
+        totalContractValue: sql<number>`(SELECT COALESCE(SUM(amount), 0) FROM customer_contracts WHERE customer_id = ${customers.id} AND status = 'active')`,
+        createdAt: customers.createdAt,
+        updatedAt: customers.updatedAt,
+      }).from(customers);
+      
+      const results = conditions.length > 0
+        ? await query.where(and(...conditions)).orderBy(customers.name)
+        : await query.orderBy(customers.name);
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching customer master:", error);
+      res.status(500).json({ message: "Failed to fetch customer master" });
+    }
+  });
+
+  // Update customer's contract type with audit logging
+  app.patch("/api/accounts/customer-master/:customerId/contract-type", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { customerId } = req.params;
+      const { contractTypeId, reason } = req.body;
+      
+      // Get current customer data
+      const [currentCustomer] = await db.select().from(customers).where(eq(customers.id, customerId));
+      if (!currentCustomer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+      
+      // Get previous and new contract type names
+      let previousTypeName: string | null = null;
+      let newTypeName: string | null = null;
+      
+      if (currentCustomer.contractTypeId) {
+        const [prevType] = await db.select({ displayName: contractTypes.displayName })
+          .from(contractTypes)
+          .where(eq(contractTypes.id, currentCustomer.contractTypeId));
+        previousTypeName = prevType?.displayName || null;
+      }
+      
+      if (contractTypeId) {
+        const [newType] = await db.select({ displayName: contractTypes.displayName })
+          .from(contractTypes)
+          .where(eq(contractTypes.id, contractTypeId));
+        newTypeName = newType?.displayName || null;
+      }
+      
+      // Create audit log entry
+      await db.insert(contractTypeChangeLogs).values({
+        customerId,
+        previousContractTypeId: currentCustomer.contractTypeId,
+        newContractTypeId: contractTypeId,
+        previousContractTypeName: previousTypeName,
+        newContractTypeName: newTypeName,
+        reason: reason || null,
+        changedBy: req.user?.id,
+        changedByName: req.user?.firstName && req.user?.lastName 
+          ? `${req.user.firstName} ${req.user.lastName}` 
+          : req.user?.email,
+        changedByEmail: req.user?.email,
+      });
+      
+      // Update customer contract type
+      await db.update(customers)
+        .set({ 
+          contractTypeId,
+          updatedAt: new Date(),
+        })
+        .where(eq(customers.id, customerId));
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "customer",
+        entityId: customerId,
+        action: "contract_type_changed",
+        description: `Contract type changed from "${previousTypeName || 'None'}" to "${newTypeName || 'None'}"`,
+        userId: req.user?.id,
+      });
+      
+      res.json({ 
+        message: "Contract type updated successfully",
+        previousType: previousTypeName,
+        newType: newTypeName,
+      });
+    } catch (error) {
+      console.error("Error updating customer contract type:", error);
+      res.status(500).json({ message: "Failed to update contract type" });
+    }
+  });
+
+  // Get contract type change history for a customer
+  app.get("/api/accounts/customer-master/:customerId/contract-type-history", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { customerId } = req.params;
+      
+      const history = await db.select()
+        .from(contractTypeChangeLogs)
+        .where(eq(contractTypeChangeLogs.customerId, customerId))
+        .orderBy(sql`${contractTypeChangeLogs.changedAt} DESC`);
+      
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching contract type change history:", error);
+      res.status(500).json({ message: "Failed to fetch change history" });
+    }
+  });
+
+  // Get unique cities for filter dropdown
+  app.get("/api/accounts/customer-master/cities", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { isNotNull } = await import('drizzle-orm');
+      
+      const cities = await db.selectDistinct({ city: customers.city })
+        .from(customers)
+        .where(isNotNull(customers.city))
+        .orderBy(customers.city);
+      
+      res.json(cities.map(c => c.city).filter(Boolean));
+    } catch (error) {
+      console.error("Error fetching cities:", error);
+      res.status(500).json({ message: "Failed to fetch cities" });
+    }
+  });
+
+  // ================== MONTHLY PAYMENT REMINDERS ==================
+
+  // Get monthly payment reminders for current month
+  app.get("/api/accounts/monthly-reminders", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { month, year, status } = req.query;
+      const { and, gte, lte } = await import('drizzle-orm');
+      
+      const currentDate = new Date();
+      const targetMonth = month ? parseInt(month as string) : currentDate.getMonth() + 1;
+      const targetYear = year ? parseInt(year as string) : currentDate.getFullYear();
+      
+      const conditions: any[] = [
+        eq(monthlyPaymentReminders.reminderMonth, targetMonth),
+        eq(monthlyPaymentReminders.reminderYear, targetYear),
+      ];
+      
+      if (status) {
+        conditions.push(eq(monthlyPaymentReminders.status, status as string));
+      }
+      
+      const reminders = await db.select({
+        reminder: monthlyPaymentReminders,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        customerEmail: sql<string>`(SELECT email FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        customerPhone: sql<string>`(SELECT phone FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        contractNumber: sql<string>`(SELECT contract_number FROM customer_contracts WHERE id = ${monthlyPaymentReminders.contractId})`,
+        contractTypeName: sql<string>`(SELECT ct.display_name FROM contract_types ct JOIN customer_contracts cc ON cc.contract_type_id = ct.id WHERE cc.id = ${monthlyPaymentReminders.contractId})`,
+      })
+        .from(monthlyPaymentReminders)
+        .where(and(...conditions))
+        .orderBy(monthlyPaymentReminders.dueDate);
+      
+      res.json(reminders);
+    } catch (error) {
+      console.error("Error fetching monthly reminders:", error);
+      res.status(500).json({ message: "Failed to fetch monthly reminders" });
+    }
+  });
+
+  // Generate monthly reminders for contracts (based on billing cycle day)
+  app.post("/api/accounts/monthly-reminders/generate", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { month, year } = req.body;
+      
+      const targetMonth = month || new Date().getMonth() + 1;
+      const targetYear = year || new Date().getFullYear();
+      
+      // Get all active contracts with monthly billing
+      const activeContracts = await db.select({
+        contract: customerContracts,
+        billingFrequency: sql<string>`(SELECT billing_frequency FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+      })
+        .from(customerContracts)
+        .where(eq(customerContracts.status, 'active'));
+      
+      let created = 0;
+      let skipped = 0;
+      
+      for (const { contract, billingFrequency } of activeContracts) {
+        // Only create reminders for monthly billing contracts
+        if (billingFrequency !== 'monthly') {
+          skipped++;
+          continue;
+        }
+        
+        // Check if reminder already exists for this month
+        const existing = await db.select()
+          .from(monthlyPaymentReminders)
+          .where(and(
+            eq(monthlyPaymentReminders.contractId, contract.id),
+            eq(monthlyPaymentReminders.reminderMonth, targetMonth),
+            eq(monthlyPaymentReminders.reminderYear, targetYear),
+          ));
+        
+        if (existing.length > 0) {
+          skipped++;
+          continue;
+        }
+        
+        // Create reminder
+        const billingDay = contract.billingCycleDay || 1;
+        const dueDate = new Date(targetYear, targetMonth - 1, billingDay);
+        
+        await db.insert(monthlyPaymentReminders).values({
+          customerId: contract.customerId,
+          contractId: contract.id,
+          reminderMonth: targetMonth,
+          reminderYear: targetYear,
+          dueDate,
+          amount: contract.amount,
+          status: 'pending',
+        });
+        
+        created++;
+      }
+      
+      res.json({ 
+        message: `Generated ${created} reminders, skipped ${skipped}`,
+        created,
+        skipped,
+      });
+    } catch (error) {
+      console.error("Error generating monthly reminders:", error);
+      res.status(500).json({ message: "Failed to generate reminders" });
+    }
+  });
+
+  // Update payment reminder status
+  app.patch("/api/accounts/monthly-reminders/:id", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { paymentStatus, paymentAmount, paymentDate, paymentReference, notes, status } = req.body;
+      
+      const updates: any = {
+        updatedAt: new Date(),
+      };
+      
+      if (paymentStatus) updates.paymentStatus = paymentStatus;
+      if (paymentAmount !== undefined) updates.paymentAmount = paymentAmount;
+      if (paymentDate) updates.paymentDate = new Date(paymentDate);
+      if (paymentReference) updates.paymentReference = paymentReference;
+      if (notes) updates.notes = notes;
+      if (status) updates.status = status;
+      
+      // Mark as followed up
+      updates.followedUpBy = req.user?.id;
+      updates.followedUpAt = new Date();
+      
+      await db.update(monthlyPaymentReminders)
+        .set(updates)
+        .where(eq(monthlyPaymentReminders.id, id));
+      
+      res.json({ message: "Reminder updated successfully" });
+    } catch (error) {
+      console.error("Error updating reminder:", error);
+      res.status(500).json({ message: "Failed to update reminder" });
+    }
+  });
+
+  // Send payment reminder email
+  app.post("/api/accounts/monthly-reminders/:id/send-email", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const [reminderData] = await db.select({
+        reminder: monthlyPaymentReminders,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        customerEmail: sql<string>`(SELECT email FROM customers WHERE id = ${monthlyPaymentReminders.customerId})`,
+        contractNumber: sql<string>`(SELECT contract_number FROM customer_contracts WHERE id = ${monthlyPaymentReminders.contractId})`,
+        contractTypeName: sql<string>`(SELECT ct.display_name FROM contract_types ct JOIN customer_contracts cc ON cc.contract_type_id = ct.id WHERE cc.id = ${monthlyPaymentReminders.contractId})`,
+      })
+        .from(monthlyPaymentReminders)
+        .where(eq(monthlyPaymentReminders.id, id));
+      
+      if (!reminderData) {
+        return res.status(404).json({ message: "Reminder not found" });
+      }
+      
+      if (!reminderData.customerEmail) {
+        return res.status(400).json({ message: "Customer email not found" });
+      }
+      
+      const { reminder, customerName, customerEmail, contractNumber, contractTypeName } = reminderData;
+      
+      const dueDate = new Date(reminder.dueDate);
+      const monthName = dueDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      
+      const emailHtml = `
+        <h2>Payment Reminder - ${monthName}</h2>
+        <p>Dear ${customerName},</p>
+        <p>This is a friendly reminder for your pending payment.</p>
+        <br/>
+        <table style="border-collapse: collapse; margin: 20px 0;">
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract Number:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${contractNumber}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract Type:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${contractTypeName}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Amount Due:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">INR ${(reminder.amount || 0).toLocaleString()}</td></tr>
+          <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Due Date:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${dueDate.toLocaleDateString()}</td></tr>
+        </table>
+        <br/>
+        <p>Please make the payment at your earliest convenience.</p>
+        <p>If you have already made the payment, please ignore this reminder.</p>
+        <br/>
+        <p>Best Regards,<br/>M-CRM Accounts Team</p>
+      `;
+      
+      await sendEmail({
+        to: customerEmail,
+        subject: `Payment Reminder - ${contractNumber} - ${monthName}`,
+        html: emailHtml,
+      });
+      
+      // Update reminder
+      await db.update(monthlyPaymentReminders)
+        .set({
+          emailSent: true,
+          emailSentAt: new Date(),
+          status: 'reminded',
+          updatedAt: new Date(),
+        })
+        .where(eq(monthlyPaymentReminders.id, id));
+      
+      res.json({ message: "Payment reminder sent successfully" });
+    } catch (error) {
+      console.error("Error sending payment reminder:", error);
+      res.status(500).json({ message: "Failed to send reminder" });
     }
   });
 
