@@ -1451,3 +1451,47 @@ export const insertMonthlyPaymentReminderSchema = createInsertSchema(monthlyPaym
 
 export type InsertMonthlyPaymentReminder = z.infer<typeof insertMonthlyPaymentReminderSchema>;
 export type MonthlyPaymentReminder = typeof monthlyPaymentReminders.$inferSelect;
+
+// Customer Module Contracts - Track individual module purchases per customer with AMC details
+export const customerModuleContracts = pgTable("customer_module_contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  moduleId: varchar("module_id").references(() => modules.id), // Link to module if available
+  moduleName: text("module_name").notNull(), // Module name (denormalized for flexibility)
+  // Order Details
+  orderDate: timestamp("order_date").notNull(),
+  orderValue: integer("order_value").notNull(), // Original purchase price
+  currency: text("currency").notNull().default("INR"),
+  // AMC Calculation
+  amcCalculationType: text("amc_calculation_type").notNull().default("percentage"), // percentage or fixed
+  amcPercentage: integer("amc_percentage"), // e.g., 18 for 18%
+  amcAmount: integer("amc_amount").notNull(), // Calculated or fixed AMC amount
+  // GST
+  gstPercentage: integer("gst_percentage").default(18), // Default 18%
+  gstAmount: integer("gst_amount"), // Calculated GST amount
+  totalAmcWithGst: integer("total_amc_with_gst"), // AMC + GST
+  // Contract Period
+  contractStartDate: timestamp("contract_start_date").notNull(),
+  contractEndDate: timestamp("contract_end_date").notNull(),
+  // Status and Renewal
+  status: text("status").notNull().default("active"), // active, expired, renewed, cancelled
+  renewalReminderDays: integer("renewal_reminder_days").default(30), // Days before expiry to send reminder
+  lastReminderSentAt: timestamp("last_reminder_sent_at"),
+  renewedFromId: varchar("renewed_from_id"), // Self-reference for renewal chain
+  // Notes
+  notes: text("notes"),
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerModuleContractSchema = createInsertSchema(customerModuleContracts).omit({
+  id: true,
+  lastReminderSentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCustomerModuleContract = z.infer<typeof insertCustomerModuleContractSchema>;
+export type CustomerModuleContract = typeof customerModuleContracts.$inferSelect;

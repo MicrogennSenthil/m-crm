@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -9770,6 +9770,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching cities:", error);
       res.status(500).json({ message: "Failed to fetch cities" });
+    }
+  });
+
+  // ================== CUSTOMER MODULE CONTRACTS ==================
+
+  // Get all module contracts for a customer
+  app.get("/api/accounts/customer-master/:customerId/module-contracts", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { customerId } = req.params;
+      
+      const contracts = await db.select({
+        contract: customerModuleContracts,
+        moduleName: sql<string>`COALESCE((SELECT name FROM modules WHERE id = ${customerModuleContracts.moduleId}), ${customerModuleContracts.moduleName})`,
+      })
+        .from(customerModuleContracts)
+        .where(eq(customerModuleContracts.customerId, customerId))
+        .orderBy(sql`${customerModuleContracts.contractEndDate} DESC`);
+      
+      res.json(contracts);
+    } catch (error) {
+      console.error("Error fetching module contracts:", error);
+      res.status(500).json({ message: "Failed to fetch module contracts" });
+    }
+  });
+
+  // Create a new module contract for a customer
+  app.post("/api/accounts/customer-master/:customerId/module-contracts", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
+    try {
+      const { customerId } = req.params;
+      const { 
+        moduleId, moduleName, orderDate, orderValue, currency,
+        amcCalculationType, amcPercentage, amcAmount,
+        gstPercentage, contractStartDate, contractEndDate,
+        renewalReminderDays, notes
+      } = req.body;
+      
+      // Calculate GST amount and total
+      const gstAmount = Math.round((amcAmount * (gstPercentage || 18)) / 100);
+      const totalAmcWithGst = amcAmount + gstAmount;
+      
+      const userId = req.user?.claims?.sub || req.user?.id || "system";
+      
+      const [contract] = await db.insert(customerModuleContracts).values({
+        customerId,
+        moduleId: moduleId || null,
+        moduleName,
+        orderDate: new Date(orderDate),
+        orderValue,
+        currency: currency || "INR",
+        amcCalculationType: amcCalculationType || "percentage",
+        amcPercentage: amcPercentage || null,
+        amcAmount,
+        gstPercentage: gstPercentage || 18,
+        gstAmount,
+        totalAmcWithGst,
+        contractStartDate: new Date(contractStartDate),
+        contractEndDate: new Date(contractEndDate),
+        renewalReminderDays: renewalReminderDays || 30,
+        notes: notes || null,
+        createdBy: userId,
+      }).returning();
+      
+      // Log activity
+      await storage.logActivity({
+        entityType: "customer_module_contract",
+        entityId: contract.id,
+        action: "created",
+        description: `Module contract created for ${moduleName}`,
+        userId,
+      });
+      
+      res.status(201).json(contract);
+    } catch (error) {
+      console.error("Error creating module contract:", error);
+      res.status(500).json({ message: "Failed to create module contract" });
+    }
+  });
+
+  // Update a module contract
+  app.patch("/api/accounts/module-contracts/:contractId", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { contractId } = req.params;
+      const updates = req.body;
+      
+      // Recalculate GST if AMC amount changed
+      if (updates.amcAmount !== undefined) {
+        const gstPercentage = updates.gstPercentage || 18;
+        updates.gstAmount = Math.round((updates.amcAmount * gstPercentage) / 100);
+        updates.totalAmcWithGst = updates.amcAmount + updates.gstAmount;
+      }
+      
+      // Convert date strings to Date objects
+      if (updates.orderDate) updates.orderDate = new Date(updates.orderDate);
+      if (updates.contractStartDate) updates.contractStartDate = new Date(updates.contractStartDate);
+      if (updates.contractEndDate) updates.contractEndDate = new Date(updates.contractEndDate);
+      
+      updates.updatedAt = new Date();
+      
+      const [updated] = await db.update(customerModuleContracts)
+        .set(updates)
+        .where(eq(customerModuleContracts.id, contractId))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Module contract not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating module contract:", error);
+      res.status(500).json({ message: "Failed to update module contract" });
+    }
+  });
+
+  // Delete a module contract
+  app.delete("/api/accounts/module-contracts/:contractId", isAuthenticated, requirePermission("contracts", "delete"), async (req, res) => {
+    try {
+      const { contractId } = req.params;
+      
+      await db.delete(customerModuleContracts)
+        .where(eq(customerModuleContracts.id, contractId));
+      
+      res.json({ message: "Module contract deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting module contract:", error);
+      res.status(500).json({ message: "Failed to delete module contract" });
+    }
+  });
+
+  // Get expiring module contracts (for reminders)
+  app.get("/api/accounts/module-contracts/expiring", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { days = 30 } = req.query;
+      const { lte, gte } = await import('drizzle-orm');
+      
+      const now = new Date();
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + parseInt(days as string));
+      
+      const expiring = await db.select({
+        contract: customerModuleContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerModuleContracts.customerId})`,
+        customerEmail: sql<string>`(SELECT email FROM customers WHERE id = ${customerModuleContracts.customerId})`,
+        customerPhone: sql<string>`(SELECT phone FROM customers WHERE id = ${customerModuleContracts.customerId})`,
+      })
+        .from(customerModuleContracts)
+        .where(and(
+          eq(customerModuleContracts.status, "active"),
+          gte(customerModuleContracts.contractEndDate, now),
+          lte(customerModuleContracts.contractEndDate, futureDate)
+        ))
+        .orderBy(customerModuleContracts.contractEndDate);
+      
+      res.json(expiring);
+    } catch (error) {
+      console.error("Error fetching expiring module contracts:", error);
+      res.status(500).json({ message: "Failed to fetch expiring contracts" });
+    }
+  });
+
+  // Get available modules for dropdown
+  app.get("/api/accounts/available-modules", isAuthenticated, async (req, res) => {
+    try {
+      const availableModules = await db.select().from(modules).orderBy(modules.name);
+      res.json(availableModules);
+    } catch (error) {
+      console.error("Error fetching modules:", error);
+      res.status(500).json({ message: "Failed to fetch modules" });
     }
   });
 
