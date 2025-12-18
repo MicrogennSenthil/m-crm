@@ -54,6 +54,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addMonths } from "date-fns";
 import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3, Package, Percent } from "lucide-react";
 import type { Customer, ContractType, CustomerContract } from "@shared/schema";
