@@ -9248,8 +9248,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const modulesToInsert = moduleDetails.map((mod: any) => ({
           contractId: created.id,
           moduleName: mod.moduleName,
-          orderValue: parseInt(mod.orderValue) || 0,
-          amcAmount: parseInt(mod.amcAmount) || 0,
+          orderValue: Math.round(parseFloat(mod.orderValue) || 0),
+          amcAmount: Math.round(parseFloat(mod.amcAmount) || 0),
           contractPeriodMonths: parseInt(mod.contractPeriodMonths) || 12,
           startDate: mod.startDate ? new Date(mod.startDate) : null,
           endDate: mod.endDate ? new Date(mod.endDate) : null,
@@ -9303,8 +9303,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const modulesToInsert = moduleDetails.map((mod: any) => ({
             contractId: req.params.id,
             moduleName: mod.moduleName,
-            orderValue: parseInt(mod.orderValue) || 0,
-            amcAmount: parseInt(mod.amcAmount) || 0,
+            orderValue: Math.round(parseFloat(mod.orderValue) || 0),
+            amcAmount: Math.round(parseFloat(mod.amcAmount) || 0),
             contractPeriodMonths: parseInt(mod.contractPeriodMonths) || 12,
             startDate: mod.startDate ? new Date(mod.startDate) : null,
             endDate: mod.endDate ? new Date(mod.endDate) : null,

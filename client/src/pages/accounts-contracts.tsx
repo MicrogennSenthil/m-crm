@@ -985,10 +985,18 @@ function ContractDetails({
   );
 }
 
+interface ModuleEntry {
+  moduleName: string;
+  orderValue: number;
+  amcAmount: number;
+  contractPeriodMonths: number;
+}
+
 function ContractForm({
   customers,
   contractTypes,
   contract,
+  existingModules,
   onSubmit,
   isPending,
   onCancel,
@@ -996,7 +1004,8 @@ function ContractForm({
   customers: Customer[];
   contractTypes: ContractType[];
   contract?: CustomerContract;
-  onSubmit: (data: Partial<CustomerContract>) => void;
+  existingModules?: ModuleEntry[];
+  onSubmit: (data: any) => void;
   isPending: boolean;
   onCancel: () => void;
 }) {
@@ -1020,6 +1029,24 @@ function ContractForm({
     suggestionRequest: contract?.suggestionRequest || "",
   });
 
+  const [modules, setModules] = useState<ModuleEntry[]>(existingModules || []);
+  const [newModuleName, setNewModuleName] = useState("");
+
+  // When customer changes, pre-populate with customer's selected modules
+  const handleCustomerChange = (customerId: string) => {
+    setFormData({ ...formData, customerId });
+    const customer = customers.find(c => c.id === customerId);
+    if (customer?.selectedModules && customer.selectedModules.length > 0 && modules.length === 0) {
+      const customerModules = customer.selectedModules.map(name => ({
+        moduleName: name,
+        orderValue: 0,
+        amcAmount: 0,
+        contractPeriodMonths: 12,
+      }));
+      setModules(customerModules);
+    }
+  };
+
   const handleContractTypeChange = (typeId: string) => {
     const type = contractTypes.find(t => t.id === typeId);
     if (type && !contract) {
@@ -1034,13 +1061,48 @@ function ContractForm({
     }
   };
 
+  const addModule = () => {
+    if (newModuleName.trim() && !modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase())) {
+      setModules([...modules, {
+        moduleName: newModuleName.trim(),
+        orderValue: 0,
+        amcAmount: 0,
+        contractPeriodMonths: 12,
+      }]);
+      setNewModuleName("");
+    }
+  };
+
+  const removeModule = (index: number) => {
+    setModules(modules.filter((_, i) => i !== index));
+  };
+
+  const updateModule = (index: number, field: keyof ModuleEntry, value: string | number) => {
+    const updated = [...modules];
+    if (field === 'moduleName') {
+      updated[index][field] = value as string;
+    } else if (field === 'contractPeriodMonths') {
+      updated[index][field] = parseInt(value as string) || 12;
+    } else {
+      // Use parseFloat for financial fields (orderValue, amcAmount)
+      updated[index][field] = parseFloat(value as string) || 0;
+    }
+    setModules(updated);
+  };
+
+  // Calculate totals
+  const totalOrderValue = modules.reduce((sum, m) => sum + (m.orderValue || 0), 0);
+  const totalAmcAmount = modules.reduce((sum, m) => sum + (m.amcAmount || 0), 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       ...formData,
+      amount: totalAmcAmount || formData.amount, // Use total AMC if modules exist
       startDate: new Date(formData.startDate),
       endDate: new Date(formData.endDate),
-    } as any);
+      modules: modules.length > 0 ? modules : undefined,
+    });
   };
 
   return (
@@ -1051,7 +1113,7 @@ function ContractForm({
             <Label>Customer *</Label>
             <Select
               value={formData.customerId}
-              onValueChange={(value) => setFormData({ ...formData, customerId: value })}
+              onValueChange={handleCustomerChange}
             >
               <SelectTrigger data-testid="select-contract-customer">
                 <SelectValue placeholder="Select customer" />
@@ -1081,14 +1143,117 @@ function ContractForm({
           </div>
         </div>
 
+        {/* Module-wise AMC, Order Value, Contract Period */}
+        <div className="border rounded-md p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Modules</Label>
+            <span className="text-xs text-muted-foreground">Add modules with individual financials</span>
+          </div>
+          
+          {/* Add new module */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Enter module name (e.g., HMS, POS, CRM)"
+              value={newModuleName}
+              onChange={(e) => setNewModuleName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addModule())}
+              className="flex-1"
+              data-testid="input-new-module-name"
+            />
+            <Button type="button" size="sm" variant="outline" onClick={addModule} data-testid="button-add-module">
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Module list */}
+          {modules.length > 0 && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
+                <div className="col-span-3">Module</div>
+                <div className="col-span-3">Order Value</div>
+                <div className="col-span-3">AMC Amount</div>
+                <div className="col-span-2">Period (Months)</div>
+                <div className="col-span-1"></div>
+              </div>
+              {modules.map((mod, index) => (
+                <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-3">
+                    <Input
+                      value={mod.moduleName}
+                      onChange={(e) => updateModule(index, 'moduleName', e.target.value)}
+                      className="text-sm h-8"
+                      data-testid={`input-module-name-${index}`}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Input
+                      type="number"
+                      value={mod.orderValue}
+                      onChange={(e) => updateModule(index, 'orderValue', e.target.value)}
+                      className="text-sm h-8"
+                      placeholder="0"
+                      data-testid={`input-module-order-value-${index}`}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Input
+                      type="number"
+                      value={mod.amcAmount}
+                      onChange={(e) => updateModule(index, 'amcAmount', e.target.value)}
+                      className="text-sm h-8"
+                      placeholder="0"
+                      data-testid={`input-module-amc-amount-${index}`}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      value={mod.contractPeriodMonths}
+                      onChange={(e) => updateModule(index, 'contractPeriodMonths', e.target.value)}
+                      className="text-sm h-8"
+                      placeholder="12"
+                      data-testid={`input-module-period-${index}`}
+                    />
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    <Button 
+                      type="button" 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-8 w-8"
+                      onClick={() => removeModule(index)}
+                      data-testid={`button-remove-module-${index}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Totals row */}
+              <div className="grid grid-cols-12 gap-2 items-center pt-2 border-t text-sm font-medium">
+                <div className="col-span-3 text-right pr-2">Totals:</div>
+                <div className="col-span-3">
+                  <span className="text-primary">{formData.currency} {totalOrderValue.toLocaleString()}</span>
+                </div>
+                <div className="col-span-3">
+                  <span className="text-primary">{formData.currency} {totalAmcAmount.toLocaleString()}</span>
+                </div>
+                <div className="col-span-3"></div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-3 gap-4">
           <div className="grid gap-2">
-            <Label>Amount *</Label>
+            <Label>Total AMC Amount {modules.length > 0 ? "(Auto-calculated)" : "*"}</Label>
             <Input
               type="number"
-              value={formData.amount}
+              value={modules.length > 0 ? totalAmcAmount : formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseInt(e.target.value) || 0 })}
-              required
+              disabled={modules.length > 0}
+              required={modules.length === 0}
               data-testid="input-contract-amount"
             />
           </div>
