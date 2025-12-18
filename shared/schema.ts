@@ -1358,6 +1358,33 @@ export const insertCustomerContractSchema = createInsertSchema(customerContracts
 export type InsertCustomerContract = z.infer<typeof insertCustomerContractSchema>;
 export type CustomerContract = typeof customerContracts.$inferSelect;
 
+// Customer Contract Modules - Module-wise AMC, order value, and contract period
+export const customerContractModules = pgTable("customer_contract_modules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => customerContracts.id, { onDelete: "cascade" }),
+  moduleName: text("module_name").notNull(), // Module name (e.g., "HMS", "POS", "CRM")
+  // Financial Details
+  orderValue: integer("order_value").default(0), // Initial implementation/order value
+  amcAmount: integer("amc_amount").default(0), // Annual Maintenance Contract amount
+  // Contract Period for this module
+  contractPeriodMonths: integer("contract_period_months").default(12), // Duration in months
+  startDate: timestamp("start_date"), // Optional: module-specific start date
+  endDate: timestamp("end_date"), // Optional: module-specific end date
+  // Additional
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerContractModuleSchema = createInsertSchema(customerContractModules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCustomerContractModule = z.infer<typeof insertCustomerContractModuleSchema>;
+export type CustomerContractModule = typeof customerContractModules.$inferSelect;
+
 // Contract Follow-ups - Track payment follow-ups and renewal reminders
 export const contractFollowups = pgTable("contract_followups", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
