@@ -9207,7 +9207,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create customer contract
   app.post("/api/customer-contracts", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
     try {
-      const validated = insertCustomerContractSchema.parse(req.body);
+      // Convert date strings to Date objects before validation
+      const bodyWithDates = {
+        ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+      };
+      const validated = insertCustomerContractSchema.parse(bodyWithDates);
       const contractNumber = await generateContractNumber();
       
       const [created] = await db.insert(customerContracts).values({
@@ -9234,8 +9240,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update customer contract
   app.patch("/api/customer-contracts/:id", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
     try {
+      // Convert date strings to Date objects if present
+      const updateData: any = { ...req.body, updatedAt: new Date() };
+      if (req.body.startDate) updateData.startDate = new Date(req.body.startDate);
+      if (req.body.endDate) updateData.endDate = new Date(req.body.endDate);
+      
       const [updated] = await db.update(customerContracts)
-        .set({ ...req.body, updatedAt: new Date() })
+        .set(updateData)
         .where(eq(customerContracts.id, req.params.id))
         .returning();
       
