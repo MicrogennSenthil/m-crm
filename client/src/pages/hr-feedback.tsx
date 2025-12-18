@@ -59,6 +59,11 @@ import {
   FileText,
   RotateCcw,
   Send,
+  ListTodo,
+  CalendarClock,
+  MessageCircle,
+  PlayCircle,
+  Building2,
 } from "lucide-react";
 
 interface FeedbackStats {
@@ -109,6 +114,54 @@ interface CompletedTicket {
   feedbackSubmittedAt: string | null;
 }
 
+interface DepartmentTask {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string | null;
+  createdBy: string;
+  assignedTo: string | null;
+  assignedAt: string | null;
+  reminderDate: string | null;
+  dueDate: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assigneeFirstName: string | null;
+  assigneeLastName: string | null;
+  assigneeDepartmentId: string | null;
+  nextFollowupDate: string | null;
+  lastFollowupDate: string | null;
+  isOverdue: boolean;
+  isFollowupDue: boolean;
+}
+
+interface DepartmentTasksResponse {
+  tasks: DepartmentTask[];
+  stats: {
+    pending: number;
+    followup: number;
+    completed: number;
+    overdue: number;
+  };
+}
+
+interface TaskFollowup {
+  id: string;
+  taskId: string;
+  userId: string;
+  followupType: string;
+  description: string | null;
+  nextFollowupDate: string | null;
+  status: string;
+  createdAt: string;
+  userFirstName: string | null;
+  userLastName: string | null;
+}
+
 export default function HRFeedback() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("pending");
@@ -123,6 +176,15 @@ export default function HRFeedback() {
   const [feedbackComments, setFeedbackComments] = useState("");
   const [feedbackSatisfied, setFeedbackSatisfied] = useState<string>("");
   const [reopenReason, setReopenReason] = useState("");
+  
+  // Department Tasks state
+  const [deptFilter, setDeptFilter] = useState<string>("all");
+  const [deptStatusFilter, setDeptStatusFilter] = useState<string>("active");
+  const [selectedTask, setSelectedTask] = useState<DepartmentTask | null>(null);
+  const [showFollowupDialog, setShowFollowupDialog] = useState(false);
+  const [showTaskHistoryDialog, setShowTaskHistoryDialog] = useState(false);
+  const [followupDescription, setFollowupDescription] = useState("");
+  const [nextFollowupDate, setNextFollowupDate] = useState("");
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<FeedbackStats>({
     queryKey: ["/api/hr/feedback/stats"],
@@ -191,10 +253,130 @@ export default function HRFeedback() {
     },
   });
 
+  // Department Tasks queries
+  const { data: deptTasksData, isLoading: deptTasksLoading, refetch: refetchDeptTasks } = useQuery<DepartmentTasksResponse>({
+    queryKey: ["/api/hr/department-tasks", { department: deptFilter !== 'all' ? deptFilter : '', status: deptStatusFilter }],
+    enabled: activeTab === "tasks",
+  });
+
+  const { data: taskFollowups, isLoading: followupsLoading, refetch: refetchFollowups } = useQuery<TaskFollowup[]>({
+    queryKey: ["/api/hr/department-tasks", selectedTask?.id, "followups"],
+    enabled: !!selectedTask && showTaskHistoryDialog,
+  });
+
+  const addFollowupMutation = useMutation({
+    mutationFn: async (data: { taskId: string; description: string; nextFollowupDate: string | null }) => {
+      const res = await apiRequest("POST", `/api/hr/department-tasks/${data.taskId}/followup`, {
+        description: data.description,
+        nextFollowupDate: data.nextFollowupDate,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Follow-up Added",
+        description: "Your follow-up has been recorded successfully.",
+      });
+      setShowFollowupDialog(false);
+      setSelectedTask(null);
+      setFollowupDescription("");
+      setNextFollowupDate("");
+      refetchDeptTasks();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add follow-up",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const completeTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await apiRequest("PATCH", `/api/hr/department-tasks/${taskId}/complete`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Task Completed",
+        description: "The task has been marked as complete.",
+      });
+      refetchDeptTasks();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to complete task",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetFeedbackForm = () => {
     setFeedbackRating(0);
     setFeedbackComments("");
     setFeedbackSatisfied("");
+  };
+
+  const handleAddFollowup = () => {
+    if (!selectedTask) return;
+    
+    if (!followupDescription.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide a follow-up description.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    addFollowupMutation.mutate({
+      taskId: selectedTask.id,
+      description: followupDescription.trim(),
+      nextFollowupDate: nextFollowupDate || null,
+    });
+  };
+
+  const openFollowupDialog = (task: DepartmentTask) => {
+    setSelectedTask(task);
+    setFollowupDescription("");
+    setNextFollowupDate("");
+    setShowFollowupDialog(true);
+  };
+
+  const openTaskHistoryDialog = (task: DepartmentTask) => {
+    setSelectedTask(task);
+    setShowTaskHistoryDialog(true);
+  };
+
+  const getTaskStatusBadge = (status: string, isOverdue: boolean, isFollowupDue: boolean) => {
+    if (isOverdue || isFollowupDue) {
+      return <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Overdue</Badge>;
+    }
+    const styles: Record<string, string> = {
+      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+      followup: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+      get_information: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+    };
+    const labels: Record<string, string> = {
+      pending: "Pending",
+      followup: "Follow Up",
+      completed: "Completed",
+      get_information: "Get Info",
+    };
+    return <Badge className={styles[status] || styles.pending}>{labels[status] || status}</Badge>;
+  };
+
+  const getTaskPriorityBadge = (priority: string | null) => {
+    const styles: Record<string, string> = {
+      urgent: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+      high: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+      medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+      low: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+    };
+    return <Badge className={styles[priority || "medium"] || styles.medium}>{priority || "medium"}</Badge>;
   };
 
   const handleSubmitFeedback = () => {
@@ -493,14 +675,18 @@ export default function HRFeedback() {
         </CardContent>
       </Card>
 
-      {/* Tabs for Pending/Completed */}
+      {/* Tabs for Pending/Completed/Tasks */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+        <TabsList className="grid w-full max-w-[600px] grid-cols-3">
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending Feedback ({stats?.closedWithoutFeedback || 0})
           </TabsTrigger>
           <TabsTrigger value="completed" data-testid="tab-completed">
             Completed ({stats?.closedWithFeedback || 0})
+          </TabsTrigger>
+          <TabsTrigger value="tasks" data-testid="tab-tasks">
+            <ListTodo className="h-4 w-4 mr-1" />
+            Dept Tasks ({deptTasksData?.stats.pending || 0})
           </TabsTrigger>
         </TabsList>
 
@@ -702,7 +888,309 @@ export default function HRFeedback() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Department Tasks Tab */}
+        <TabsContent value="tasks" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-blue-500" />
+                  HR & Accounts Department Tasks
+                </div>
+                <div className="flex gap-2">
+                  <Select value={deptFilter} onValueChange={setDeptFilter}>
+                    <SelectTrigger className="w-[140px]" data-testid="select-department">
+                      <SelectValue placeholder="Department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      <SelectItem value="hr">HR</SelectItem>
+                      <SelectItem value="accounts">Accounts</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={deptStatusFilter} onValueChange={setDeptStatusFilter}>
+                    <SelectTrigger className="w-[140px]" data-testid="select-task-status">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="followup">Follow Up</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Task Stats */}
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                  <p className="text-xl font-bold text-yellow-600">{deptTasksData?.stats.pending || 0}</p>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-muted-foreground">Follow Up</p>
+                  <p className="text-xl font-bold text-blue-600">{deptTasksData?.stats.followup || 0}</p>
+                </div>
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="text-xs text-muted-foreground">Overdue</p>
+                  <p className="text-xl font-bold text-red-600">{deptTasksData?.stats.overdue || 0}</p>
+                </div>
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <p className="text-xs text-muted-foreground">Completed</p>
+                  <p className="text-xl font-bold text-green-600">{deptTasksData?.stats.completed || 0}</p>
+                </div>
+              </div>
+
+              {deptTasksLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : !deptTasksData?.tasks?.length ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                  <p>No tasks found for this department.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Task</TableHead>
+                        <TableHead>Assigned To</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Due Date</TableHead>
+                        <TableHead>Next Follow-up</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deptTasksData.tasks.map((task) => (
+                        <TableRow 
+                          key={task.id} 
+                          data-testid={`row-task-${task.id}`}
+                          className={task.isOverdue || task.isFollowupDue ? "bg-red-50/50 dark:bg-red-900/10" : ""}
+                        >
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{task.title}</span>
+                              {task.description && (
+                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                  {task.description}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {task.assigneeFirstName ? (
+                              <span>{task.assigneeFirstName} {task.assigneeLastName}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Unassigned</span>
+                            )}
+                          </TableCell>
+                          <TableCell>{getTaskPriorityBadge(task.priority)}</TableCell>
+                          <TableCell>
+                            {getTaskStatusBadge(task.status, task.isOverdue, task.isFollowupDue)}
+                          </TableCell>
+                          <TableCell>
+                            {task.dueDate ? (
+                              <div className={`flex items-center gap-1 ${task.isOverdue ? "text-red-600 font-medium" : ""}`}>
+                                <Calendar className="h-3 w-3" />
+                                {format(new Date(task.dueDate), "dd/MM/yyyy")}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {task.nextFollowupDate ? (
+                              <div className={`flex items-center gap-1 ${task.isFollowupDue ? "text-red-600 font-medium" : ""}`}>
+                                <CalendarClock className="h-3 w-3" />
+                                {format(new Date(task.nextFollowupDate), "dd/MM/yyyy")}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">Not set</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-1 justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openTaskHistoryDialog(task)}
+                                data-testid={`button-history-${task.id}`}
+                                title="View History"
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openFollowupDialog(task)}
+                                data-testid={`button-followup-${task.id}`}
+                                title="Add Follow-up"
+                              >
+                                <PlayCircle className="h-4 w-4" />
+                              </Button>
+                              {task.status !== 'completed' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => completeTaskMutation.mutate(task.id)}
+                                  disabled={completeTaskMutation.isPending}
+                                  data-testid={`button-complete-${task.id}`}
+                                  title="Mark Complete"
+                                >
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Follow-up Dialog */}
+      <Dialog open={showFollowupDialog} onOpenChange={setShowFollowupDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PlayCircle className="h-5 w-5 text-blue-500" />
+              Add Follow-up
+            </DialogTitle>
+            <DialogDescription>
+              Add a follow-up note for task: {selectedTask?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="followup-description">Follow-up Description *</Label>
+              <Textarea
+                id="followup-description"
+                placeholder="Enter your follow-up notes..."
+                value={followupDescription}
+                onChange={(e) => setFollowupDescription(e.target.value)}
+                className="min-h-[100px]"
+                data-testid="input-followup-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="next-followup-date">Next Follow-up Date (optional)</Label>
+              <Input
+                id="next-followup-date"
+                type="date"
+                value={nextFollowupDate}
+                onChange={(e) => setNextFollowupDate(e.target.value)}
+                data-testid="input-next-followup-date"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFollowupDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddFollowup} 
+              disabled={addFollowupMutation.isPending}
+              data-testid="button-submit-followup"
+            >
+              {addFollowupMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Add Follow-up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task History Dialog */}
+      <Dialog open={showTaskHistoryDialog} onOpenChange={setShowTaskHistoryDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-blue-500" />
+              Task Follow-up History
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTask?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            {followupsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : !taskFollowups?.length ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <MessageCircle className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No follow-ups recorded yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 p-1">
+                {taskFollowups.map((followup) => (
+                  <div 
+                    key={followup.id} 
+                    className="p-4 border rounded-lg bg-muted/30"
+                    data-testid={`followup-${followup.id}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                          <User className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {followup.userFirstName} {followup.userLastName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {followup.createdAt ? format(new Date(followup.createdAt), "dd/MM/yyyy HH:mm") : "-"}
+                          </p>
+                        </div>
+                      </div>
+                      {followup.nextFollowupDate && (
+                        <Badge variant="outline" className="text-xs">
+                          <CalendarClock className="h-3 w-3 mr-1" />
+                          Next: {format(new Date(followup.nextFollowupDate), "dd/MM/yyyy")}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-3 text-sm">{followup.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTaskHistoryDialog(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setShowTaskHistoryDialog(false);
+              if (selectedTask) openFollowupDialog(selectedTask);
+            }}>
+              <PlayCircle className="h-4 w-4 mr-2" />
+              Add Follow-up
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Ticket Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
