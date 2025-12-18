@@ -301,6 +301,7 @@ export default function AccountsContracts() {
         <TabsList className="w-full sm:w-auto flex-wrap mb-4">
           <TabsTrigger value="contracts" data-testid="tab-main-contracts">Contracts</TabsTrigger>
           <TabsTrigger value="customer-master" data-testid="tab-main-customer-master">Customer Master</TabsTrigger>
+          <TabsTrigger value="unallocated" data-testid="tab-main-unallocated">Unallocated Customers</TabsTrigger>
           <TabsTrigger value="monthly-reminders" data-testid="tab-main-monthly-reminders">Monthly Reminders</TabsTrigger>
         </TabsList>
 
@@ -817,6 +818,16 @@ export default function AccountsContracts() {
             customers={customers} 
             contractTypes={contractTypes}
             toast={toast}
+          />
+        </TabsContent>
+
+        <TabsContent value="unallocated" className="space-y-4">
+          <UnallocatedCustomersTab 
+            toast={toast}
+            onCreateContract={(customerId) => {
+              setMainTab("contracts");
+              setIsAddOpen(true);
+            }}
           />
         </TabsContent>
 
@@ -2197,6 +2208,179 @@ function CustomerMasterTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ================== UNALLOCATED CUSTOMERS TAB ==================
+
+interface UnallocatedCustomer {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  designation: string | null;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  country: string;
+  status: string;
+  customerType: string;
+  contractTypeId: string | null;
+  contractTypeName: string | null;
+  selectedModules: string[] | null;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+
+function UnallocatedCustomersTab({ 
+  toast,
+  onCreateContract,
+}: { 
+  toast: any;
+  onCreateContract: (customerId: string) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+
+  const { data: unallocatedCustomers = [], isLoading } = useQuery<UnallocatedCustomer[]>({
+    queryKey: ["/api/accounts/unallocated-customers", { search: searchQuery, city: selectedCity }],
+    staleTime: 0,
+  });
+
+  const { data: cities = [] } = useQuery<string[]>({
+    queryKey: ["/api/accounts/customer-master/cities"],
+  });
+
+  const debouncedSearch = useMemo(() => {
+    let timeout: NodeJS.Timeout;
+    return (value: string) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => setSearchQuery(value), 300);
+    };
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Unallocated Customers</h2>
+          <p className="text-sm text-muted-foreground">
+            Customers without any active contracts
+          </p>
+        </div>
+        <Badge variant="outline" className="text-lg px-4 py-2">
+          {unallocatedCustomers.length} customers
+        </Badge>
+      </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, contact, city, email..."
+                className="pl-10"
+                onChange={(e) => debouncedSearch(e.target.value)}
+                data-testid="input-search-unallocated"
+              />
+            </div>
+            <Select value={selectedCity} onValueChange={setSelectedCity}>
+              <SelectTrigger className="w-full sm:w-48" data-testid="select-city-unallocated">
+                <SelectValue placeholder="All Cities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Cities</SelectItem>
+                {cities.map((city) => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : unallocatedCustomers.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
+            <h3 className="text-lg font-medium mb-2">All Customers Allocated</h3>
+            <p className="text-muted-foreground">
+              All active customers have contracts assigned.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead className="hidden sm:table-cell">Contact</TableHead>
+                <TableHead className="hidden md:table-cell">City</TableHead>
+                <TableHead className="hidden lg:table-cell">Phone / Email</TableHead>
+                <TableHead className="hidden xl:table-cell">Type</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {unallocatedCustomers.map((customer) => (
+                <TableRow key={customer.id} data-testid={`row-unallocated-${customer.id}`}>
+                  <TableCell>
+                    <div className="font-medium">{customer.name}</div>
+                    <div className="text-xs text-muted-foreground sm:hidden">
+                      {customer.contactPerson}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <div>{customer.contactPerson || "-"}</div>
+                    {customer.designation && (
+                      <div className="text-xs text-muted-foreground">{customer.designation}</div>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <div>{customer.city || "-"}</div>
+                    {customer.state && (
+                      <div className="text-xs text-muted-foreground">{customer.state}</div>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <div className="text-sm">{customer.phone || "-"}</div>
+                    <div className="text-xs text-muted-foreground">{customer.email || "-"}</div>
+                  </TableCell>
+                  <TableCell className="hidden xl:table-cell">
+                    <Badge variant="outline">{customer.customerType}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={() => onCreateContract(customer.id)}
+                            data-testid={`button-create-contract-${customer.id}`}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Create Contract</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

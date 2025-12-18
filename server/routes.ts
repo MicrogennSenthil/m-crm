@@ -9600,6 +9600,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ================== CUSTOMER MASTER WITH CONTRACT TYPE (Accounts) ==================
 
+  // Get unallocated customers (not in any contract - neither customer_contracts nor customer_module_contracts)
+  app.get("/api/accounts/unallocated-customers", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
+    try {
+      const { search, city } = req.query;
+      const { and, or } = await import('drizzle-orm');
+      
+      const conditions: any[] = [
+        // Customer must NOT have any active customer_contracts
+        sql`NOT EXISTS (
+          SELECT 1 FROM customer_contracts cc 
+          WHERE cc.customer_id = ${customers.id} 
+          AND cc.status = 'active'
+        )`,
+        // Customer must NOT have any active module_contracts
+        sql`NOT EXISTS (
+          SELECT 1 FROM customer_module_contracts cmc 
+          WHERE cmc.customer_id = ${customers.id} 
+          AND cmc.status = 'active'
+        )`,
+        // Only active customers
+        eq(customers.status, 'active')
+      ];
+      
+      // Search filter
+      if (search) {
+        const searchLower = `%${(search as string).toLowerCase()}%`;
+        conditions.push(or(
+          sql`LOWER(${customers.name}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.contactPerson}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.city}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.email}) LIKE ${searchLower}`,
+          sql`LOWER(${customers.phone}) LIKE ${searchLower}`
+        ));
+      }
+      
+      // City filter
+      if (city) {
+        conditions.push(sql`LOWER(${customers.city}) = LOWER(${city})`);
+      }
+      
+      const results = await db.select({
+        id: customers.id,
+        name: customers.name,
+        contactPerson: customers.contactPerson,
+        designation: customers.designation,
+        email: customers.email,
+        phone: customers.phone,
+        city: customers.city,
+        state: customers.state,
+        country: customers.country,
+        status: customers.status,
+        customerType: customers.customerType,
+        contractTypeId: customers.contractTypeId,
+        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customers.contractTypeId})`,
+        selectedModules: customers.selectedModules,
+        createdAt: customers.createdAt,
+        updatedAt: customers.updatedAt,
+      })
+        .from(customers)
+        .where(and(...conditions))
+        .orderBy(customers.name);
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching unallocated customers:", error);
+      res.status(500).json({ message: "Failed to fetch unallocated customers" });
+    }
+  });
+
   // Get all customers with their contract type for Accounts department
   app.get("/api/accounts/customer-master", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
