@@ -9941,6 +9941,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send module contract renewal reminder email
+  app.post("/api/accounts/module-contracts/:contractId/send-reminder", isAuthenticated, requirePermission("contracts", "edit"), async (req: any, res) => {
+    try {
+      const { contractId } = req.params;
+      
+      const [contractData] = await db.select({
+        contract: customerModuleContracts,
+        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerModuleContracts.customerId})`,
+        customerEmail: sql<string>`(SELECT email FROM customers WHERE id = ${customerModuleContracts.customerId})`,
+        moduleName: sql<string>`(SELECT name FROM modules WHERE id = ${customerModuleContracts.moduleId})`,
+      })
+        .from(customerModuleContracts)
+        .where(eq(customerModuleContracts.id, contractId));
+      
+      if (!contractData) {
+        return res.status(404).json({ message: "Module contract not found" });
+      }
+      
+      if (!contractData.customerEmail) {
+        return res.status(400).json({ message: "Customer email not available" });
+      }
+      
+      const { contract, customerName, customerEmail, moduleName } = contractData;
+      const endDate = new Date(contract.contractEndDate);
+      const daysUntilExpiry = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      
+      const amcAmount = contract.amcCalculationType === 'percentage' 
+        ? (contract.orderValue * (contract.amcPercentage || 0) / 100)
+        : (contract.amcAmount || 0);
+      const gstAmount = amcAmount * ((contract.gstPercentage || 18) / 100);
+      const totalAmount = amcAmount + gstAmount;
+      
+      // Send email
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      
+      await resend.emails.send({
+        from: "M-CRM <noreply@microgenn.com>",
+        to: customerEmail,
+        subject: `Module Contract Renewal Reminder - ${moduleName || contract.moduleName}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a2b6d;">Contract Renewal Reminder</h2>
+            <p>Dear ${customerName || 'Customer'},</p>
+            <p>This is a reminder that your <strong>${moduleName || contract.moduleName}</strong> module contract is approaching renewal.</p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Module:</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${moduleName || contract.moduleName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Contract End Date:</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${endDate.toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Days Until Expiry:</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${daysUntilExpiry} days</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>AMC Amount:</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">INR ${amcAmount.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>GST (${contract.gstPercentage || 18}%):</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;">INR ${gstAmount.toLocaleString()}</td>
+              </tr>
+              <tr style="background-color: #f5f5f5;">
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>Total Amount:</strong></td>
+                <td style="padding: 8px; border: 1px solid #ddd;"><strong>INR ${totalAmount.toLocaleString()}</strong></td>
+              </tr>
+            </table>
+            
+            <p>Please contact us to renew your contract and ensure uninterrupted service.</p>
+            
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">
+              This is a reminder from M-CRM.
+            </p>
+          </div>
+        `,
+      });
+      
+      // Update contract
+      await db.update(customerModuleContracts)
+        .set({ lastReminderSentAt: new Date() })
+        .where(eq(customerModuleContracts.id, contractId));
+      
+      // Log activity
+      await db.insert(activityLog).values({
+        entityType: "module_contract",
+        entityId: contractId,
+        action: "renewal_reminder_sent",
+        description: `Renewal reminder sent for ${moduleName || contract.moduleName} to ${customerEmail}`,
+        userId: req.user?.claims?.sub,
+      });
+      
+      res.json({ message: "Renewal reminder sent successfully" });
+    } catch (error) {
+      console.error("Error sending module contract reminder:", error);
+      res.status(500).json({ message: "Failed to send reminder" });
+    }
+  });
+
+  // Trigger module contract reminder check manually (admin only)
+  app.post("/api/accounts/module-contracts/trigger-reminders", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { triggerModuleContractReminderCheck } = await import("./moduleContractReminderScheduler");
+      await triggerModuleContractReminderCheck();
+      res.json({ message: "Module contract reminder check triggered" });
+    } catch (error) {
+      console.error("Error triggering reminder check:", error);
+      res.status(500).json({ message: "Failed to trigger reminder check" });
+    }
+  });
+
   // ================== MONTHLY PAYMENT REMINDERS ==================
 
   // Get monthly payment reminders for current month

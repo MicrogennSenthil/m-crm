@@ -9,6 +9,7 @@ import express, {
 
 import { registerRoutes } from "./routes";
 import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
+import { startModuleContractReminderScheduler } from "./moduleContractReminderScheduler";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -97,5 +98,8 @@ export default async function runApp(
     
     // Start the auto-assignment scheduler for support tickets
     startAutoAssignmentScheduler();
+    
+    // Start the module contract reminder scheduler (checks daily)
+    startModuleContractReminderScheduler();
   });
 }
