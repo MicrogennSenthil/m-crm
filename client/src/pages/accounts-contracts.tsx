@@ -1462,23 +1462,23 @@ function CustomerMasterTab({
                 data-testid="input-search-customer-master"
               />
             </div>
-            <Select value={filterCity} onValueChange={setFilterCity}>
+            <Select value={filterCity || "all"} onValueChange={(v) => setFilterCity(v === "all" ? "" : v)}>
               <SelectTrigger className="w-[180px]" data-testid="select-filter-city">
                 <SelectValue placeholder="All Cities" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Cities</SelectItem>
+                <SelectItem value="all">All Cities</SelectItem>
                 {cities.map((city) => (
                   <SelectItem key={city} value={city}>{city}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterContractType} onValueChange={setFilterContractType}>
+            <Select value={filterContractType || "all"} onValueChange={(v) => setFilterContractType(v === "all" ? "" : v)}>
               <SelectTrigger className="w-[180px]" data-testid="select-filter-contract-type">
                 <SelectValue placeholder="All Contract Types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Contract Types</SelectItem>
+                <SelectItem value="all">All Contract Types</SelectItem>
                 {contractTypes.map((type) => (
                   <SelectItem key={type.id} value={type.id}>{type.displayName}</SelectItem>
                 ))}
@@ -1861,12 +1861,12 @@ function MonthlyRemindersTab({
                 ))}
               </SelectContent>
             </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
               <SelectTrigger className="w-[150px]" data-testid="select-filter-status">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="reminded">Reminded</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
