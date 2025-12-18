@@ -38,7 +38,40 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // Build URL from queryKey
+    // Pattern 1: ["/api/path"] - simple path
+    // Pattern 2: ["/api/path", id] - path with id segment (string/number)
+    // Pattern 3: ["/api/path", { search: "foo" }] - path with query params (object)
+    // Pattern 4: ["/api/path", id, { search: "foo" }] - path with id and query params
+    
+    let pathSegments: string[] = [];
+    let queryParams: Record<string, string> = {};
+    
+    for (const segment of queryKey) {
+      if (typeof segment === 'string') {
+        pathSegments.push(segment);
+      } else if (typeof segment === 'number') {
+        pathSegments.push(String(segment));
+      } else if (typeof segment === 'object' && segment !== null) {
+        // Object means query parameters
+        for (const [key, value] of Object.entries(segment)) {
+          if (value !== undefined && value !== null && value !== '') {
+            queryParams[key] = String(value);
+          }
+        }
+      }
+    }
+    
+    let url = pathSegments.join('/');
+    
+    // Append query parameters if any
+    const searchParams = new URLSearchParams(queryParams);
+    const paramString = searchParams.toString();
+    if (paramString) {
+      url = `${url}?${paramString}`;
+    }
+    
+    const res = await fetch(url, {
       credentials: "include",
     });
 

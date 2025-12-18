@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -9757,6 +9757,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching completed feedback tickets:", error);
       res.status(500).json({ message: "Failed to fetch completed feedback tickets" });
+    }
+  });
+
+  // Submit feedback for a ticket (HR permission required)
+  app.post("/api/hr/feedback/submit", isAuthenticated, requirePermission("hr_feedback", "update"), async (req, res) => {
+    try {
+      const { z } = await import('zod');
+      
+      // Zod schema for feedback submission
+      const feedbackSchema = z.object({
+        ticketId: z.string().min(1, "Ticket ID is required"),
+        rating: z.number().min(1).max(5).nullable().optional(),
+        comments: z.string().nullable().optional(),
+        satisfied: z.boolean().nullable().optional(),
+      }).refine(data => {
+        // Require at least rating or satisfaction to be provided
+        return (data.rating !== null && data.rating !== undefined) || 
+               (data.satisfied !== null && data.satisfied !== undefined);
+      }, {
+        message: "Either rating or satisfaction must be provided"
+      });
+      
+      const validationResult = feedbackSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: validationResult.error.errors[0]?.message || "Validation failed" 
+        });
+      }
+      
+      const { ticketId, rating, comments, satisfied } = validationResult.data;
+      const userId = (req.user as any)?.id;
+      
+      // Check if feedback already exists for this ticket
+      const existingFeedback = await db.select()
+        .from(feedback)
+        .where(eq(feedback.ticketId, ticketId))
+        .limit(1);
+      
+      if (existingFeedback.length > 0) {
+        return res.status(400).json({ message: "Feedback already submitted for this ticket" });
+      }
+      
+      // Insert feedback
+      const [newFeedback] = await db.insert(feedback)
+        .values({
+          ticketId,
+          rating: rating || null,
+          comments: comments || null,
+          satisfied: satisfied !== undefined ? satisfied : null,
+        })
+        .returning();
+      
+      // Log activity
+      await db.insert(activityLog).values({
+        entityType: 'ticket',
+        entityId: ticketId,
+        action: 'feedback_submitted',
+        description: `Customer feedback submitted: ${rating ? rating + ' stars' : 'No rating'}, ${satisfied ? 'Satisfied' : satisfied === false ? 'Not satisfied' : 'Unknown'}`,
+        userId: userId,
+        metadata: { rating, satisfied, comments: comments?.substring(0, 100) },
+      });
+      
+      res.json({ success: true, feedback: newFeedback, message: "Feedback submitted successfully" });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+  
+  // Reopen a closed ticket (HR permission required)
+  app.post("/api/hr/feedback/reopen", isAuthenticated, requirePermission("hr_feedback", "update"), async (req, res) => {
+    try {
+      const { z } = await import('zod');
+      
+      // Zod schema for reopen request
+      const reopenSchema = z.object({
+        ticketId: z.string().min(1, "Ticket ID is required"),
+        reason: z.string().min(1, "Reason for reopening is required").max(1000, "Reason is too long"),
+      });
+      
+      const validationResult = reopenSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: validationResult.error.errors[0]?.message || "Validation failed" 
+        });
+      }
+      
+      const { ticketId, reason } = validationResult.data;
+      const userId = (req.user as any)?.id;
+      
+      // Get the ticket
+      const [ticket] = await db.select()
+        .from(tickets)
+        .where(eq(tickets.id, ticketId))
+        .limit(1);
+      
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      if (ticket.status !== 'closed' && ticket.status !== 'resolved') {
+        return res.status(400).json({ message: "Only closed or resolved tickets can be reopened" });
+      }
+      
+      // Update ticket status to 'reopened'
+      const [updatedTicket] = await db.update(tickets)
+        .set({
+          status: 'reopened',
+          resolvedAt: null,
+          closedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tickets.id, ticketId))
+        .returning();
+      
+      // Add a comment entry for the reopen reason
+      await db.insert(ticketComments).values({
+        ticketId: ticketId,
+        userId: userId || null,
+        comment: `Ticket reopened by HR. Reason: ${reason}`,
+        isInternal: false,
+      });
+      
+      // Log activity
+      await db.insert(activityLog).values({
+        entityType: 'ticket',
+        entityId: ticketId,
+        action: 'ticket_reopened',
+        description: `Ticket ${ticket.ticketNumber} reopened. Reason: ${reason}`,
+        userId: userId,
+        metadata: { reason, previousStatus: ticket.status },
+      });
+      
+      res.json({ success: true, ticket: updatedTicket, message: "Ticket reopened successfully" });
+    } catch (error) {
+      console.error("Error reopening ticket:", error);
+      res.status(500).json({ message: "Failed to reopen ticket" });
     }
   });
 
