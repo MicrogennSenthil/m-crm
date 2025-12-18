@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -312,6 +312,52 @@ export default function HRFeedback() {
       });
     },
   });
+
+  // Track if we've shown reminder toast for this session
+  const [hasShownReminder, setHasShownReminder] = useState(false);
+
+  // Show reminder toast for overdue and upcoming follow-up tasks when data loads
+  useEffect(() => {
+    if (deptTasksData && activeTab === "tasks" && !hasShownReminder) {
+      const overdueTasks = deptTasksData.tasks.filter(t => t.isOverdue);
+      const followupDueTasks = deptTasksData.tasks.filter(t => t.isFollowupDue && !t.isOverdue);
+      
+      // Show overdue tasks toast
+      if (overdueTasks.length > 0) {
+        const taskNames = overdueTasks.slice(0, 2).map(t => t.title).join(", ");
+        const moreText = overdueTasks.length > 2 ? ` +${overdueTasks.length - 2} more` : "";
+        
+        toast({
+          title: `${overdueTasks.length} Overdue Task${overdueTasks.length > 1 ? "s" : ""}`,
+          description: `Past due: ${taskNames}${moreText}`,
+          variant: "destructive",
+        });
+      }
+      
+      // Show follow-up reminder toast (separate from overdue)
+      if (followupDueTasks.length > 0) {
+        const taskNames = followupDueTasks.slice(0, 2).map(t => t.title).join(", ");
+        const moreText = followupDueTasks.length > 2 ? ` +${followupDueTasks.length - 2} more` : "";
+        
+        toast({
+          title: `${followupDueTasks.length} Follow-up Reminder${followupDueTasks.length > 1 ? "s" : ""}`,
+          description: `Upcoming: ${taskNames}${moreText}`,
+        });
+      }
+      
+      // Mark as shown to prevent repeated toasts
+      if (overdueTasks.length > 0 || followupDueTasks.length > 0) {
+        setHasShownReminder(true);
+      }
+    }
+  }, [deptTasksData, activeTab, hasShownReminder, toast]);
+  
+  // Reset reminder flag when leaving the tasks tab
+  useEffect(() => {
+    if (activeTab !== "tasks") {
+      setHasShownReminder(false);
+    }
+  }, [activeTab]);
 
   const resetFeedbackForm = () => {
     setFeedbackRating(0);
