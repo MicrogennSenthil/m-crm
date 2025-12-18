@@ -105,6 +105,7 @@ const PAYMENT_STATUS = [
 
 export default function AccountsContracts() {
   const { toast } = useToast();
+  const [mainTab, setMainTab] = useState("contracts");
   const [activeTab, setActiveTab] = useState("all");
   const [viewMode, setViewMode] = useState<"list" | "monthly">("list");
   const [searchTerm, setSearchTerm] = useState("");
@@ -294,7 +295,18 @@ export default function AccountsContracts() {
             Track customer contracts, renewals, and payment follow-ups
           </p>
         </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+      </div>
+
+      <Tabs value={mainTab} onValueChange={setMainTab}>
+        <TabsList className="w-full sm:w-auto flex-wrap mb-4">
+          <TabsTrigger value="contracts" data-testid="tab-main-contracts">Contracts</TabsTrigger>
+          <TabsTrigger value="customer-master" data-testid="tab-main-customer-master">Customer Master</TabsTrigger>
+          <TabsTrigger value="monthly-reminders" data-testid="tab-main-monthly-reminders">Monthly Reminders</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="contracts" className="space-y-4 sm:space-y-6">
+          <div className="flex justify-end">
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-contract">
               <Plus className="w-4 h-4 mr-2" />
@@ -798,6 +810,22 @@ export default function AccountsContracts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="customer-master" className="space-y-4">
+          <CustomerMasterTab 
+            customers={customers} 
+            contractTypes={contractTypes}
+            toast={toast}
+          />
+        </TabsContent>
+
+        <TabsContent value="monthly-reminders" className="space-y-4">
+          <MonthlyRemindersTab 
+            toast={toast}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1303,5 +1331,742 @@ function FollowupForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// ================== CUSTOMER MASTER TAB ==================
+
+interface CustomerMasterItem {
+  id: string;
+  name: string;
+  contactPerson: string;
+  designation: string;
+  email: string;
+  phone: string;
+  city: string;
+  state: string;
+  country: string;
+  status: string;
+  customerType: string;
+  contractTypeId: string | null;
+  contractTypeName: string | null;
+  selectedModules: string[] | null;
+  activeContractsCount: number;
+  totalContractValue: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface ContractTypeChangeLog {
+  id: string;
+  customerId: string;
+  previousContractTypeId: string | null;
+  newContractTypeId: string | null;
+  previousContractTypeName: string | null;
+  newContractTypeName: string | null;
+  reason: string | null;
+  changedBy: string | null;
+  changedByName: string | null;
+  changedByEmail: string | null;
+  changedAt: Date;
+}
+
+function CustomerMasterTab({ 
+  customers: _, 
+  contractTypes,
+  toast,
+}: { 
+  customers: Customer[];
+  contractTypes: ContractType[];
+  toast: any;
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCity, setFilterCity] = useState("");
+  const [filterContractType, setFilterContractType] = useState("");
+  const [editingCustomer, setEditingCustomer] = useState<CustomerMasterItem | null>(null);
+  const [viewingHistory, setViewingHistory] = useState<CustomerMasterItem | null>(null);
+  const [changeReason, setChangeReason] = useState("");
+  const [newContractTypeId, setNewContractTypeId] = useState("");
+
+  const { data: customerMaster = [], isLoading } = useQuery<CustomerMasterItem[]>({
+    queryKey: ["/api/accounts/customer-master", searchTerm, filterCity, filterContractType],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (searchTerm) params.set("search", searchTerm);
+      if (filterCity) params.set("city", filterCity);
+      if (filterContractType) params.set("contractTypeId", filterContractType);
+      const res = await fetch(`/api/accounts/customer-master?${params.toString()}`);
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const { data: cities = [] } = useQuery<string[]>({
+    queryKey: ["/api/accounts/customer-master/cities"],
+  });
+
+  const { data: changeHistory = [] } = useQuery<ContractTypeChangeLog[]>({
+    queryKey: ["/api/accounts/customer-master", viewingHistory?.id, "contract-type-history"],
+    enabled: !!viewingHistory,
+  });
+
+  const updateContractTypeMutation = useMutation({
+    mutationFn: async ({ customerId, contractTypeId, reason }: { customerId: string; contractTypeId: string; reason: string }) => {
+      const res = await fetch(`/api/accounts/customer-master/${customerId}/contract-type`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contractTypeId, reason }),
+      });
+      if (!res.ok) throw new Error("Failed to update contract type");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/customer-master"] });
+      toast({
+        title: "Contract type updated",
+        description: `Changed from "${data.previousType || 'None'}" to "${data.newType || 'None'}"`,
+      });
+      setEditingCustomer(null);
+      setChangeReason("");
+      setNewContractTypeId("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleUpdateContractType = () => {
+    if (!editingCustomer || !newContractTypeId) return;
+    updateContractTypeMutation.mutate({
+      customerId: editingCustomer.id,
+      contractTypeId: newContractTypeId,
+      reason: changeReason,
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Customer Master
+          </CardTitle>
+          <CardDescription>View and manage customer contract types with full audit trail</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Search customers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-customer-master"
+              />
+            </div>
+            <Select value={filterCity} onValueChange={setFilterCity}>
+              <SelectTrigger className="w-[180px]" data-testid="select-filter-city">
+                <SelectValue placeholder="All Cities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Cities</SelectItem>
+                {cities.map((city) => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterContractType} onValueChange={setFilterContractType}>
+              <SelectTrigger className="w-[180px]" data-testid="select-filter-contract-type">
+                <SelectValue placeholder="All Contract Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Contract Types</SelectItem>
+                {contractTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>{type.displayName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Contract Type</TableHead>
+                  <TableHead>Active Contracts</TableHead>
+                  <TableHead className="text-right">Total Value</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {customerMaster.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      No customers found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  customerMaster.map((customer) => (
+                    <TableRow key={customer.id} data-testid={`row-customer-${customer.id}`}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{customer.name}</p>
+                          <p className="text-sm text-muted-foreground">{customer.contactPerson}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{customer.city || "-"}</TableCell>
+                      <TableCell>
+                        {customer.contractTypeName ? (
+                          <Badge variant="outline">{customer.contractTypeName}</Badge>
+                        ) : (
+                          <Badge variant="secondary">Not Set</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{customer.activeContractsCount}</TableCell>
+                      <TableCell className="text-right">
+                        INR {customer.totalContractValue.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setEditingCustomer(customer);
+                              setNewContractTypeId(customer.contractTypeId || "");
+                            }}
+                            data-testid={`button-edit-contract-type-${customer.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setViewingHistory(customer)}
+                            data-testid={`button-view-history-${customer.id}`}
+                          >
+                            <History className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Contract Type Dialog */}
+      <Dialog open={!!editingCustomer} onOpenChange={(open) => !open && setEditingCustomer(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Contract Type</DialogTitle>
+            <DialogDescription>
+              Update contract type for {editingCustomer?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-2">
+              <Label>Current Contract Type</Label>
+              <Badge variant="outline" className="w-fit">
+                {editingCustomer?.contractTypeName || "Not Set"}
+              </Badge>
+            </div>
+            <div className="grid gap-2">
+              <Label>New Contract Type *</Label>
+              <Select value={newContractTypeId} onValueChange={setNewContractTypeId}>
+                <SelectTrigger data-testid="select-new-contract-type">
+                  <SelectValue placeholder="Select contract type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contractTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>{type.displayName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Reason for Change</Label>
+              <Textarea
+                value={changeReason}
+                onChange={(e) => setChangeReason(e.target.value)}
+                placeholder="Enter reason for contract type change..."
+                data-testid="input-change-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingCustomer(null)}>Cancel</Button>
+            <Button 
+              onClick={handleUpdateContractType}
+              disabled={!newContractTypeId || updateContractTypeMutation.isPending}
+              data-testid="button-save-contract-type"
+            >
+              {updateContractTypeMutation.isPending ? "Saving..." : "Update Contract Type"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View History Dialog */}
+      <Dialog open={!!viewingHistory} onOpenChange={(open) => !open && setViewingHistory(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Contract Type Change History</DialogTitle>
+            <DialogDescription>
+              Audit trail for {viewingHistory?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-96">
+            {changeHistory.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No change history found</p>
+            ) : (
+              <div className="space-y-4">
+                {changeHistory.map((log) => (
+                  <Card key={log.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant="outline">{log.previousContractTypeName || "None"}</Badge>
+                            <span className="text-muted-foreground">→</span>
+                            <Badge>{log.newContractTypeName || "None"}</Badge>
+                          </div>
+                          {log.reason && (
+                            <p className="text-sm text-muted-foreground mb-2">
+                              Reason: {log.reason}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Changed by {log.changedByName || log.changedByEmail} on {format(new Date(log.changedAt), "MMM d, yyyy h:mm a")}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingHistory(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ================== MONTHLY REMINDERS TAB ==================
+
+interface MonthlyReminderItem {
+  reminder: {
+    id: string;
+    customerId: string;
+    contractId: string | null;
+    reminderMonth: number;
+    reminderYear: number;
+    dueDate: Date;
+    amount: number | null;
+    status: string;
+    emailSent: boolean;
+    emailSentAt: Date | null;
+    followedUpBy: string | null;
+    followedUpAt: Date | null;
+    paymentStatus: string | null;
+    paymentDate: Date | null;
+    paymentAmount: number | null;
+    paymentReference: string | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  customerName: string;
+  customerCity: string;
+  customerEmail: string;
+  customerPhone: string;
+  contractNumber: string;
+  contractTypeName: string;
+}
+
+function MonthlyRemindersTab({ 
+  toast,
+}: { 
+  toast: any;
+}) {
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [filterStatus, setFilterStatus] = useState("");
+  const [updatingReminder, setUpdatingReminder] = useState<MonthlyReminderItem | null>(null);
+  const [paymentData, setPaymentData] = useState({
+    paymentStatus: "paid",
+    paymentAmount: 0,
+    paymentReference: "",
+    notes: "",
+  });
+
+  const { data: reminders = [], isLoading } = useQuery<MonthlyReminderItem[]>({
+    queryKey: ["/api/accounts/monthly-reminders", selectedMonth, selectedYear, filterStatus],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("month", selectedMonth.toString());
+      params.set("year", selectedYear.toString());
+      if (filterStatus) params.set("status", filterStatus);
+      const res = await fetch(`/api/accounts/monthly-reminders?${params.toString()}`);
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const generateRemindersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/accounts/monthly-reminders/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: selectedMonth, year: selectedYear }),
+      });
+      if (!res.ok) throw new Error("Failed to generate reminders");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/monthly-reminders"] });
+      toast({
+        title: "Reminders Generated",
+        description: data.message,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const sendEmailMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/accounts/monthly-reminders/${id}/send-email`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to send email");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/monthly-reminders"] });
+      toast({ title: "Payment reminder sent successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateReminderMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await fetch(`/api/accounts/monthly-reminders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to update reminder");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/monthly-reminders"] });
+      toast({ title: "Reminder updated successfully" });
+      setUpdatingReminder(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const months = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" },
+  ];
+
+  const years = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - 1 + i);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "pending":
+        return <Badge variant="secondary">Pending</Badge>;
+      case "reminded":
+        return <Badge variant="outline" className="border-yellow-500 text-yellow-600">Reminded</Badge>;
+      case "completed":
+        return <Badge variant="default" className="bg-green-500">Completed</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const getPaymentStatusBadge = (status: string | null) => {
+    if (!status) return null;
+    switch (status) {
+      case "pending":
+        return <Badge variant="outline">Payment Pending</Badge>;
+      case "partial":
+        return <Badge variant="outline" className="border-yellow-500 text-yellow-600">Partial Payment</Badge>;
+      case "paid":
+        return <Badge variant="default" className="bg-green-500">Paid</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5" />
+                Monthly Payment Reminders
+              </CardTitle>
+              <CardDescription>Track and follow up on monthly payments</CardDescription>
+            </div>
+            <Button 
+              onClick={() => generateRemindersMutation.mutate()}
+              disabled={generateRemindersMutation.isPending}
+              data-testid="button-generate-reminders"
+            >
+              {generateRemindersMutation.isPending ? "Generating..." : "Generate Reminders"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <Select 
+              value={selectedMonth.toString()} 
+              onValueChange={(v) => setSelectedMonth(parseInt(v))}
+            >
+              <SelectTrigger className="w-[150px]" data-testid="select-reminder-month">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((m) => (
+                  <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select 
+              value={selectedYear.toString()} 
+              onValueChange={(v) => setSelectedYear(parseInt(v))}
+            >
+              <SelectTrigger className="w-[100px]" data-testid="select-reminder-year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[150px]" data-testid="select-filter-status">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="reminded">Reminded</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Contract</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reminders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      No reminders found for this period. Click "Generate Reminders" to create them.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  reminders.map((item) => (
+                    <TableRow key={item.reminder.id} data-testid={`row-reminder-${item.reminder.id}`}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{item.customerName}</p>
+                          <p className="text-sm text-muted-foreground">{item.customerCity}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-mono text-sm">{item.contractNumber}</p>
+                          <p className="text-sm text-muted-foreground">{item.contractTypeName}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(item.reminder.dueDate), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        INR {(item.reminder.amount || 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(item.reminder.status)}</TableCell>
+                      <TableCell>{getPaymentStatusBadge(item.reminder.paymentStatus)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => sendEmailMutation.mutate(item.reminder.id)}
+                            disabled={sendEmailMutation.isPending}
+                            title="Send Reminder Email"
+                            data-testid={`button-send-email-${item.reminder.id}`}
+                          >
+                            <Mail className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setUpdatingReminder(item);
+                              setPaymentData({
+                                paymentStatus: item.reminder.paymentStatus || "paid",
+                                paymentAmount: item.reminder.amount || 0,
+                                paymentReference: item.reminder.paymentReference || "",
+                                notes: item.reminder.notes || "",
+                              });
+                            }}
+                            title="Update Payment Status"
+                            data-testid={`button-update-reminder-${item.reminder.id}`}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Update Payment Dialog */}
+      <Dialog open={!!updatingReminder} onOpenChange={(open) => !open && setUpdatingReminder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Payment Status</DialogTitle>
+            <DialogDescription>
+              Record payment for {updatingReminder?.customerName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-2">
+              <Label>Payment Status</Label>
+              <Select 
+                value={paymentData.paymentStatus} 
+                onValueChange={(v) => setPaymentData({ ...paymentData, paymentStatus: v })}
+              >
+                <SelectTrigger data-testid="select-payment-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="partial">Partial Payment</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Payment Amount</Label>
+              <Input
+                type="number"
+                value={paymentData.paymentAmount}
+                onChange={(e) => setPaymentData({ ...paymentData, paymentAmount: parseInt(e.target.value) || 0 })}
+                data-testid="input-payment-amount"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Payment Reference</Label>
+              <Input
+                value={paymentData.paymentReference}
+                onChange={(e) => setPaymentData({ ...paymentData, paymentReference: e.target.value })}
+                placeholder="Transaction ID, cheque number, etc."
+                data-testid="input-payment-reference"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={paymentData.notes}
+                onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
+                placeholder="Additional notes..."
+                data-testid="input-payment-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpdatingReminder(null)}>Cancel</Button>
+            <Button 
+              onClick={() => {
+                if (!updatingReminder) return;
+                updateReminderMutation.mutate({
+                  id: updatingReminder.reminder.id,
+                  data: {
+                    ...paymentData,
+                    paymentDate: new Date().toISOString(),
+                    status: paymentData.paymentStatus === "paid" ? "completed" : "reminded",
+                  },
+                });
+              }}
+              disabled={updateReminderMutation.isPending}
+              data-testid="button-save-payment"
+            >
+              {updateReminderMutation.isPending ? "Saving..." : "Update Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
