@@ -3,9 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   insertCustomerSchema,
@@ -9761,7 +9761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submit feedback for a ticket (HR permission required)
-  app.post("/api/hr/feedback/submit", isAuthenticated, requirePermission("hr_feedback", "update"), async (req, res) => {
+  app.post("/api/hr/feedback/submit", isAuthenticated, requirePermission("hr_feedback", "edit"), async (req, res) => {
     try {
       const { z } = await import('zod');
       
@@ -9827,7 +9827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Reopen a closed ticket (HR permission required)
-  app.post("/api/hr/feedback/reopen", isAuthenticated, requirePermission("hr_feedback", "update"), async (req, res) => {
+  app.post("/api/hr/feedback/reopen", isAuthenticated, requirePermission("hr_feedback", "edit"), async (req, res) => {
     try {
       const { z } = await import('zod');
       
@@ -9894,6 +9894,281 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error reopening ticket:", error);
       res.status(500).json({ message: "Failed to reopen ticket" });
+    }
+  });
+
+  // ================== DEPARTMENT TASKS ==================
+
+  // Get tasks for a specific department (HR or Accounts) with follow-up info
+  app.get("/api/hr/department-tasks", isAuthenticated, requirePermission("hr_feedback", "view"), async (req: any, res) => {
+    try {
+      const { department, status, search } = req.query;
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Validate department (only HR and Accounts are allowed)
+      const validDepartments = ['hr', 'accounts'];
+      if (department && !validDepartments.includes(department as string)) {
+        return res.status(400).json({ message: "Invalid department. Only 'hr' or 'accounts' allowed." });
+      }
+      
+      // Get users in the target department(s)
+      let departmentFilter: string[] = [];
+      if (department) {
+        departmentFilter = [department as string];
+      } else {
+        departmentFilter = validDepartments; // Both HR and Accounts
+      }
+      
+      // Get all users who belong to HR or Accounts departments (by departmentId)
+      // First get department IDs for HR and Accounts
+      const departments = await storage.getDepartments();
+      const targetDepts = departments.filter(d => 
+        departmentFilter.some(df => d.name.toLowerCase().includes(df.toLowerCase()))
+      );
+      const targetDeptIds = targetDepts.map(d => d.id);
+      
+      if (targetDeptIds.length === 0) {
+        return res.json({ tasks: [], stats: { pending: 0, followup: 0, completed: 0, overdue: 0 } });
+      }
+      
+      const departmentUsers = await db.select({ id: users.id })
+        .from(users)
+        .where(inArray(users.departmentId, targetDeptIds));
+      
+      const departmentUserIds = departmentUsers.map(u => u.id);
+      
+      if (departmentUserIds.length === 0) {
+        return res.json({ tasks: [], stats: { pending: 0, followup: 0, completed: 0, overdue: 0 } });
+      }
+      
+      // Build conditions
+      const conditions: any[] = [
+        inArray(tasks.assignedTo, departmentUserIds)
+      ];
+      
+      // Status filter
+      if (status && status !== 'all') {
+        conditions.push(eq(tasks.status, status as string));
+      } else {
+        // By default, exclude completed tasks
+        conditions.push(sql`${tasks.status} != 'completed'`);
+      }
+      
+      // Search filter
+      if (search) {
+        conditions.push(
+          or(
+            ilike(tasks.title, `%${search}%`),
+            ilike(tasks.description, `%${search}%`)
+          )
+        );
+      }
+      
+      // Get tasks with assignee info
+      const departmentTasks = await db.select({
+        id: tasks.id,
+        title: tasks.title,
+        description: tasks.description,
+        status: tasks.status,
+        priority: tasks.priority,
+        createdBy: tasks.createdBy,
+        assignedTo: tasks.assignedTo,
+        assignedAt: tasks.assignedAt,
+        reminderDate: tasks.reminderDate,
+        dueDate: tasks.dueDate,
+        relatedEntityType: tasks.relatedEntityType,
+        relatedEntityId: tasks.relatedEntityId,
+        completedAt: tasks.completedAt,
+        createdAt: tasks.createdAt,
+        updatedAt: tasks.updatedAt,
+        assigneeFirstName: users.firstName,
+        assigneeLastName: users.lastName,
+        assigneeDepartmentId: users.departmentId,
+      })
+        .from(tasks)
+        .leftJoin(users, eq(tasks.assignedTo, users.id))
+        .where(and(...conditions))
+        .orderBy(desc(tasks.createdAt));
+      
+      // Get latest followup date for each task
+      const taskIds = departmentTasks.map(t => t.id);
+      
+      let followupsMap: Record<string, { nextFollowupDate: Date | null; lastFollowupDate: Date | null }> = {};
+      
+      if (taskIds.length > 0) {
+        const latestFollowups = await db.select({
+          taskId: taskFollowups.taskId,
+          nextFollowupDate: sql<Date>`MAX(${taskFollowups.nextFollowupDate})`,
+          lastFollowupDate: sql<Date>`MAX(${taskFollowups.createdAt})`,
+        })
+          .from(taskFollowups)
+          .where(inArray(taskFollowups.taskId, taskIds))
+          .groupBy(taskFollowups.taskId);
+        
+        followupsMap = latestFollowups.reduce((acc, f) => {
+          acc[f.taskId] = { nextFollowupDate: f.nextFollowupDate, lastFollowupDate: f.lastFollowupDate };
+          return acc;
+        }, {} as Record<string, { nextFollowupDate: Date | null; lastFollowupDate: Date | null }>);
+      }
+      
+      // Combine tasks with followup info
+      const tasksWithFollowups = departmentTasks.map(task => ({
+        ...task,
+        nextFollowupDate: followupsMap[task.id]?.nextFollowupDate || null,
+        lastFollowupDate: followupsMap[task.id]?.lastFollowupDate || null,
+        isOverdue: task.dueDate ? new Date(task.dueDate) < new Date() && task.status !== 'completed' : false,
+        isFollowupDue: followupsMap[task.id]?.nextFollowupDate 
+          ? new Date(followupsMap[task.id].nextFollowupDate!) <= new Date() 
+          : false,
+      }));
+      
+      // Calculate stats
+      const now = new Date();
+      const stats = {
+        pending: tasksWithFollowups.filter(t => t.status === 'pending').length,
+        followup: tasksWithFollowups.filter(t => t.status === 'followup').length,
+        completed: departmentTasks.filter(t => t.status === 'completed').length,
+        overdue: tasksWithFollowups.filter(t => t.isOverdue || t.isFollowupDue).length,
+      };
+      
+      res.json({ tasks: tasksWithFollowups, stats });
+    } catch (error) {
+      console.error("Error fetching department tasks:", error);
+      res.status(500).json({ message: "Failed to fetch department tasks" });
+    }
+  });
+
+  // Add follow-up to a department task
+  app.post("/api/hr/department-tasks/:taskId/followup", isAuthenticated, requirePermission("hr_feedback", "edit"), async (req: any, res) => {
+    try {
+      const { z } = await import('zod');
+      
+      const followupSchema = z.object({
+        description: z.string().min(1, "Follow-up description is required").max(2000),
+        nextFollowupDate: z.string().nullable().optional(),
+      });
+      
+      const validationResult = followupSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: validationResult.error.errors[0]?.message || "Validation failed" 
+        });
+      }
+      
+      const { description, nextFollowupDate } = validationResult.data;
+      const userId = req.user.claims.sub;
+      const taskId = req.params.taskId;
+      
+      // Verify task exists
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      // Create followup
+      const followupData = {
+        taskId,
+        userId,
+        followupType: 'text',
+        description,
+        nextFollowupDate: nextFollowupDate ? new Date(nextFollowupDate) : null,
+        status: nextFollowupDate ? 'pending_next' : 'completed',
+      };
+      
+      const newFollowup = await storage.createTaskFollowup(followupData);
+      
+      // Update task status based on followup
+      if (nextFollowupDate) {
+        await storage.updateTask(taskId, { status: 'followup' });
+      }
+      
+      // Log activity
+      await db.insert(activityLog).values({
+        entityType: 'task',
+        entityId: taskId,
+        action: 'followup_added',
+        description: `Follow-up added by HR to task: ${task.title}`,
+        userId,
+      });
+      
+      res.json(newFollowup);
+    } catch (error) {
+      console.error("Error creating task followup:", error);
+      res.status(500).json({ message: "Failed to create task followup" });
+    }
+  });
+
+  // Mark department task as complete
+  app.patch("/api/hr/department-tasks/:taskId/complete", isAuthenticated, requirePermission("hr_feedback", "edit"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const taskId = req.params.taskId;
+      
+      // Verify task exists
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      // Update task to completed (storage automatically sets completedAt)
+      const updatedTask = await storage.updateTask(taskId, { 
+        status: 'completed'
+      });
+      
+      // Log activity
+      await db.insert(activityLog).values({
+        entityType: 'task',
+        entityId: taskId,
+        action: 'task_completed',
+        description: `Task marked as complete by HR: ${task.title}`,
+        userId,
+      });
+      
+      res.json(updatedTask);
+    } catch (error) {
+      console.error("Error completing task:", error);
+      res.status(500).json({ message: "Failed to complete task" });
+    }
+  });
+
+  // Get task followup history
+  app.get("/api/hr/department-tasks/:taskId/followups", isAuthenticated, requirePermission("hr_feedback", "view"), async (req, res) => {
+    try {
+      const taskId = req.params.taskId;
+      
+      // Verify task exists
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      // Get followups with user info
+      const followups = await db.select({
+        id: taskFollowups.id,
+        taskId: taskFollowups.taskId,
+        userId: taskFollowups.userId,
+        followupType: taskFollowups.followupType,
+        description: taskFollowups.description,
+        nextFollowupDate: taskFollowups.nextFollowupDate,
+        status: taskFollowups.status,
+        createdAt: taskFollowups.createdAt,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+      })
+        .from(taskFollowups)
+        .leftJoin(users, eq(taskFollowups.userId, users.id))
+        .where(eq(taskFollowups.taskId, taskId))
+        .orderBy(desc(taskFollowups.createdAt));
+      
+      res.json(followups);
+    } catch (error) {
+      console.error("Error fetching task followups:", error);
+      res.status(500).json({ message: "Failed to fetch task followups" });
     }
   });
 
