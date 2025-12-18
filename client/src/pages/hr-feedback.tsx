@@ -193,11 +193,13 @@ export default function HRFeedback() {
   const { data: pendingTickets, isLoading: pendingLoading, refetch: refetchPending } = useQuery<PendingTicket[]>({
     queryKey: ["/api/hr/feedback/pending", { search: searchQuery, priority: priorityFilter !== 'all' ? priorityFilter : '' }],
     enabled: activeTab === "pending",
+    staleTime: 0, // Always refetch
   });
 
   const { data: completedTickets, isLoading: completedLoading, refetch: refetchCompleted } = useQuery<CompletedTicket[]>({
     queryKey: ["/api/hr/feedback/completed", { search: searchQuery }],
     enabled: activeTab === "completed",
+    staleTime: 0, // Always refetch
   });
 
   const submitFeedbackMutation = useMutation({
