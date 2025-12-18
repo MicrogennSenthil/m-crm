@@ -1389,15 +1389,7 @@ function CustomerMasterTab({
   const [newContractTypeId, setNewContractTypeId] = useState("");
 
   const { data: customerMaster = [], isLoading } = useQuery<CustomerMasterItem[]>({
-    queryKey: ["/api/accounts/customer-master", searchTerm, filterCity, filterContractType],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (searchTerm) params.set("search", searchTerm);
-      if (filterCity) params.set("city", filterCity);
-      if (filterContractType) params.set("contractTypeId", filterContractType);
-      const res = await fetch(`/api/accounts/customer-master?${params.toString()}`);
-      return res.json();
-    },
+    queryKey: ["/api/accounts/customer-master", { search: searchTerm, city: filterCity, contractTypeId: filterContractType }],
     staleTime: 0,
   });
 
@@ -1412,12 +1404,7 @@ function CustomerMasterTab({
 
   const updateContractTypeMutation = useMutation({
     mutationFn: async ({ customerId, contractTypeId, reason }: { customerId: string; contractTypeId: string; reason: string }) => {
-      const res = await fetch(`/api/accounts/customer-master/${customerId}/contract-type`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contractTypeId, reason }),
-      });
-      if (!res.ok) throw new Error("Failed to update contract type");
+      const res = await apiRequest("PATCH", `/api/accounts/customer-master/${customerId}/contract-type`, { contractTypeId, reason });
       return res.json();
     },
     onSuccess: (data) => {
@@ -1722,26 +1709,13 @@ function MonthlyRemindersTab({
   });
 
   const { data: reminders = [], isLoading } = useQuery<MonthlyReminderItem[]>({
-    queryKey: ["/api/accounts/monthly-reminders", selectedMonth, selectedYear, filterStatus],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set("month", selectedMonth.toString());
-      params.set("year", selectedYear.toString());
-      if (filterStatus) params.set("status", filterStatus);
-      const res = await fetch(`/api/accounts/monthly-reminders?${params.toString()}`);
-      return res.json();
-    },
+    queryKey: ["/api/accounts/monthly-reminders", { month: selectedMonth, year: selectedYear, status: filterStatus }],
     staleTime: 0,
   });
 
   const generateRemindersMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/accounts/monthly-reminders/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month: selectedMonth, year: selectedYear }),
-      });
-      if (!res.ok) throw new Error("Failed to generate reminders");
+      const res = await apiRequest("POST", "/api/accounts/monthly-reminders/generate", { month: selectedMonth, year: selectedYear });
       return res.json();
     },
     onSuccess: (data) => {
@@ -1758,10 +1732,7 @@ function MonthlyRemindersTab({
 
   const sendEmailMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/accounts/monthly-reminders/${id}/send-email`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to send email");
+      const res = await apiRequest("POST", `/api/accounts/monthly-reminders/${id}/send-email`);
       return res.json();
     },
     onSuccess: () => {
@@ -1775,12 +1746,7 @@ function MonthlyRemindersTab({
 
   const updateReminderMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await fetch(`/api/accounts/monthly-reminders/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to update reminder");
+      const res = await apiRequest("PATCH", `/api/accounts/monthly-reminders/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
