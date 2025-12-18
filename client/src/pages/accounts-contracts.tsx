@@ -55,7 +55,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format, differenceInDays, addMonths } from "date-fns";
-import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3, Package, Percent } from "lucide-react";
 import type { Customer, ContractType, CustomerContract } from "@shared/schema";
 
 interface ContractWithDetails {
@@ -1371,6 +1371,30 @@ interface ContractTypeChangeLog {
   changedAt: Date;
 }
 
+interface ModuleContract {
+  contract: {
+    id: string;
+    customerId: string;
+    moduleId: string | null;
+    moduleName: string;
+    orderDate: Date;
+    orderValue: number;
+    currency: string;
+    amcCalculationType: string;
+    amcPercentage: number | null;
+    amcAmount: number;
+    gstPercentage: number;
+    gstAmount: number;
+    totalAmcWithGst: number;
+    contractStartDate: Date;
+    contractEndDate: Date;
+    status: string;
+    renewalReminderDays: number;
+    notes: string | null;
+  };
+  moduleName: string;
+}
+
 function CustomerMasterTab({ 
   customers: _, 
   contractTypes,
@@ -1387,6 +1411,26 @@ function CustomerMasterTab({
   const [viewingHistory, setViewingHistory] = useState<CustomerMasterItem | null>(null);
   const [changeReason, setChangeReason] = useState("");
   const [newContractTypeId, setNewContractTypeId] = useState("");
+  
+  // Module contracts state
+  const [viewingModules, setViewingModules] = useState<CustomerMasterItem | null>(null);
+  const [isAddModuleOpen, setIsAddModuleOpen] = useState(false);
+  const [editingModuleContract, setEditingModuleContract] = useState<ModuleContract | null>(null);
+  const [moduleFormData, setModuleFormData] = useState({
+    moduleId: "",
+    moduleName: "",
+    orderDate: new Date().toISOString().split("T")[0],
+    orderValue: 0,
+    currency: "INR",
+    amcCalculationType: "percentage" as "percentage" | "fixed",
+    amcPercentage: 18,
+    amcAmount: 0,
+    gstPercentage: 18,
+    contractStartDate: new Date().toISOString().split("T")[0],
+    contractEndDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split("T")[0],
+    renewalReminderDays: 30,
+    notes: "",
+  });
 
   const { data: customerMaster = [], isLoading } = useQuery<CustomerMasterItem[]>({
     queryKey: ["/api/accounts/customer-master", { search: searchTerm, city: filterCity, contractTypeId: filterContractType }],
@@ -1401,6 +1445,132 @@ function CustomerMasterTab({
     queryKey: ["/api/accounts/customer-master", viewingHistory?.id, "contract-type-history"],
     enabled: !!viewingHistory,
   });
+
+  // Module contracts queries and mutations
+  const { data: moduleContracts = [], isLoading: modulesLoading } = useQuery<ModuleContract[]>({
+    queryKey: ["/api/accounts/customer-master", viewingModules?.id, "module-contracts"],
+    enabled: !!viewingModules,
+    staleTime: 0,
+  });
+
+  const { data: availableModules = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/accounts/available-modules"],
+    enabled: isAddModuleOpen || !!editingModuleContract,
+  });
+
+  const createModuleContractMutation = useMutation({
+    mutationFn: async (data: typeof moduleFormData & { customerId: string }) => {
+      const res = await apiRequest("POST", `/api/accounts/customer-master/${data.customerId}/module-contracts`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/customer-master", viewingModules?.id, "module-contracts"] });
+      toast({ title: "Module contract created successfully" });
+      setIsAddModuleOpen(false);
+      resetModuleForm();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateModuleContractMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/accounts/module-contracts/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/customer-master", viewingModules?.id, "module-contracts"] });
+      toast({ title: "Module contract updated successfully" });
+      setEditingModuleContract(null);
+      resetModuleForm();
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteModuleContractMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/accounts/module-contracts/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts/customer-master", viewingModules?.id, "module-contracts"] });
+      toast({ title: "Module contract deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resetModuleForm = () => {
+    setModuleFormData({
+      moduleId: "",
+      moduleName: "",
+      orderDate: new Date().toISOString().split("T")[0],
+      orderValue: 0,
+      currency: "INR",
+      amcCalculationType: "percentage",
+      amcPercentage: 18,
+      amcAmount: 0,
+      gstPercentage: 18,
+      contractStartDate: new Date().toISOString().split("T")[0],
+      contractEndDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split("T")[0],
+      renewalReminderDays: 30,
+      notes: "",
+    });
+  };
+
+  const calculateAmcAmount = () => {
+    if (moduleFormData.amcCalculationType === "percentage") {
+      return Math.round((moduleFormData.orderValue * (moduleFormData.amcPercentage || 0)) / 100);
+    }
+    return moduleFormData.amcAmount;
+  };
+
+  const handleModuleSelect = (moduleId: string) => {
+    const module = availableModules.find(m => m.id === moduleId);
+    setModuleFormData(prev => ({
+      ...prev,
+      moduleId,
+      moduleName: module?.name || prev.moduleName,
+    }));
+  };
+
+  const handleSaveModuleContract = () => {
+    const amcAmount = calculateAmcAmount();
+    const data = {
+      ...moduleFormData,
+      amcAmount,
+      customerId: viewingModules?.id || "",
+    };
+    
+    if (editingModuleContract) {
+      updateModuleContractMutation.mutate({ id: editingModuleContract.contract.id, data });
+    } else {
+      createModuleContractMutation.mutate(data);
+    }
+  };
+
+  const handleEditModuleContract = (contract: ModuleContract) => {
+    setEditingModuleContract(contract);
+    setModuleFormData({
+      moduleId: contract.contract.moduleId || "",
+      moduleName: contract.contract.moduleName,
+      orderDate: new Date(contract.contract.orderDate).toISOString().split("T")[0],
+      orderValue: contract.contract.orderValue,
+      currency: contract.contract.currency,
+      amcCalculationType: contract.contract.amcCalculationType as "percentage" | "fixed",
+      amcPercentage: contract.contract.amcPercentage || 18,
+      amcAmount: contract.contract.amcAmount,
+      gstPercentage: contract.contract.gstPercentage,
+      contractStartDate: new Date(contract.contract.contractStartDate).toISOString().split("T")[0],
+      contractEndDate: new Date(contract.contract.contractEndDate).toISOString().split("T")[0],
+      renewalReminderDays: contract.contract.renewalReminderDays,
+      notes: contract.contract.notes || "",
+    });
+  };
 
   const updateContractTypeMutation = useMutation({
     mutationFn: async ({ customerId, contractTypeId, reason }: { customerId: string; contractTypeId: string; reason: string }) => {
@@ -1531,6 +1701,15 @@ function CustomerMasterTab({
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => setViewingModules(customer)}
+                            title="View Module Contracts"
+                            data-testid={`button-view-modules-${customer.id}`}
+                          >
+                            <Package className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
                               setEditingCustomer(customer);
                               setNewContractTypeId(customer.contractTypeId || "");
@@ -1652,6 +1831,369 @@ function CustomerMasterTab({
           </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingHistory(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Module Contracts Dialog */}
+      <Dialog open={!!viewingModules} onOpenChange={(open) => {
+        if (!open) {
+          setViewingModules(null);
+          setIsAddModuleOpen(false);
+          setEditingModuleContract(null);
+          resetModuleForm();
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Module Contracts - {viewingModules?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Manage individual module purchases, AMC calculations, and contract periods
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Add Module Contract Button */}
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  resetModuleForm();
+                  setIsAddModuleOpen(true);
+                }}
+                data-testid="button-add-module-contract"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Module Contract
+              </Button>
+            </div>
+
+            {/* Module Contracts List */}
+            <ScrollArea className="max-h-[400px]">
+              {modulesLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : moduleContracts.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No module contracts found. Click "Add Module Contract" to create one.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {moduleContracts.map((mc) => {
+                    const daysUntilExpiry = differenceInDays(new Date(mc.contract.contractEndDate), new Date());
+                    const isExpiring = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+                    const isExpired = daysUntilExpiry < 0;
+                    
+                    return (
+                      <Card key={mc.contract.id} className={isExpired ? "border-destructive" : isExpiring ? "border-yellow-500" : ""}>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-medium">{mc.moduleName}</h4>
+                                <Badge variant={mc.contract.status === "active" ? "default" : "secondary"}>
+                                  {mc.contract.status}
+                                </Badge>
+                                {isExpired && <Badge variant="destructive">Expired</Badge>}
+                                {isExpiring && <Badge variant="outline" className="border-yellow-500 text-yellow-600">Expiring Soon</Badge>}
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                  <p className="text-muted-foreground">Order Value</p>
+                                  <p className="font-medium">{mc.contract.currency} {mc.contract.orderValue.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">AMC ({mc.contract.amcCalculationType === "percentage" ? `${mc.contract.amcPercentage}%` : "Fixed"})</p>
+                                  <p className="font-medium">{mc.contract.currency} {mc.contract.amcAmount.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">AMC + GST ({mc.contract.gstPercentage}%)</p>
+                                  <p className="font-medium">{mc.contract.currency} {mc.contract.totalAmcWithGst.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Contract Period</p>
+                                  <p className="font-medium">
+                                    {format(new Date(mc.contract.contractStartDate), "MMM d, yyyy")} - {format(new Date(mc.contract.contractEndDate), "MMM d, yyyy")}
+                                  </p>
+                                </div>
+                              </div>
+                              {mc.contract.notes && (
+                                <p className="text-sm text-muted-foreground mt-2">Notes: {mc.contract.notes}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditModuleContract(mc)}
+                                data-testid={`button-edit-module-${mc.contract.id}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteModuleContractMutation.mutate(mc.contract.id)}
+                                data-testid={`button-delete-module-${mc.contract.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingModules(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Module Contract Dialog */}
+      <Dialog open={isAddModuleOpen || !!editingModuleContract} onOpenChange={(open) => {
+        if (!open) {
+          setIsAddModuleOpen(false);
+          setEditingModuleContract(null);
+          resetModuleForm();
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingModuleContract ? "Edit Module Contract" : "Add Module Contract"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingModuleContract ? "Update module contract details" : "Create a new module contract for this customer"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Module *</Label>
+                <Select 
+                  value={moduleFormData.moduleId || "custom"} 
+                  onValueChange={(v) => {
+                    if (v === "custom") {
+                      setModuleFormData(prev => ({ ...prev, moduleId: "", moduleName: "" }));
+                    } else {
+                      handleModuleSelect(v);
+                    }
+                  }}
+                >
+                  <SelectTrigger data-testid="select-module">
+                    <SelectValue placeholder="Select a module" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="custom">Custom Module</SelectItem>
+                    {availableModules.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Module Name *</Label>
+                <Input
+                  value={moduleFormData.moduleName}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, moduleName: e.target.value }))}
+                  placeholder="Enter module name"
+                  data-testid="input-module-name"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label>Order Date *</Label>
+                <Input
+                  type="date"
+                  value={moduleFormData.orderDate}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, orderDate: e.target.value }))}
+                  data-testid="input-order-date"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Order Value *</Label>
+                <Input
+                  type="number"
+                  value={moduleFormData.orderValue}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, orderValue: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0"
+                  data-testid="input-order-value"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Currency</Label>
+                <Select value={moduleFormData.currency} onValueChange={(v) => setModuleFormData(prev => ({ ...prev, currency: v }))}>
+                  <SelectTrigger data-testid="select-currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INR">INR</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label>AMC Calculation</Label>
+                <Select 
+                  value={moduleFormData.amcCalculationType} 
+                  onValueChange={(v: "percentage" | "fixed") => setModuleFormData(prev => ({ ...prev, amcCalculationType: v }))}
+                >
+                  <SelectTrigger data-testid="select-amc-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Percentage of Order Value</SelectItem>
+                    <SelectItem value="fixed">Fixed Amount</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {moduleFormData.amcCalculationType === "percentage" ? (
+                <div className="grid gap-2">
+                  <Label>AMC Percentage (%)</Label>
+                  <Input
+                    type="number"
+                    value={moduleFormData.amcPercentage}
+                    onChange={(e) => setModuleFormData(prev => ({ ...prev, amcPercentage: parseFloat(e.target.value) || 0 }))}
+                    placeholder="18"
+                    data-testid="input-amc-percentage"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Label>AMC Amount</Label>
+                  <Input
+                    type="number"
+                    value={moduleFormData.amcAmount}
+                    onChange={(e) => setModuleFormData(prev => ({ ...prev, amcAmount: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0"
+                    data-testid="input-amc-amount"
+                  />
+                </div>
+              )}
+              <div className="grid gap-2">
+                <Label>GST (%)</Label>
+                <Input
+                  type="number"
+                  value={moduleFormData.gstPercentage}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, gstPercentage: parseFloat(e.target.value) || 0 }))}
+                  placeholder="18"
+                  data-testid="input-gst-percentage"
+                />
+              </div>
+            </div>
+
+            {/* AMC Preview */}
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Percent className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">AMC Calculation Preview</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Base AMC</p>
+                    <p className="font-medium">{moduleFormData.currency} {calculateAmcAmount().toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">GST ({moduleFormData.gstPercentage}%)</p>
+                    <p className="font-medium">{moduleFormData.currency} {Math.round((calculateAmcAmount() * moduleFormData.gstPercentage) / 100).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Total AMC with GST</p>
+                    <p className="font-bold text-primary">
+                      {moduleFormData.currency} {(calculateAmcAmount() + Math.round((calculateAmcAmount() * moduleFormData.gstPercentage) / 100)).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Contract Start Date *</Label>
+                <Input
+                  type="date"
+                  value={moduleFormData.contractStartDate}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, contractStartDate: e.target.value }))}
+                  data-testid="input-contract-start"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Contract End Date *</Label>
+                <Input
+                  type="date"
+                  value={moduleFormData.contractEndDate}
+                  onChange={(e) => setModuleFormData(prev => ({ ...prev, contractEndDate: e.target.value }))}
+                  data-testid="input-contract-end"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Renewal Reminder (days before expiry)</Label>
+              <Input
+                type="number"
+                value={moduleFormData.renewalReminderDays}
+                onChange={(e) => setModuleFormData(prev => ({ ...prev, renewalReminderDays: parseInt(e.target.value) || 30 }))}
+                placeholder="30"
+                data-testid="input-reminder-days"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Notes</Label>
+              <Textarea
+                value={moduleFormData.notes}
+                onChange={(e) => setModuleFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional notes about this module contract..."
+                data-testid="input-module-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsAddModuleOpen(false);
+              setEditingModuleContract(null);
+              resetModuleForm();
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveModuleContract}
+              disabled={
+                !moduleFormData.moduleName || 
+                !moduleFormData.orderValue ||
+                createModuleContractMutation.isPending || 
+                updateModuleContractMutation.isPending
+              }
+              data-testid="button-save-module-contract"
+            >
+              {(createModuleContractMutation.isPending || updateModuleContractMutation.isPending) 
+                ? "Saving..." 
+                : editingModuleContract ? "Update Contract" : "Create Contract"
+              }
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
