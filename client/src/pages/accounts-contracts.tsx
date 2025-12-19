@@ -1217,44 +1217,37 @@ function ContractForm({
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">Modules</Label>
             <span className="text-xs text-muted-foreground">
-              {hasModulesFromSales 
-                ? "Select from customer's purchased modules" 
-                : "Add modules with individual financials"}
+              {modules.length > 0 ? `${modules.length} module(s) added` : "Add modules with individual financials"}
             </span>
           </div>
           
-          {/* Add module - Show multi-select checkboxes if customer has modules from sales, otherwise show text input */}
-          {hasModulesFromSales ? (
+          {/* Add modules from sales (if customer has purchased modules) */}
+          {hasModulesFromSales && availableModulesToAdd.length > 0 && (
             <div className="space-y-3">
-              {/* Module selection checkboxes */}
-              {availableModulesToAdd.length > 0 ? (
-                <div className="border rounded-md p-2 space-y-2 max-h-32 overflow-y-auto">
-                  <div className="text-xs text-muted-foreground mb-1">Select modules (same renewal date):</div>
-                  <div className="flex flex-wrap gap-2">
-                    {availableModulesToAdd.map((mod) => (
-                      <label 
-                        key={mod} 
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer text-sm transition-colors ${
-                          selectedModulesToAdd.includes(mod) 
-                            ? 'bg-primary/10 border-primary text-primary' 
-                            : 'hover:bg-muted'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedModulesToAdd.includes(mod)}
-                          onChange={() => toggleModuleSelection(mod)}
-                          className="w-3.5 h-3.5"
-                          data-testid={`checkbox-module-${mod}`}
-                        />
-                        {mod}
-                      </label>
-                    ))}
-                  </div>
+              <div className="border rounded-md p-2 space-y-2 max-h-32 overflow-y-auto">
+                <div className="text-xs text-muted-foreground mb-1">Add from purchased modules:</div>
+                <div className="flex flex-wrap gap-2">
+                  {availableModulesToAdd.map((mod) => (
+                    <label 
+                      key={mod} 
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer text-sm transition-colors ${
+                        selectedModulesToAdd.includes(mod) 
+                          ? 'bg-primary/10 border-primary text-primary' 
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModulesToAdd.includes(mod)}
+                        onChange={() => toggleModuleSelection(mod)}
+                        className="w-3.5 h-3.5"
+                        data-testid={`checkbox-module-${mod}`}
+                      />
+                      {mod}
+                    </label>
+                  ))}
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground text-center py-2">All modules have been added</div>
-              )}
+              </div>
               
               {/* Bulk financial inputs - shown when modules are selected */}
               {selectedModulesToAdd.length > 0 && (
@@ -1310,7 +1303,13 @@ function ContractForm({
                 </div>
               )}
             </div>
-          ) : (
+          )}
+          
+          {/* Manual module entry - always available */}
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">
+              {hasModulesFromSales ? "Or add a custom module:" : "Enter module name:"}
+            </div>
             <div className="flex gap-2">
               <Input
                 placeholder="Enter module name (e.g., HMS, POS, CRM)"
@@ -1331,12 +1330,11 @@ function ContractForm({
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
-          )}
-          
-          {/* Duplicate warning for manual entry */}
-          {!hasModulesFromSales && newModuleName.trim() && modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase()) && (
-            <p className="text-xs text-destructive">This module has already been added</p>
-          )}
+            {/* Duplicate warning for manual entry */}
+            {newModuleName.trim() && modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase()) && (
+              <p className="text-xs text-destructive">This module has already been added</p>
+            )}
+          </div>
 
           {/* Module list */}
           {modules.length > 0 && (
