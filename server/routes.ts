@@ -8722,7 +8722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/development/developer-summary", isAuthenticated, async (req: any, res) => {
     try {
       const tasks = await storage.getDevelopmentTasks({});
-      const users = await storage.getAllUsers();
+      const users = await storage.getUsers();
       
       // Group tasks by developer
       const developerMap = new Map<string, { developer: any; pending: number; inProgress: number; completed: number; overdue: number; total: number }>();
