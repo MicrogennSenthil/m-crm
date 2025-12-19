@@ -102,7 +102,7 @@ export default function SupportDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<TicketWithAssignee | null>(null);
   const [newComment, setNewComment] = useState("");
-  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+  const { currentPage, pageSize, setCurrentPage, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
   // Only show today's completed tickets (removed toggle for showing all)
 
   // All hooks must be called before conditional returns
@@ -225,6 +225,11 @@ export default function SupportDashboard() {
     );
   });
 
+  const handleFilterChange = (filter: FilterType) => {
+    setActiveFilter(filter);
+    setCurrentPage(1);
+  };
+
   const getFilterLabel = (filter: FilterType): string => {
     const labels: Record<FilterType, string> = {
       all: 'All Tickets',
@@ -284,7 +289,7 @@ export default function SupportDashboard() {
           count={stats?.totalTickets || 0}
           color="bg-slate-500"
           isActive={activeFilter === 'all'}
-          onClick={() => setActiveFilter('all')}
+          onClick={() => handleFilterChange('all')}
         />
         <StatCard
           icon={<UserCheck className="h-5 w-5" />}
@@ -292,7 +297,7 @@ export default function SupportDashboard() {
           count={stats?.assignedCount || 0}
           color="bg-blue-500"
           isActive={activeFilter === 'assigned'}
-          onClick={() => setActiveFilter('assigned')}
+          onClick={() => handleFilterChange('assigned')}
         />
         <StatCard
           icon={<Users className="h-5 w-5" />}
@@ -300,7 +305,7 @@ export default function SupportDashboard() {
           count={stats?.unassignedCount || 0}
           color="bg-orange-500"
           isActive={activeFilter === 'unassigned'}
-          onClick={() => setActiveFilter('unassigned')}
+          onClick={() => handleFilterChange('unassigned')}
         />
         <StatCard
           icon={<Clock className="h-5 w-5" />}
@@ -308,7 +313,7 @@ export default function SupportDashboard() {
           count={stats?.inProcessCount || 0}
           color="bg-yellow-500"
           isActive={activeFilter === 'in_progress'}
-          onClick={() => setActiveFilter('in_progress')}
+          onClick={() => handleFilterChange('in_progress')}
         />
         <StatCard
           icon={<CheckCircle2 className="h-5 w-5" />}
@@ -316,7 +321,7 @@ export default function SupportDashboard() {
           count={stats?.completedTodayCount || 0}
           color="bg-green-500"
           isActive={activeFilter === 'completed'}
-          onClick={() => setActiveFilter('completed')}
+          onClick={() => handleFilterChange('completed')}
         />
         <StatCard
           icon={<RefreshCcw className="h-5 w-5" />}
@@ -324,7 +329,7 @@ export default function SupportDashboard() {
           count={stats?.reassignedCount || 0}
           color="bg-purple-500"
           isActive={activeFilter === 'reassigned'}
-          onClick={() => setActiveFilter('reassigned')}
+          onClick={() => handleFilterChange('reassigned')}
         />
         <StatCard
           icon={<RotateCcw className="h-5 w-5" />}
@@ -332,7 +337,7 @@ export default function SupportDashboard() {
           count={stats?.reopenedCount || 0}
           color="bg-red-500"
           isActive={activeFilter === 'reopened'}
-          onClick={() => setActiveFilter('reopened')}
+          onClick={() => handleFilterChange('reopened')}
         />
         <StatCard
           icon={<Timer className="h-5 w-5" />}
@@ -340,7 +345,7 @@ export default function SupportDashboard() {
           count={stats?.longProcessingCount || 0}
           color="bg-rose-600"
           isActive={activeFilter === 'long_processing'}
-          onClick={() => setActiveFilter('long_processing')}
+          onClick={() => handleFilterChange('long_processing')}
         />
         <StatCard
           icon={<AlertTriangle className="h-5 w-5" />}
@@ -348,7 +353,7 @@ export default function SupportDashboard() {
           count={stats?.escalatedCount || 0}
           color="bg-amber-600"
           isActive={activeFilter === 'escalated'}
-          onClick={() => setActiveFilter('escalated')}
+          onClick={() => handleFilterChange('escalated')}
         />
         <StatCard
           icon={<FileText className="h-5 w-5" />}
@@ -356,7 +361,7 @@ export default function SupportDashboard() {
           count={stats?.openCount || 0}
           color="bg-cyan-500"
           isActive={activeFilter === 'open'}
-          onClick={() => setActiveFilter('open')}
+          onClick={() => handleFilterChange('open')}
         />
         <StatCard
           icon={<AlertCircle className="h-5 w-5" />}
@@ -364,7 +369,7 @@ export default function SupportDashboard() {
           count={stats?.pendingCustomerCount || 0}
           color="bg-indigo-500"
           isActive={activeFilter === 'pending_customer'}
-          onClick={() => setActiveFilter('pending_customer')}
+          onClick={() => handleFilterChange('pending_customer')}
         />
         <StatCard
           icon={<Code2 className="h-5 w-5" />}
@@ -372,7 +377,7 @@ export default function SupportDashboard() {
           count={stats?.pendingDevelopmentCount || 0}
           color="bg-violet-600"
           isActive={activeFilter === 'pending_development'}
-          onClick={() => setActiveFilter('pending_development')}
+          onClick={() => handleFilterChange('pending_development')}
         />
       </div>
 
