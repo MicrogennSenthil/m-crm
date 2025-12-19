@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -1058,6 +1058,13 @@ function ContractForm({
   const [bulkOrderValue, setBulkOrderValue] = useState<number>(0);
   const [bulkAmcAmount, setBulkAmcAmount] = useState<number>(0);
   const [bulkContractPeriod, setBulkContractPeriod] = useState<number>(12);
+
+  // Update modules when existingModules prop changes (after async fetch)
+  useEffect(() => {
+    if (existingModules && existingModules.length > 0) {
+      setModules(existingModules);
+    }
+  }, [existingModules]);
 
   // Get current customer's available modules from sales
   const currentCustomer = customers.find(c => c.id === formData.customerId);
