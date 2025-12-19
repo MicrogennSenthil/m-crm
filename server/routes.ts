@@ -5816,6 +5816,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get today's tasks (for Today's Task page) - MUST be before /api/tasks/:id to avoid route conflict
+  app.get("/api/tasks/today", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub;
+      const user = await storage.getUser(authId);
+      const { view } = req.query;
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Admin/Super admin can view all tasks
+      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = user?.role === 'admin' || isSuperAdmin;
+      
+      // Only admins/super admins can request view=all
+      if (view === 'all' && !isAdmin) {
+        return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
+      }
+      
+      const includeAll = isAdmin && view === 'all';
+      
+      // Use the database user ID (not auth ID) since tasks are assigned by database ID
+      const todayTasks = await storage.getTodayTasks(user.id, includeAll);
+      console.log(`[TodayTasks] User ${user.email} (db id: ${user.id}) fetching tasks, includeAll: ${includeAll}, found: ${todayTasks.length}`);
+      res.json(todayTasks);
+    } catch (error) {
+      console.error("Error fetching today's tasks:", error);
+      res.status(500).json({ message: "Failed to fetch today's tasks" });
+    }
+  });
+
   // Get single task
   app.get("/api/tasks/:id", isAuthenticated, requirePermission('tasks', 'view'), async (req: any, res) => {
     try {
@@ -6132,38 +6164,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
   // TASK FOLLOWUP ROUTES
   // =============================================
-
-  // Get today's tasks (for Today's Task page)
-  app.get("/api/tasks/today", isAuthenticated, async (req: any, res) => {
-    try {
-      const authId = req.user.claims.sub;
-      const user = await storage.getUser(authId);
-      const { view } = req.query;
-      
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Admin/Super admin can view all tasks
-      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
-      const isAdmin = user?.role === 'admin' || isSuperAdmin;
-      
-      // Only admins/super admins can request view=all
-      if (view === 'all' && !isAdmin) {
-        return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
-      }
-      
-      const includeAll = isAdmin && view === 'all';
-      
-      // Use the database user ID (not auth ID) since tasks are assigned by database ID
-      const todayTasks = await storage.getTodayTasks(user.id, includeAll);
-      console.log(`[TodayTasks] User ${user.email} (db id: ${user.id}) fetching tasks, includeAll: ${includeAll}, found: ${todayTasks.length}`);
-      res.json(todayTasks);
-    } catch (error) {
-      console.error("Error fetching today's tasks:", error);
-      res.status(500).json({ message: "Failed to fetch today's tasks" });
-    }
-  });
 
   // Get task followups
   app.get("/api/tasks/:id/followups", isAuthenticated, async (req, res) => {
