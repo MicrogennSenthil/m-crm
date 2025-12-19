@@ -1031,20 +1031,24 @@ function ContractForm({
 
   const [modules, setModules] = useState<ModuleEntry[]>(existingModules || []);
   const [newModuleName, setNewModuleName] = useState("");
+  const [selectedModuleToAdd, setSelectedModuleToAdd] = useState("");
 
-  // When customer changes, pre-populate with customer's selected modules
+  // Get current customer's available modules from sales
+  const currentCustomer = customers.find(c => c.id === formData.customerId);
+  const customerSalesModules = currentCustomer?.selectedModules || [];
+  const hasModulesFromSales = customerSalesModules.length > 0;
+  
+  // Get modules that haven't been added yet (for dropdown)
+  const availableModulesToAdd = customerSalesModules.filter(
+    mod => !modules.some(m => m.moduleName.toLowerCase() === mod.toLowerCase())
+  );
+
+  // When customer changes, clear modules and reset selection
   const handleCustomerChange = (customerId: string) => {
     setFormData({ ...formData, customerId });
-    const customer = customers.find(c => c.id === customerId);
-    if (customer?.selectedModules && customer.selectedModules.length > 0 && modules.length === 0) {
-      const customerModules = customer.selectedModules.map(name => ({
-        moduleName: name,
-        orderValue: 0,
-        amcAmount: 0,
-        contractPeriodMonths: 12,
-      }));
-      setModules(customerModules);
-    }
+    setModules([]); // Clear modules when customer changes
+    setSelectedModuleToAdd("");
+    setNewModuleName("");
   };
 
   const handleContractTypeChange = (typeId: string) => {
@@ -1061,7 +1065,21 @@ function ContractForm({
     }
   };
 
-  const addModule = () => {
+  // Add module from dropdown (sales modules)
+  const addModuleFromDropdown = () => {
+    if (selectedModuleToAdd && !modules.some(m => m.moduleName.toLowerCase() === selectedModuleToAdd.toLowerCase())) {
+      setModules([...modules, {
+        moduleName: selectedModuleToAdd,
+        orderValue: 0,
+        amcAmount: 0,
+        contractPeriodMonths: 12,
+      }]);
+      setSelectedModuleToAdd("");
+    }
+  };
+
+  // Add module from manual entry (when no sales modules available)
+  const addModuleManual = () => {
     if (newModuleName.trim() && !modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase())) {
       setModules([...modules, {
         moduleName: newModuleName.trim(),
@@ -1147,23 +1165,67 @@ function ContractForm({
         <div className="border rounded-md p-3 space-y-3">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">Modules</Label>
-            <span className="text-xs text-muted-foreground">Add modules with individual financials</span>
+            <span className="text-xs text-muted-foreground">
+              {hasModulesFromSales 
+                ? "Select from customer's purchased modules" 
+                : "Add modules with individual financials"}
+            </span>
           </div>
           
-          {/* Add new module */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter module name (e.g., HMS, POS, CRM)"
-              value={newModuleName}
-              onChange={(e) => setNewModuleName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addModule())}
-              className="flex-1"
-              data-testid="input-new-module-name"
-            />
-            <Button type="button" size="sm" variant="outline" onClick={addModule} data-testid="button-add-module">
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
+          {/* Add module - Show dropdown if customer has modules from sales, otherwise show text input */}
+          {hasModulesFromSales ? (
+            <div className="flex gap-2">
+              <Select
+                value={selectedModuleToAdd}
+                onValueChange={setSelectedModuleToAdd}
+              >
+                <SelectTrigger className="flex-1" data-testid="select-module-to-add">
+                  <SelectValue placeholder={availableModulesToAdd.length > 0 ? "Select a module to add" : "All modules added"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModulesToAdd.map((mod) => (
+                    <SelectItem key={mod} value={mod}>{mod}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                type="button" 
+                size="sm" 
+                variant="outline" 
+                onClick={addModuleFromDropdown} 
+                disabled={!selectedModuleToAdd || availableModulesToAdd.length === 0}
+                data-testid="button-add-module"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter module name (e.g., HMS, POS, CRM)"
+                value={newModuleName}
+                onChange={(e) => setNewModuleName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addModuleManual())}
+                className="flex-1"
+                data-testid="input-new-module-name"
+              />
+              <Button 
+                type="button" 
+                size="sm" 
+                variant="outline" 
+                onClick={addModuleManual} 
+                disabled={!newModuleName.trim() || modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase())}
+                data-testid="button-add-module"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          
+          {/* Duplicate warning for manual entry */}
+          {!hasModulesFromSales && newModuleName.trim() && modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase()) && (
+            <p className="text-xs text-destructive">This module has already been added</p>
+          )}
 
           {/* Module list */}
           {modules.length > 0 && (
