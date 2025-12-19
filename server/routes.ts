@@ -5030,7 +5030,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tickets/:id/assignment-history", isAuthenticated, async (req, res) => {
     try {
       const history = await storage.getTicketAssignmentHistory(req.params.id);
-      res.json(history);
+      
+      // Transform snake_case to camelCase for frontend
+      const transformedHistory = history.map((h: any) => ({
+        id: h.id,
+        ticketId: h.ticket_id,
+        engineerId: h.engineer_id,
+        assignedAt: h.assigned_at,
+        unassignedAt: h.unassigned_at,
+        transferredToId: h.transferred_to_id,
+        transferReason: h.transfer_reason,
+        actionsTaken: h.actions_taken,
+        engineerName: h.engineer_first_name && h.engineer_last_name 
+          ? `${h.engineer_first_name} ${h.engineer_last_name}` 
+          : 'Unknown',
+        engineerEmail: h.engineer_email,
+        transferredToName: h.transferred_to_first_name && h.transferred_to_last_name
+          ? `${h.transferred_to_first_name} ${h.transferred_to_last_name}`
+          : null,
+      }));
+      
+      res.json(transformedHistory);
     } catch (error) {
       console.error("Error fetching assignment history:", error);
       res.status(500).json({ message: "Failed to fetch assignment history" });

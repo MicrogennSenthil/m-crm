@@ -64,6 +64,12 @@ import {
   MessageCircle,
   PlayCircle,
   Building2,
+  ArrowRight,
+  History,
+  UserCheck,
+  UserX,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
 interface FeedbackStats {
@@ -112,6 +118,19 @@ interface CompletedTicket {
   feedbackComments: string | null;
   feedbackSatisfied: boolean | null;
   feedbackSubmittedAt: string | null;
+}
+
+interface TicketAssignmentHistory {
+  id: string;
+  ticketId: string;
+  engineerId: string;
+  assignedAt: string;
+  unassignedAt: string | null;
+  transferredToId: string | null;
+  transferReason: string | null;
+  engineerName: string;
+  engineerEmail: string | null;
+  transferredToName: string | null;
 }
 
 interface DepartmentTask {
@@ -177,6 +196,14 @@ export default function HRFeedback() {
   const [feedbackSatisfied, setFeedbackSatisfied] = useState<string>("");
   const [reopenReason, setReopenReason] = useState("");
   
+  // Enhanced feedback state for completion details
+  const [workStatus, setWorkStatus] = useState<string>("");
+  const [workDescription, setWorkDescription] = useState("");
+  const [clientContactPerson, setClientContactPerson] = useState("");
+  const [clientContactPhone, setClientContactPhone] = useState("");
+  const [completedAt, setCompletedAt] = useState("");
+  const [showCallHistory, setShowCallHistory] = useState(false);
+  
   // Department Tasks state
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [deptStatusFilter, setDeptStatusFilter] = useState<string>("active");
@@ -200,6 +227,17 @@ export default function HRFeedback() {
     queryKey: ["/api/hr/feedback/completed", { search: searchQuery }],
     enabled: activeTab === "completed",
     staleTime: 0, // Always refetch
+  });
+
+  // Query for ticket assignment history (call history)
+  const { data: assignmentHistory, isLoading: historyLoading } = useQuery<TicketAssignmentHistory[]>({
+    queryKey: ["/api/tickets", selectedTicket?.id, "assignment-history"],
+    enabled: !!selectedTicket && showCallHistory,
+  });
+
+  // Query for engineers list (for completion dropdown)
+  const { data: engineers } = useQuery<Array<{ id: string; firstName: string; lastName: string; email: string }>>({
+    queryKey: ["/api/users/engineers"],
   });
 
   const submitFeedbackMutation = useMutation({
@@ -365,6 +403,12 @@ export default function HRFeedback() {
     setFeedbackRating(0);
     setFeedbackComments("");
     setFeedbackSatisfied("");
+    setWorkStatus("");
+    setWorkDescription("");
+    setClientContactPerson("");
+    setClientContactPhone("");
+    setCompletedAt("");
+    setShowCallHistory(false);
   };
 
   const handleAddFollowup = () => {
@@ -427,8 +471,18 @@ export default function HRFeedback() {
     return <Badge className={styles[priority || "medium"] || styles.medium}>{priority || "medium"}</Badge>;
   };
 
-  const handleSubmitFeedback = () => {
+  const handleSubmitFeedback = (andReopen: boolean = false) => {
     if (!selectedTicket) return;
+    
+    // Require work status for enhanced feedback
+    if (!workStatus) {
+      toast({
+        title: "Validation Error",
+        description: "Please select the work completion status.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Client-side validation - require either a rating (1-5) OR satisfaction selection
     if (feedbackRating < 1 && feedbackSatisfied === '') {
@@ -439,14 +493,76 @@ export default function HRFeedback() {
       });
       return;
     }
+
+    // If reopening, require a reason
+    if (andReopen && !reopenReason.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide a reason for reopening the ticket.",
+        variant: "destructive",
+      });
+      return;
+    }
     
-    submitFeedbackMutation.mutate({
+    // Use enhanced feedback endpoint
+    const feedbackData = {
       ticketId: selectedTicket.id,
       rating: feedbackRating > 0 ? feedbackRating : null,
       comments: feedbackComments.trim() || null,
       satisfied: feedbackSatisfied === 'yes' ? true : feedbackSatisfied === 'no' ? false : null,
-    });
+      workStatus,
+      workDescription: workDescription.trim() || null,
+      clientContactPerson: clientContactPerson.trim() || null,
+      clientContactPhone: clientContactPhone.trim() || null,
+      completedAt: completedAt || null,
+      completedById: selectedTicket.assignedEngineerId,
+      reopenedByHr: andReopen,
+      reopenReason: andReopen ? reopenReason.trim() : null,
+    };
+
+    // Use enhanced endpoint if reopening, otherwise use regular endpoint
+    if (andReopen) {
+      enhancedFeedbackMutation.mutate(feedbackData);
+    } else {
+      submitFeedbackMutation.mutate({
+        ticketId: selectedTicket.id,
+        rating: feedbackRating > 0 ? feedbackRating : null,
+        comments: feedbackComments.trim() || null,
+        satisfied: feedbackSatisfied === 'yes' ? true : feedbackSatisfied === 'no' ? false : null,
+      });
+    }
   };
+
+  // Enhanced feedback mutation for full completion details
+  const enhancedFeedbackMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", `/api/tickets/${data.ticketId}/feedback-complete`, data);
+      return res.json();
+    },
+    onSuccess: (result) => {
+      toast({
+        title: result.newTicket ? "Feedback Submitted & Ticket Reopened" : "Feedback Submitted",
+        description: result.newTicket 
+          ? `New ticket ${result.newTicket.ticketNumber} created at Level 2`
+          : "Customer feedback has been recorded successfully.",
+      });
+      setShowFeedbackDialog(false);
+      setSelectedTicket(null);
+      resetFeedbackForm();
+      refetchPending();
+      refetchCompleted();
+      refetchStats();
+      queryClient.invalidateQueries({ queryKey: ["/api/hr/feedback"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit feedback",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleReopenTicket = () => {
     if (!selectedTicket) return;
@@ -1376,9 +1492,9 @@ export default function HRFeedback() {
         </DialogContent>
       </Dialog>
 
-      {/* Feedback Submission Dialog */}
+      {/* Feedback Submission Dialog - Enhanced with Call History and Completion Details */}
       <Dialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 text-yellow-500" />
@@ -1395,6 +1511,153 @@ export default function HRFeedback() {
               <p className="font-medium">{selectedTicket?.customerName}</p>
               <p className="text-sm text-muted-foreground">{selectedTicket?.customerPhone || selectedTicket?.customerEmail}</p>
               <p className="text-sm mt-1">{selectedTicket?.issueSummary}</p>
+            </div>
+
+            {/* Call History Timeline Toggle */}
+            <div className="border rounded-md">
+              <Button
+                variant="ghost"
+                className="w-full justify-between px-4 py-3"
+                onClick={() => setShowCallHistory(!showCallHistory)}
+                data-testid="button-toggle-call-history"
+              >
+                <span className="flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Work History Timeline
+                </span>
+                <span className="text-muted-foreground text-sm">
+                  {showCallHistory ? "Hide" : "Show"}
+                </span>
+              </Button>
+              
+              {showCallHistory && (
+                <div className="px-4 pb-4">
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="ml-2 text-sm text-muted-foreground">Loading history...</span>
+                    </div>
+                  ) : assignmentHistory && assignmentHistory.length > 0 ? (
+                    <div className="space-y-3">
+                      {assignmentHistory.map((history, index) => (
+                        <div
+                          key={history.id}
+                          className="relative pl-6 pb-3 border-l-2 border-muted last:border-l-0 last:pb-0"
+                          data-testid={`history-item-${index}`}
+                        >
+                          <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                            <User className="h-2 w-2 text-primary-foreground" />
+                          </div>
+                          <div className="bg-muted/30 p-3 rounded-md">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{history.engineerName}</span>
+                              {!history.unassignedAt && (
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
+                                  Current
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Assigned: {format(new Date(history.assignedAt), "dd/MM/yyyy HH:mm")}
+                              </div>
+                              {history.unassignedAt && (
+                                <div className="flex items-center gap-1">
+                                  <ArrowRight className="h-3 w-3" />
+                                  Transferred: {format(new Date(history.unassignedAt), "dd/MM/yyyy HH:mm")}
+                                  {history.transferredToName && (
+                                    <span> to {history.transferredToName}</span>
+                                  )}
+                                </div>
+                              )}
+                              {history.transferReason && (
+                                <div className="flex items-center gap-1 italic">
+                                  Reason: {history.transferReason}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      No assignment history recorded
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Work Completion Status */}
+            <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-800">
+              <Label className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                <UserCheck className="h-4 w-4" />
+                Work Completion Details
+              </Label>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="work-status" className="text-sm">Work Status *</Label>
+                  <Select value={workStatus} onValueChange={setWorkStatus}>
+                    <SelectTrigger data-testid="select-work-status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="completed">Fully Completed</SelectItem>
+                      <SelectItem value="partially_completed">Partially Completed</SelectItem>
+                      <SelectItem value="not_completed">Not Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="completed-at" className="text-sm">Completion Date</Label>
+                  <Input
+                    id="completed-at"
+                    type="date"
+                    value={completedAt}
+                    onChange={(e) => setCompletedAt(e.target.value)}
+                    data-testid="input-completed-at"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="work-description" className="text-sm">Work Description</Label>
+                <Textarea
+                  id="work-description"
+                  placeholder="Brief description of work done..."
+                  value={workDescription}
+                  onChange={(e) => setWorkDescription(e.target.value)}
+                  rows={2}
+                  data-testid="input-work-description"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="client-contact" className="text-sm">Client Contact Person</Label>
+                  <Input
+                    id="client-contact"
+                    placeholder="Who was informed?"
+                    value={clientContactPerson}
+                    onChange={(e) => setClientContactPerson(e.target.value)}
+                    data-testid="input-client-contact"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-phone" className="text-sm">Contact Phone</Label>
+                  <Input
+                    id="client-phone"
+                    placeholder="Contact phone"
+                    value={clientContactPhone}
+                    onChange={(e) => setClientContactPhone(e.target.value)}
+                    data-testid="input-client-phone"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Rating */}
@@ -1418,14 +1681,44 @@ export default function HRFeedback() {
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="yes" id="satisfied-yes" data-testid="radio-satisfied-yes" />
-                  <Label htmlFor="satisfied-yes" className="text-green-600 font-medium">Yes, Satisfied</Label>
+                  <Label htmlFor="satisfied-yes" className="text-green-600 font-medium flex items-center gap-1">
+                    <ThumbsUp className="h-4 w-4" />
+                    Yes, Satisfied
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="no" id="satisfied-no" data-testid="radio-satisfied-no" />
-                  <Label htmlFor="satisfied-no" className="text-red-600 font-medium">No, Not Satisfied</Label>
+                  <Label htmlFor="satisfied-no" className="text-red-600 font-medium flex items-center gap-1">
+                    <ThumbsDown className="h-4 w-4" />
+                    No, Not Satisfied
+                  </Label>
                 </div>
               </RadioGroup>
             </div>
+
+            {/* Show reopen option when not satisfied */}
+            {feedbackSatisfied === "no" && (
+              <div className="p-4 bg-orange-50 dark:bg-orange-950/30 rounded-md border border-orange-200 dark:border-orange-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <Label className="text-orange-800 dark:text-orange-200">Reopen to Level 2 Support</Label>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Since the customer is not satisfied, you can reopen this ticket as Level 2 escalation.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="reopen-reason-inline" className="text-sm">Reason for Reopening</Label>
+                  <Textarea
+                    id="reopen-reason-inline"
+                    placeholder="Describe why the ticket needs to be reopened..."
+                    value={reopenReason}
+                    onChange={(e) => setReopenReason(e.target.value)}
+                    rows={2}
+                    data-testid="input-reopen-reason-inline"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Comments */}
             <div className="space-y-2">
@@ -1435,19 +1728,38 @@ export default function HRFeedback() {
                 placeholder="Enter customer's feedback comments..."
                 value={feedbackComments}
                 onChange={(e) => setFeedbackComments(e.target.value)}
-                rows={4}
+                rows={3}
                 data-testid="input-feedback-comments"
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setShowFeedbackDialog(false)}>
               Cancel
             </Button>
+            {feedbackSatisfied === "no" && reopenReason.trim() && (
+              <Button
+                variant="outline"
+                className="text-orange-600 border-orange-300"
+                onClick={() => {
+                  // Submit feedback and reopen
+                  handleSubmitFeedback(true);
+                }}
+                disabled={submitFeedbackMutation.isPending}
+                data-testid="button-submit-and-reopen"
+              >
+                {submitFeedbackMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                )}
+                Submit & Reopen to L2
+              </Button>
+            )}
             <Button
-              onClick={handleSubmitFeedback}
-              disabled={submitFeedbackMutation.isPending}
+              onClick={() => handleSubmitFeedback(false)}
+              disabled={submitFeedbackMutation.isPending || !workStatus}
               data-testid="button-submit-feedback"
             >
               {submitFeedbackMutation.isPending ? (
