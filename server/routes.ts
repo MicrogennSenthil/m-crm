@@ -4688,11 +4688,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user's assigned tickets (for dashboard "My Tickets" section)
   app.get("/api/tickets/my-assigned", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const authId = req.user.claims.sub;
+      const user = await storage.getUser(authId);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
       const allTickets = await storage.getTickets({});
       
-      // Filter to tickets assigned to current user (include all statuses for dashboard display)
-      const myTickets = allTickets.filter(t => t.assignedEngineerId === userId);
+      // Filter to tickets assigned to current user using database ID (include all statuses for dashboard display)
+      const myTickets = allTickets.filter(t => t.assignedEngineerId === user.id);
       
       // Sort: open/in_progress first, then by created date
       const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
@@ -4704,7 +4710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
       
-      console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${userId}`);
+      console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${user.email} (db id: ${user.id})`);
       
       res.json(myTickets);
     } catch (error) {
@@ -4713,10 +4719,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/tickets", isAuthenticated, requirePermission('tickets', 'view'), async (req: any, res) => {
+  // Get all tickets - Everyone can see their own assigned tickets
+  app.get("/api/tickets", isAuthenticated, async (req: any, res) => {
     try {
       const { status, priority, limit, assignedTo } = req.query;
-      const userId = req.user?.claims?.sub;
+      const authId = req.user?.claims?.sub;
+      
+      // Get current user with database ID
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
       let ticketsList = await storage.getTickets({
         status: status as string,
@@ -4724,30 +4737,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Check if user is super admin or has admin role
-      const currentUser = await storage.getUser(userId);
-      const isSuperAdminUser = currentUser?.email === "senthil@microgenn.com" || currentUser?.role === "admin";
+      const isSuperAdminUser = currentUser?.email === SUPER_ADMIN_EMAIL || currentUser?.role === "admin";
       
       // Super admin or admin role sees all tickets
-      if (!isSuperAdminUser && currentUser?.departmentId) {
+      if (isSuperAdminUser) {
+        // Admin/Super admin sees all tickets - no filtering
+        console.log(`[Tickets] Super admin/admin ${currentUser.email} viewing all ${ticketsList.length} tickets`);
+      } else if (currentUser?.departmentId) {
         const department = await storage.getDepartment(currentUser.departmentId);
-        const departmentName = department?.name?.toLowerCase() || '';
-        const isDepartmentHead = department?.managerId === userId;
+        const isDepartmentHead = department?.managerId === currentUser.id;
         
-        if (departmentName.includes('support')) {
-          if (isDepartmentHead) {
-            // Department head sees all tickets assigned to users in their department
-            const allUsers = await storage.getUsers();
-            const departmentUserIds = allUsers
-              .filter(u => u.departmentId === currentUser.departmentId)
-              .map(u => u.id);
-            ticketsList = ticketsList.filter(ticket => 
-              ticket.assignedEngineerId && departmentUserIds.includes(ticket.assignedEngineerId)
-            );
-          } else {
-            // Regular support users only see their assigned tickets
-            ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === userId);
-          }
+        if (isDepartmentHead) {
+          // Department head sees all tickets assigned to users in their department
+          const allUsers = await storage.getUsers();
+          const departmentUserIds = allUsers
+            .filter(u => u.departmentId === currentUser.departmentId)
+            .map(u => u.id);
+          ticketsList = ticketsList.filter(ticket => 
+            ticket.assignedEngineerId && departmentUserIds.includes(ticket.assignedEngineerId)
+          );
+          console.log(`[Tickets] Dept head ${currentUser.email} viewing ${ticketsList.length} department tickets`);
+        } else {
+          // Regular users only see their assigned tickets (using database user ID)
+          ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === currentUser.id);
+          console.log(`[Tickets] User ${currentUser.email} (db id: ${currentUser.id}) viewing ${ticketsList.length} assigned tickets`);
         }
+      } else {
+        // User without department - only see their assigned tickets
+        ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === currentUser.id);
+        console.log(`[Tickets] User ${currentUser.email} viewing ${ticketsList.length} assigned tickets`);
       }
       
       // Allow explicit assignedTo filter (for dashboard "My Tickets" etc.)
