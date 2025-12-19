@@ -6136,9 +6136,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get today's tasks (for Today's Task page)
   app.get("/api/tasks/today", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const authId = req.user.claims.sub;
+      const user = await storage.getUser(authId);
       const { view } = req.query;
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
       // Admin/Super admin can view all tasks
       const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
@@ -6151,7 +6155,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const includeAll = isAdmin && view === 'all';
       
-      const todayTasks = await storage.getTodayTasks(userId, includeAll);
+      // Use the database user ID (not auth ID) since tasks are assigned by database ID
+      const todayTasks = await storage.getTodayTasks(user.id, includeAll);
+      console.log(`[TodayTasks] User ${user.email} (db id: ${user.id}) fetching tasks, includeAll: ${includeAll}, found: ${todayTasks.length}`);
       res.json(todayTasks);
     } catch (error) {
       console.error("Error fetching today's tasks:", error);
