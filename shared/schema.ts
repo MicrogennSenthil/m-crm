@@ -617,6 +617,27 @@ export const insertEscalationHistorySchema = createInsertSchema(escalationHistor
 export type InsertEscalationHistory = z.infer<typeof insertEscalationHistorySchema>;
 export type EscalationHistory = typeof escalationHistory.$inferSelect;
 
+// Ticket Assignment History table - Track all engineers who worked on a ticket
+export const ticketAssignmentHistory = pgTable("ticket_assignment_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull().references(() => tickets.id, { onDelete: "cascade" }),
+  engineerId: varchar("engineer_id").notNull().references(() => users.id),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+  unassignedAt: timestamp("unassigned_at"), // When transferred to another engineer
+  transferredToId: varchar("transferred_to_id").references(() => users.id), // Next engineer if transferred
+  transferReason: text("transfer_reason"),
+  actionsTaken: text("actions_taken"), // What the engineer did during their assignment
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTicketAssignmentHistorySchema = createInsertSchema(ticketAssignmentHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTicketAssignmentHistory = z.infer<typeof insertTicketAssignmentHistorySchema>;
+export type TicketAssignmentHistory = typeof ticketAssignmentHistory.$inferSelect;
+
 // Customer Feedback table
 export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -624,7 +645,19 @@ export const feedback = pgTable("feedback", {
   rating: integer("rating"), // 1-5 stars
   comments: text("comments"),
   satisfied: boolean("satisfied"),
+  // Completion details
+  completedById: varchar("completed_by_id").references(() => users.id), // Who completed the work
+  completedAt: timestamp("completed_at"), // When work was completed
+  clientContactPerson: text("client_contact_person"), // Whom they informed at client place
+  clientContactPhone: text("client_contact_phone"), // Client contact phone
+  workStatus: text("work_status").default("completed"), // completed, partial, not_completed
+  workDescription: text("work_description"), // Description of work done
+  // Reopen tracking
+  reopenedByHr: boolean("reopened_by_hr").default(false), // If HR reopened due to client not satisfied
+  reopenReason: text("reopen_reason"),
+  newTicketId: varchar("new_ticket_id"), // Reference to new Level 2 ticket if reopened
   submittedAt: timestamp("submitted_at").defaultNow(),
+  submittedById: varchar("submitted_by_id").references(() => users.id), // HR who submitted the feedback
 });
 
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({
