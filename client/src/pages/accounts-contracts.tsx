@@ -1031,7 +1031,10 @@ function ContractForm({
 
   const [modules, setModules] = useState<ModuleEntry[]>(existingModules || []);
   const [newModuleName, setNewModuleName] = useState("");
-  const [selectedModuleToAdd, setSelectedModuleToAdd] = useState("");
+  const [selectedModulesToAdd, setSelectedModulesToAdd] = useState<string[]>([]);
+  const [bulkOrderValue, setBulkOrderValue] = useState<number>(0);
+  const [bulkAmcAmount, setBulkAmcAmount] = useState<number>(0);
+  const [bulkContractPeriod, setBulkContractPeriod] = useState<number>(12);
 
   // Get current customer's available modules from sales
   const currentCustomer = customers.find(c => c.id === formData.customerId);
@@ -1047,8 +1050,20 @@ function ContractForm({
   const handleCustomerChange = (customerId: string) => {
     setFormData({ ...formData, customerId });
     setModules([]); // Clear modules when customer changes
-    setSelectedModuleToAdd("");
+    setSelectedModulesToAdd([]);
     setNewModuleName("");
+    setBulkOrderValue(0);
+    setBulkAmcAmount(0);
+    setBulkContractPeriod(12);
+  };
+
+  // Toggle module selection for multi-select
+  const toggleModuleSelection = (moduleName: string) => {
+    setSelectedModulesToAdd(prev => 
+      prev.includes(moduleName) 
+        ? prev.filter(m => m !== moduleName)
+        : [...prev, moduleName]
+    );
   };
 
   const handleContractTypeChange = (typeId: string) => {
@@ -1065,16 +1080,22 @@ function ContractForm({
     }
   };
 
-  // Add module from dropdown (sales modules)
-  const addModuleFromDropdown = () => {
-    if (selectedModuleToAdd && !modules.some(m => m.moduleName.toLowerCase() === selectedModuleToAdd.toLowerCase())) {
-      setModules([...modules, {
-        moduleName: selectedModuleToAdd,
-        orderValue: 0,
-        amcAmount: 0,
-        contractPeriodMonths: 12,
-      }]);
-      setSelectedModuleToAdd("");
+  // Add multiple modules from selection (with same financial details)
+  const addSelectedModules = () => {
+    if (selectedModulesToAdd.length > 0) {
+      const newModules = selectedModulesToAdd
+        .filter(mod => !modules.some(m => m.moduleName.toLowerCase() === mod.toLowerCase()))
+        .map(mod => ({
+          moduleName: mod,
+          orderValue: bulkOrderValue,
+          amcAmount: bulkAmcAmount,
+          contractPeriodMonths: bulkContractPeriod,
+        }));
+      setModules([...modules, ...newModules]);
+      setSelectedModulesToAdd([]);
+      setBulkOrderValue(0);
+      setBulkAmcAmount(0);
+      setBulkContractPeriod(12);
     }
   };
 
@@ -1172,32 +1193,92 @@ function ContractForm({
             </span>
           </div>
           
-          {/* Add module - Show dropdown if customer has modules from sales, otherwise show text input */}
+          {/* Add module - Show multi-select checkboxes if customer has modules from sales, otherwise show text input */}
           {hasModulesFromSales ? (
-            <div className="flex gap-2">
-              <Select
-                value={selectedModuleToAdd}
-                onValueChange={setSelectedModuleToAdd}
-              >
-                <SelectTrigger className="flex-1" data-testid="select-module-to-add">
-                  <SelectValue placeholder={availableModulesToAdd.length > 0 ? "Select a module to add" : "All modules added"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableModulesToAdd.map((mod) => (
-                    <SelectItem key={mod} value={mod}>{mod}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button 
-                type="button" 
-                size="sm" 
-                variant="outline" 
-                onClick={addModuleFromDropdown} 
-                disabled={!selectedModuleToAdd || availableModulesToAdd.length === 0}
-                data-testid="button-add-module"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
+            <div className="space-y-3">
+              {/* Module selection checkboxes */}
+              {availableModulesToAdd.length > 0 ? (
+                <div className="border rounded-md p-2 space-y-2 max-h-32 overflow-y-auto">
+                  <div className="text-xs text-muted-foreground mb-1">Select modules (same renewal date):</div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableModulesToAdd.map((mod) => (
+                      <label 
+                        key={mod} 
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-md border cursor-pointer text-sm transition-colors ${
+                          selectedModulesToAdd.includes(mod) 
+                            ? 'bg-primary/10 border-primary text-primary' 
+                            : 'hover:bg-muted'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedModulesToAdd.includes(mod)}
+                          onChange={() => toggleModuleSelection(mod)}
+                          className="w-3.5 h-3.5"
+                          data-testid={`checkbox-module-${mod}`}
+                        />
+                        {mod}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-2">All modules have been added</div>
+              )}
+              
+              {/* Bulk financial inputs - shown when modules are selected */}
+              {selectedModulesToAdd.length > 0 && (
+                <div className="bg-muted/50 rounded-md p-3 space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Set values for {selectedModulesToAdd.length} selected module{selectedModulesToAdd.length > 1 ? 's' : ''}:
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label className="text-xs">Order Value (each)</Label>
+                      <Input
+                        type="number"
+                        value={bulkOrderValue}
+                        onChange={(e) => setBulkOrderValue(parseFloat(e.target.value) || 0)}
+                        className="h-8 text-sm"
+                        placeholder="0"
+                        data-testid="input-bulk-order-value"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">AMC Amount (each)</Label>
+                      <Input
+                        type="number"
+                        value={bulkAmcAmount}
+                        onChange={(e) => setBulkAmcAmount(parseFloat(e.target.value) || 0)}
+                        className="h-8 text-sm"
+                        placeholder="0"
+                        data-testid="input-bulk-amc-amount"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Period (months)</Label>
+                      <Input
+                        type="number"
+                        value={bulkContractPeriod}
+                        onChange={(e) => setBulkContractPeriod(parseInt(e.target.value) || 12)}
+                        className="h-8 text-sm"
+                        placeholder="12"
+                        data-testid="input-bulk-contract-period"
+                      />
+                    </div>
+                  </div>
+                  <Button 
+                    type="button" 
+                    size="sm" 
+                    onClick={addSelectedModules}
+                    className="w-full mt-2"
+                    data-testid="button-add-selected-modules"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add {selectedModulesToAdd.length} Module{selectedModulesToAdd.length > 1 ? 's' : ''}
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex gap-2">
