@@ -67,6 +67,13 @@ interface ContractWithDetails {
   contractTypeName: string;
 }
 
+interface ModuleEntry {
+  moduleName: string;
+  orderValue: number;
+  amcAmount: number;
+  contractPeriodMonths: number;
+}
+
 interface MonthlyRenewal {
   month: string;
   monthDisplay: string;
@@ -112,6 +119,7 @@ export default function AccountsContracts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
+  const [editingModules, setEditingModules] = useState<ModuleEntry[]>([]);
   const [deletingContract, setDeletingContract] = useState<ContractWithDetails | null>(null);
   const [viewingContract, setViewingContract] = useState<ContractWithDetails | null>(null);
   const [showFollowupDialog, setShowFollowupDialog] = useState(false);
@@ -215,6 +223,27 @@ export default function AccountsContracts() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  // Function to open edit dialog and fetch modules
+  const openEditContract = async (item: ContractWithDetails) => {
+    setEditingContract(item);
+    setEditingModules([]); // Reset while loading
+    try {
+      const response = await fetch(`/api/customer-contracts/${item.contract.id}/modules`);
+      if (response.ok) {
+        const modulesData = await response.json();
+        const mappedModules: ModuleEntry[] = modulesData.map((m: any) => ({
+          moduleName: m.moduleName,
+          orderValue: m.orderValue || 0,
+          amcAmount: m.amcAmount || 0,
+          contractPeriodMonths: m.contractPeriodMonths || 12,
+        }));
+        setEditingModules(mappedModules);
+      }
+    } catch (error) {
+      console.error("Failed to load contract modules:", error);
+    }
+  };
 
   // Check if any filters are active
   const hasActiveFilters = (filterCity && filterCity !== "all") || (filterType && filterType !== "all") || filterDateFrom || filterDateTo;
@@ -601,7 +630,7 @@ export default function AccountsContracts() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => setEditingContract(item)}
+                                onClick={() => openEditContract(item)}
                                 data-testid={`button-edit-contract-${item.contract.id}`}
                               >
                                 <Pencil className="w-4 h-4" />
@@ -699,7 +728,7 @@ export default function AccountsContracts() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => setEditingContract(item)}
+                                      onClick={() => openEditContract(item)}
                                     >
                                       <Pencil className="w-4 h-4" />
                                     </Button>
@@ -783,6 +812,7 @@ export default function AccountsContracts() {
               customers={customers}
               contractTypes={contractTypes}
               contract={editingContract.contract}
+              existingModules={editingModules}
               onSubmit={(data) => updateMutation.mutate({ id: editingContract.contract.id, updates: data })}
               isPending={updateMutation.isPending}
               onCancel={() => setEditingContract(null)}
@@ -983,13 +1013,6 @@ function ContractDetails({
       </DialogFooter>
     </div>
   );
-}
-
-interface ModuleEntry {
-  moduleName: string;
-  orderValue: number;
-  amcAmount: number;
-  contractPeriodMonths: number;
 }
 
 function ContractForm({
