@@ -278,9 +278,16 @@ export interface IStorage {
   getEscalationHistory(ticketId: string): Promise<EscalationHistory[]>;
   createEscalation(escalation: InsertEscalationHistory): Promise<EscalationHistory>;
 
+  // Ticket Assignment History operations
+  getTicketAssignmentHistory(ticketId: string): Promise<any[]>;
+  createTicketAssignmentHistory(data: { ticketId: string; engineerId: string; assignedAt?: Date }): Promise<any>;
+  updateTicketAssignmentHistory(id: string, data: { unassignedAt?: Date; transferredToId?: string; transferReason?: string; actionsTaken?: string }): Promise<any>;
+  getActiveTicketAssignment(ticketId: string): Promise<any | undefined>;
+
   // Feedback operations
   createFeedback(feedbackData: InsertFeedback): Promise<Feedback>;
   getFeedbackByTicket(ticketId: string): Promise<Feedback | undefined>;
+  updateFeedback(id: string, data: Partial<InsertFeedback>): Promise<Feedback>;
 
   // Activity Log operations
   logActivity(activity: InsertActivityLog): Promise<ActivityLog>;
@@ -1423,6 +1430,58 @@ export class DatabaseStorage implements IStorage {
     return newEscalation;
   }
 
+  // Ticket Assignment History operations
+  async getTicketAssignmentHistory(ticketId: string): Promise<any[]> {
+    const results = await db.execute(sql`
+      SELECT 
+        tah.*,
+        e.first_name as engineer_first_name,
+        e.last_name as engineer_last_name,
+        e.email as engineer_email,
+        t.first_name as transferred_to_first_name,
+        t.last_name as transferred_to_last_name
+      FROM ticket_assignment_history tah
+      LEFT JOIN users e ON e.id = tah.engineer_id
+      LEFT JOIN users t ON t.id = tah.transferred_to_id
+      WHERE tah.ticket_id = ${ticketId}
+      ORDER BY tah.assigned_at ASC
+    `);
+    return results.rows as any[];
+  }
+
+  async createTicketAssignmentHistory(data: { ticketId: string; engineerId: string; assignedAt?: Date }): Promise<any> {
+    const results = await db.execute(sql`
+      INSERT INTO ticket_assignment_history (ticket_id, engineer_id, assigned_at)
+      VALUES (${data.ticketId}, ${data.engineerId}, ${data.assignedAt || new Date()})
+      RETURNING *
+    `);
+    return (results.rows as any[])[0];
+  }
+
+  async updateTicketAssignmentHistory(id: string, data: { unassignedAt?: Date; transferredToId?: string; transferReason?: string; actionsTaken?: string }): Promise<any> {
+    const results = await db.execute(sql`
+      UPDATE ticket_assignment_history 
+      SET 
+        unassigned_at = COALESCE(${data.unassignedAt || null}, unassigned_at),
+        transferred_to_id = COALESCE(${data.transferredToId || null}, transferred_to_id),
+        transfer_reason = COALESCE(${data.transferReason || null}, transfer_reason),
+        actions_taken = COALESCE(${data.actionsTaken || null}, actions_taken)
+      WHERE id = ${id}
+      RETURNING *
+    `);
+    return (results.rows as any[])[0];
+  }
+
+  async getActiveTicketAssignment(ticketId: string): Promise<any | undefined> {
+    const results = await db.execute(sql`
+      SELECT * FROM ticket_assignment_history 
+      WHERE ticket_id = ${ticketId} AND unassigned_at IS NULL
+      ORDER BY assigned_at DESC
+      LIMIT 1
+    `);
+    return (results.rows as any[])[0];
+  }
+
   // Feedback operations
   async createFeedback(feedbackData: InsertFeedback): Promise<Feedback> {
     const [newFeedback] = await db.insert(feedback).values(feedbackData).returning();
@@ -1432,6 +1491,11 @@ export class DatabaseStorage implements IStorage {
   async getFeedbackByTicket(ticketId: string): Promise<Feedback | undefined> {
     const [feedbackEntry] = await db.select().from(feedback).where(eq(feedback.ticketId, ticketId));
     return feedbackEntry;
+  }
+
+  async updateFeedback(id: string, data: Partial<InsertFeedback>): Promise<Feedback> {
+    const [updated] = await db.update(feedback).set(data).where(eq(feedback.id, id)).returning();
+    return updated;
   }
 
   // Activity Log operations

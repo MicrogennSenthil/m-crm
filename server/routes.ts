@@ -4820,8 +4820,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newTicket = await storage.createTicket(validatedData);
       
-      // Award points if ticket is assigned
+      // Award points and record assignment history if ticket is assigned
       if (newTicket.assignedEngineerId) {
+        // Create initial assignment history entry
+        await storage.createTicketAssignmentHistory({
+          ticketId: newTicket.id,
+          engineerId: newTicket.assignedEngineerId,
+          assignedAt: new Date(),
+        });
+        
         await handleAssignment({
           module: "tickets",
           entityId: newTicket.id,
@@ -4857,10 +4864,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updated = await storage.updateTicket(req.params.id, req.body);
       
-      // Handle points for engineer assignment changes
+      // Handle points for engineer assignment changes and record assignment history
       if (req.body.assignedEngineerId !== undefined && 
           req.body.assignedEngineerId !== currentTicket.assignedEngineerId) {
+        
+        // Close previous assignment in history
+        if (currentTicket.assignedEngineerId) {
+          const activeAssignment = await storage.getActiveTicketAssignment(req.params.id);
+          if (activeAssignment) {
+            await storage.updateTicketAssignmentHistory(activeAssignment.id, {
+              unassignedAt: new Date(),
+              transferredToId: req.body.assignedEngineerId || null,
+              transferReason: req.body.transferReason || 'Reassigned',
+            });
+          }
+        }
+        
+        // Create new assignment history entry
         if (req.body.assignedEngineerId) {
+          await storage.createTicketAssignmentHistory({
+            ticketId: req.params.id,
+            engineerId: req.body.assignedEngineerId,
+            assignedAt: new Date(),
+          });
+          
           await handleAssignment({
             module: "tickets",
             entityId: req.params.id,
@@ -4996,6 +5023,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error escalating ticket:", error);
       res.status(400).json({ message: "Failed to escalate ticket" });
+    }
+  });
+
+  // Ticket Assignment History routes
+  app.get("/api/tickets/:id/assignment-history", isAuthenticated, async (req, res) => {
+    try {
+      const history = await storage.getTicketAssignmentHistory(req.params.id);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching assignment history:", error);
+      res.status(500).json({ message: "Failed to fetch assignment history" });
+    }
+  });
+
+  // Enhanced feedback with completion details
+  app.post("/api/tickets/:id/feedback-complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const ticket = await storage.getTicket(req.params.id);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+
+      const {
+        rating,
+        comments,
+        satisfied,
+        completedById,
+        completedAt,
+        clientContactPerson,
+        clientContactPhone,
+        workStatus,
+        workDescription,
+        reopenedByHr,
+        reopenReason,
+      } = req.body;
+
+      // Check if feedback already exists
+      const existingFeedback = await storage.getFeedbackByTicket(req.params.id);
+      
+      let feedbackResult;
+      if (existingFeedback) {
+        // Update existing feedback
+        feedbackResult = await storage.updateFeedback(existingFeedback.id, {
+          rating,
+          comments,
+          satisfied,
+          completedById,
+          completedAt: completedAt ? new Date(completedAt) : new Date(),
+          clientContactPerson,
+          clientContactPhone,
+          workStatus,
+          workDescription,
+          reopenedByHr,
+          reopenReason,
+          submittedById: req.user.claims.sub,
+        });
+      } else {
+        // Create new feedback
+        feedbackResult = await storage.createFeedback({
+          ticketId: req.params.id,
+          rating,
+          comments,
+          satisfied,
+          completedById,
+          completedAt: completedAt ? new Date(completedAt) : new Date(),
+          clientContactPerson,
+          clientContactPhone,
+          workStatus,
+          workDescription,
+          reopenedByHr,
+          reopenReason,
+          submittedById: req.user.claims.sub,
+        });
+      }
+
+      // If client not satisfied, reopen as Level 2 ticket
+      if (reopenedByHr && workStatus === 'not_completed') {
+        // Create new Level 2 ticket
+        const count = await storage.getTickets({});
+        const newTicketNumber = `TKT-${String(count.length + 1).padStart(6, '0')}`;
+        
+        const newTicket = await storage.createTicket({
+          ticketNumber: newTicketNumber,
+          customerId: ticket.customerId,
+          customerName: ticket.customerName,
+          customerEmail: ticket.customerEmail,
+          customerPhone: ticket.customerPhone,
+          issueSummary: `[Reopened from ${ticket.ticketNumber}] ${ticket.issueSummary}`,
+          issueDescription: `Original issue was not completed. Reason: ${reopenReason || 'Client reported incomplete work'}\n\nOriginal Description:\n${ticket.issueDescription}`,
+          priority: 'high',
+          status: 'open',
+          escalationLevel: 2, // Start at Level 2
+          reopenedFromTicketId: ticket.id,
+          reopenReason: reopenReason || 'Client reported incomplete work',
+          reopenedAt: new Date(),
+        });
+
+        // Update feedback with new ticket reference
+        await storage.updateFeedback(feedbackResult.id, {
+          newTicketId: newTicket.id,
+        });
+
+        // Log activity
+        await storage.logActivity({
+          entityType: "ticket",
+          entityId: newTicket.id,
+          action: "reopened_from_feedback",
+          description: `Ticket reopened from ${ticket.ticketNumber} due to incomplete work`,
+          userId: req.user.claims.sub,
+        });
+
+        res.json({ feedback: feedbackResult, newTicket });
+      } else {
+        res.json({ feedback: feedbackResult });
+      }
+    } catch (error) {
+      console.error("Error saving feedback:", error);
+      res.status(400).json({ message: "Failed to save feedback" });
+    }
+  });
+
+  // Get reopened tickets for dashboard notifications
+  app.get("/api/tickets/reopened", isAuthenticated, async (req: any, res) => {
+    try {
+      const allTickets = await storage.getTickets({});
+      const reopenedTickets = allTickets.filter(t => t.reopenedFromTicketId !== null);
+      
+      // Attach engineer details
+      const withDetails = await Promise.all(
+        reopenedTickets.map(async (ticket) => {
+          const assignee = ticket.assignedEngineerId 
+            ? await storage.getUser(ticket.assignedEngineerId) 
+            : null;
+          return {
+            ...ticket,
+            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
+          };
+        })
+      );
+      
+      res.json(withDetails);
+    } catch (error) {
+      console.error("Error fetching reopened tickets:", error);
+      res.status(500).json({ message: "Failed to fetch reopened tickets" });
     }
   });
 
