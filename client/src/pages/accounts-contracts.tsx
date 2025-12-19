@@ -1032,6 +1032,11 @@ function ContractForm({
   isPending: boolean;
   onCancel: () => void;
 }) {
+  // Fetch modules master for dropdown selection
+  const { data: modulesMaster = [] } = useQuery<{ id: string; name: string; description?: string }[]>({
+    queryKey: ['/api/modules'],
+  });
+
   const selectedType = contractTypes.find(t => t.id === contract?.contractTypeId);
   const defaultDuration = selectedType?.defaultDurationMonths || 12;
   const defaultEndDate = addMonths(new Date(), defaultDuration);
@@ -1305,33 +1310,40 @@ function ContractForm({
             </div>
           )}
           
-          {/* Manual module entry - always available */}
+          {/* Module selection from master - always available */}
           <div className="space-y-2">
             <div className="text-xs text-muted-foreground">
-              {hasModulesFromSales ? "Or add a custom module:" : "Enter module name:"}
+              {hasModulesFromSales ? "Or add from modules master:" : "Select module from master:"}
             </div>
             <div className="flex gap-2">
-              <Input
-                placeholder="Enter module name (e.g., HMS, POS, CRM)"
+              <Select
                 value={newModuleName}
-                onChange={(e) => setNewModuleName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addModuleManual())}
-                className="flex-1"
-                data-testid="input-new-module-name"
-              />
+                onValueChange={setNewModuleName}
+              >
+                <SelectTrigger className="flex-1" data-testid="select-new-module">
+                  <SelectValue placeholder="Select a module" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modulesMaster
+                    .filter(m => !modules.some(mod => mod.moduleName.toLowerCase() === m.name.toLowerCase()))
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <Button 
                 type="button" 
                 size="sm" 
                 variant="outline" 
                 onClick={addModuleManual} 
-                disabled={!newModuleName.trim() || modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase())}
+                disabled={!newModuleName || modules.some(m => m.moduleName.toLowerCase() === newModuleName.toLowerCase())}
                 data-testid="button-add-module"
               >
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
-            {/* Duplicate warning for manual entry */}
-            {newModuleName.trim() && modules.some(m => m.moduleName.toLowerCase() === newModuleName.trim().toLowerCase()) && (
+            {/* Duplicate warning */}
+            {newModuleName && modules.some(m => m.moduleName.toLowerCase() === newModuleName.toLowerCase()) && (
               <p className="text-xs text-destructive">This module has already been added</p>
             )}
           </div>
@@ -1349,12 +1361,23 @@ function ContractForm({
               {modules.map((mod, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3">
-                    <Input
+                    <Select
                       value={mod.moduleName}
-                      onChange={(e) => updateModule(index, 'moduleName', e.target.value)}
-                      className="text-sm h-8"
-                      data-testid={`input-module-name-${index}`}
-                    />
+                      onValueChange={(value) => updateModule(index, 'moduleName', value)}
+                    >
+                      <SelectTrigger className="text-sm h-8" data-testid={`select-module-name-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* Show current module plus available ones */}
+                        <SelectItem value={mod.moduleName}>{mod.moduleName}</SelectItem>
+                        {modulesMaster
+                          .filter(m => m.name !== mod.moduleName && !modules.some(existing => existing.moduleName === m.name))
+                          .map((m) => (
+                            <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-3">
                     <Input
