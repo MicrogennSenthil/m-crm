@@ -19,7 +19,8 @@ The CRM includes:
 -   **Authentication**: Replit Auth with various providers and role-based access (Sales Executive, Engineer, Support, Admin).
 -   **Sales Management**: Kanban board for leads, tracking, follow-ups, and quote management.
 -   **Implementation Module**: Project cards with progress tracking, multi-engineer assignment, 8-module checklist, and training record logging.
--   **Support Ticket System**: Priority-based ticket creation, assignment, multi-level escalation, conversation threading, and status management.
+-   **Support Ticket System**: Priority-based ticket creation, assignment, multi-level escalation, conversation threading, and status management. Includes ticket assignment history tracking for all engineers who worked on a ticket.
+-   **HR Feedback Management**: Enhanced feedback collection with work completion details, call history timeline showing all engineers who worked on the ticket, client contact tracking, and Level 2 reopen capability for unsatisfied customers.
 -   **Task/Followup Management**: Comprehensive task management with multimedia attachments, reminders, due dates, team mentions, and commenting.
 -   **Dashboard & Analytics**: Metric cards, activity feed, quick access panels, and trend indicators.
 -   **Reports & Analytics**: Sales, Implementation, and Support reports with filtering, export (CSV/Excel), and email functionality (Resend).

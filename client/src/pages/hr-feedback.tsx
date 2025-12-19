@@ -235,37 +235,6 @@ export default function HRFeedback() {
     enabled: !!selectedTicket && showCallHistory,
   });
 
-  // Query for engineers list (for completion dropdown)
-  const { data: engineers } = useQuery<Array<{ id: string; firstName: string; lastName: string; email: string }>>({
-    queryKey: ["/api/users/engineers"],
-  });
-
-  const submitFeedbackMutation = useMutation({
-    mutationFn: async (data: { ticketId: string; rating: number | null; comments: string | null; satisfied: boolean | null }) => {
-      const res = await apiRequest("POST", "/api/hr/feedback/submit", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Feedback Submitted",
-        description: "Customer feedback has been recorded successfully.",
-      });
-      setShowFeedbackDialog(false);
-      setSelectedTicket(null);
-      resetFeedbackForm();
-      refetchPending();
-      refetchCompleted();
-      refetchStats();
-      queryClient.invalidateQueries({ queryKey: ["/api/hr/feedback"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to submit feedback",
-        variant: "destructive",
-      });
-    },
-  });
 
   const reopenTicketMutation = useMutation({
     mutationFn: async (data: { ticketId: string; reason: string }) => {
@@ -504,7 +473,7 @@ export default function HRFeedback() {
       return;
     }
     
-    // Use enhanced feedback endpoint
+    // Use enhanced feedback endpoint for all submissions to capture completion details
     const feedbackData = {
       ticketId: selectedTicket.id,
       rating: feedbackRating > 0 ? feedbackRating : null,
@@ -515,22 +484,13 @@ export default function HRFeedback() {
       clientContactPerson: clientContactPerson.trim() || null,
       clientContactPhone: clientContactPhone.trim() || null,
       completedAt: completedAt || null,
-      completedById: selectedTicket.assignedEngineerId,
+      completedById: selectedTicket.assignedEngineerId || null,
       reopenedByHr: andReopen,
       reopenReason: andReopen ? reopenReason.trim() : null,
     };
 
-    // Use enhanced endpoint if reopening, otherwise use regular endpoint
-    if (andReopen) {
-      enhancedFeedbackMutation.mutate(feedbackData);
-    } else {
-      submitFeedbackMutation.mutate({
-        ticketId: selectedTicket.id,
-        rating: feedbackRating > 0 ? feedbackRating : null,
-        comments: feedbackComments.trim() || null,
-        satisfied: feedbackSatisfied === 'yes' ? true : feedbackSatisfied === 'no' ? false : null,
-      });
-    }
+    // Always use enhanced endpoint to capture all completion details
+    enhancedFeedbackMutation.mutate(feedbackData);
   };
 
   // Enhanced feedback mutation for full completion details
@@ -1746,10 +1706,10 @@ export default function HRFeedback() {
                   // Submit feedback and reopen
                   handleSubmitFeedback(true);
                 }}
-                disabled={submitFeedbackMutation.isPending}
+                disabled={enhancedFeedbackMutation.isPending}
                 data-testid="button-submit-and-reopen"
               >
-                {submitFeedbackMutation.isPending ? (
+                {enhancedFeedbackMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <RotateCcw className="h-4 w-4 mr-2" />
@@ -1759,10 +1719,10 @@ export default function HRFeedback() {
             )}
             <Button
               onClick={() => handleSubmitFeedback(false)}
-              disabled={submitFeedbackMutation.isPending || !workStatus}
+              disabled={enhancedFeedbackMutation.isPending || !workStatus}
               data-testid="button-submit-feedback"
             >
-              {submitFeedbackMutation.isPending ? (
+              {enhancedFeedbackMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Send className="h-4 w-4 mr-2" />
