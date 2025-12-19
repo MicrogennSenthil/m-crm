@@ -5778,12 +5778,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TASK/FOLLOWUP MANAGEMENT ROUTES
   // =============================================
 
-  // Get all tasks (with filters)
-  app.get("/api/tasks", isAuthenticated, requirePermission('tasks', 'view'), async (req: any, res) => {
+  // Get all tasks (with filters) - Everyone can see their own tasks
+  app.get("/api/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const authId = req.user.claims.sub;
+      const user = await storage.getUser(authId);
       const { status, assignedTo, createdBy, view } = req.query;
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
       // Role-based access control for view=all
       const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
@@ -5796,18 +5800,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const includeAll = isAdmin && view === 'all';
       
-      // Debug logging
-      console.log(`[Tasks] Fetching tasks for user ${userId}, view=${view || 'default'}, includeAll=${includeAll}`);
+      // Use the database user ID (not auth ID) since tasks are assigned by database ID
+      console.log(`[Tasks] Fetching tasks for user ${user.email} (db id: ${user.id}), view=${view || 'default'}, includeAll=${includeAll}`);
       
       const taskList = await storage.getTasks({
-        userId: !includeAll ? userId : undefined,
+        userId: !includeAll ? user.id : undefined,
         status: status as string || undefined,
         assignedTo: assignedTo as string || undefined,
         createdBy: createdBy as string || undefined,
         includeAll,
       });
       
-      console.log(`[Tasks] Found ${taskList.length} tasks for user ${userId}`);
+      console.log(`[Tasks] Found ${taskList.length} tasks for user ${user.email}`);
       
       res.json(taskList);
     } catch (error) {
