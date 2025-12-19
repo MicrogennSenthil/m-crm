@@ -103,6 +103,18 @@ export default function KnowledgeBaseAdmin() {
     },
   });
 
+  const handlePermissionError = (error: Error, action: string) => {
+    const message = error.message.toLowerCase();
+    if (message.includes("access denied") || message.includes("permission") || message.includes("403")) {
+      toast({ 
+        title: "Permission Required", 
+        description: `You don't have permission to ${action}. Please contact your administrator.`,
+      });
+    } else {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: FormValues) => {
       const response = await apiRequest("POST", "/api/knowledge-base/sources", data);
@@ -116,7 +128,7 @@ export default function KnowledgeBaseAdmin() {
       form.reset();
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      handlePermissionError(error, "create documents");
     },
   });
 
@@ -130,7 +142,7 @@ export default function KnowledgeBaseAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/analytics"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      handlePermissionError(error, "delete documents");
     },
   });
 
@@ -144,7 +156,7 @@ export default function KnowledgeBaseAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/sources"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      handlePermissionError(error, "update document status");
     },
   });
 
@@ -159,7 +171,7 @@ export default function KnowledgeBaseAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/analytics"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      handlePermissionError(error, "re-index documents");
     },
   });
 
@@ -179,7 +191,7 @@ export default function KnowledgeBaseAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/knowledge-base/analytics"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      handlePermissionError(error, "re-index all documents");
     },
   });
 
