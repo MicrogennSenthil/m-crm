@@ -74,7 +74,8 @@ export default function TodaysTasksPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [viewFilter, setViewFilter] = useState<string>("own"); // own, all (admin only)
+  // Admin users default to seeing all tasks, non-admins see their own
+  const [viewFilter, setViewFilter] = useState<string>("all"); // own, all (admin only) - defaults to "all" for admins
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
 
   // Get current user
