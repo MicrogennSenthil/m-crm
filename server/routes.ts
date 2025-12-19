@@ -6474,7 +6474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new knowledge base source and index its content
-  app.post("/api/knowledge-base/sources", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.post("/api/knowledge-base/sources", isAuthenticated, requirePermission("knowledge_base", "create"), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { title, content, category, contentType, description, languageCode = "en", translationGroupId } = req.body;
@@ -6568,7 +6568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a knowledge base source
-  app.patch("/api/knowledge-base/sources/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.patch("/api/knowledge-base/sources/:id", isAuthenticated, requirePermission("knowledge_base", "edit"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const { title, description, category, isActive } = req.body;
@@ -6593,7 +6593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a knowledge base source (cascades to chunks)
-  app.delete("/api/knowledge-base/sources/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.delete("/api/knowledge-base/sources/:id", isAuthenticated, requirePermission("knowledge_base", "delete"), async (req: any, res) => {
     try {
       const { id } = req.params;
 
@@ -6611,7 +6611,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Re-index a knowledge base source
-  app.post("/api/knowledge-base/sources/:id/reindex", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.post("/api/knowledge-base/sources/:id/reindex", isAuthenticated, requirePermission("knowledge_base", "edit"), async (req: any, res) => {
     try {
       const { id } = req.params;
 
@@ -6670,7 +6670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk re-index all unindexed knowledge base sources
-  app.post("/api/knowledge-base/reindex-all", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.post("/api/knowledge-base/reindex-all", isAuthenticated, requirePermission("knowledge_base", "edit"), async (req: any, res) => {
     try {
       const { force } = req.body || {};
       
@@ -6836,7 +6836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get search analytics (admin only)
-  app.get("/api/knowledge-base/analytics", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.get("/api/knowledge-base/analytics", isAuthenticated, requirePermission("knowledge_base", "view"), async (req: any, res) => {
     try {
       const queries = await storage.getKnowledgeBaseQueries(100);
       const sources = await storage.getKnowledgeBaseSources();
