@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,9 @@ import {
   User,
   ArrowUpDown,
   Filter,
+  Columns3,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -80,6 +83,16 @@ const SOURCE_CONFIG: Record<string, { color: string; label: string }> = {
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
+type LayoutType = "kanban" | "card" | "table";
+
+const DEV_TASK_STAGES = [
+  { id: "pending", title: "Pending", color: "bg-gray-600" },
+  { id: "in_progress", title: "In Progress", color: "bg-blue-600" },
+  { id: "overdue", title: "Overdue", color: "bg-red-600" },
+  { id: "completed", title: "Completed", color: "bg-green-600" },
+  { id: "incomplete", title: "Incomplete", color: "bg-orange-600" },
+];
+
 const createTaskFormSchema = insertDevelopmentTaskSchema.pick({
   title: true,
   description: true,
@@ -117,7 +130,12 @@ export default function DevelopmentTasks() {
   const [engineerFilter, setEngineerFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [activeSourceTab, setActiveSourceTab] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [layout, setLayout] = useState<LayoutType>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("development-tasks-layout") as LayoutType) || "table";
+    }
+    return "table";
+  });
   const [selectedTask, setSelectedTask] = useState<DevelopmentTaskWithDetails | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -135,6 +153,14 @@ export default function DevelopmentTasks() {
   const [reassignToUserId, setReassignToUserId] = useState("");
   const [reassignNotes, setReassignNotes] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+
+  useEffect(() => {
+    localStorage.setItem("development-tasks-layout", layout);
+  }, [layout]);
+
+  const getTasksByStatus = (status: string) => {
+    return sortedTasks.filter(t => t.status === status);
+  };
 
   const form = useForm<CreateTaskFormData>({
     resolver: zodResolver(createTaskFormSchema),
@@ -638,6 +664,38 @@ export default function DevelopmentTasks() {
               <SelectItem value="manual">Manual</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex border rounded-md">
+            <Button 
+              variant={layout === "kanban" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-r-none"
+              onClick={() => setLayout("kanban")}
+              title="Kanban View"
+              data-testid="button-layout-kanban"
+            >
+              <Columns3 className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "card" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-none border-x"
+              onClick={() => setLayout("card")}
+              title="Card View"
+              data-testid="button-layout-card"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "table" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-l-none"
+              onClick={() => setLayout("table")}
+              title="Table View"
+              data-testid="button-layout-table"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <TabsContent value={activeTab} className="space-y-4">
@@ -649,6 +707,168 @@ export default function DevelopmentTasks() {
               </CardContent>
             </Card>
           ) : (
+            <>
+              {/* Kanban View */}
+              {layout === "kanban" && (
+                <div className="grid grid-cols-5 gap-3 pb-4 overflow-x-auto" data-testid="kanban-view">
+                  {DEV_TASK_STAGES.map((stage) => {
+                    const stageTasks = getTasksByStatus(stage.id);
+                    return (
+                      <div key={stage.id} className="min-w-[220px]">
+                        <div className="mb-2 flex items-center gap-1.5">
+                          <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
+                          <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {stageTasks.length}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto">
+                          {stageTasks.length === 0 ? (
+                            <div className="text-center text-sm text-muted-foreground py-4 bg-muted/30 rounded-lg">
+                              No tasks
+                            </div>
+                          ) : (
+                            stageTasks.map(task => {
+                              const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
+                              const deadline = new Date(task.deadline);
+                              const isOverdue = task.isOverdue || (deadline < new Date() && task.status !== "completed");
+                              
+                              return (
+                                <Card 
+                                  key={task.id} 
+                                  className={`hover-elevate cursor-pointer ${isOverdue ? "border-red-300 dark:border-red-800" : ""}`}
+                                  onClick={() => {
+                                    setSelectedTask(task);
+                                    setIsDetailDialogOpen(true);
+                                  }}
+                                  data-testid={`kanban-card-${task.id}`}
+                                >
+                                  <CardContent className="p-3">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                      <span className="font-mono text-xs text-muted-foreground">{task.taskNumber}</span>
+                                      {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
+                                    </div>
+                                    <h4 className="font-medium text-sm truncate mb-2">{task.title}</h4>
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      <Badge variant="outline" className={`${PRIORITY_CONFIG[task.priority]?.color || ""} text-xs`}>
+                                        {PRIORITY_CONFIG[task.priority]?.label || task.priority}
+                                      </Badge>
+                                      <Badge variant="outline" className={`${SOURCE_CONFIG[task.sourceType]?.color || ""} text-xs`}>
+                                        {SOURCE_CONFIG[task.sourceType]?.label || task.sourceType}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                      {task.assignee ? (
+                                        <div className="flex items-center gap-1">
+                                          <Avatar className="h-4 w-4">
+                                            <AvatarFallback className="text-[8px]">
+                                              {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <span className="truncate max-w-[60px]">{task.assignee.firstName}</span>
+                                        </div>
+                                      ) : (
+                                        <span>Unassigned</span>
+                                      )}
+                                      <span className={isOverdue ? "text-red-500" : ""}>
+                                        {format(deadline, "MMM d")}
+                                      </span>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Card View */}
+              {layout === "card" && (
+                <div className="space-y-3" data-testid="card-view">
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {paginateData(sortedTasks).map(task => {
+                      const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
+                      const deadline = new Date(task.deadline);
+                      const isOverdue = task.isOverdue || (deadline < new Date() && task.status !== "completed");
+                      
+                      return (
+                        <Card 
+                          key={task.id} 
+                          className={`hover-elevate cursor-pointer ${isOverdue ? "border-red-300 dark:border-red-800" : ""}`}
+                          onClick={() => {
+                            setSelectedTask(task);
+                            setIsDetailDialogOpen(true);
+                          }}
+                          data-testid={`card-task-${task.id}`}
+                        >
+                          <CardHeader className="pb-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-mono text-xs text-muted-foreground">{task.taskNumber}</span>
+                                  {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
+                                </div>
+                                <CardTitle className="text-sm font-medium truncate">{task.title}</CardTitle>
+                              </div>
+                              <Badge className={`${statusConfig.color} text-xs flex-shrink-0`}>
+                                {statusConfig.label}
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            {task.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{task.description}</p>
+                            )}
+                            <div className="flex flex-wrap gap-1 mb-3">
+                              <Badge variant="outline" className={`${PRIORITY_CONFIG[task.priority]?.color || ""} text-xs`}>
+                                {PRIORITY_CONFIG[task.priority]?.label || task.priority}
+                              </Badge>
+                              <Badge variant="outline" className={`${SOURCE_CONFIG[task.sourceType]?.color || ""} text-xs`}>
+                                {SOURCE_CONFIG[task.sourceType]?.label || task.sourceType}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              {task.assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Avatar className="h-5 w-5">
+                                    <AvatarFallback className="text-[10px]">
+                                      {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span>{task.assignee.firstName} {task.assignee.lastName}</span>
+                                </div>
+                              ) : (
+                                <span>Unassigned</span>
+                              )}
+                              <span className={`flex items-center gap-1 ${isOverdue ? "text-red-500" : ""}`}>
+                                <Calendar className="h-3 w-3" />
+                                {format(deadline, "MMM d, HH:mm")}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  {sortedTasks.length > 0 && (
+                    <DataTablePagination
+                      currentPage={currentPage}
+                      totalPages={getTotalPages(sortedTasks.length)}
+                      pageSize={pageSize}
+                      totalItems={sortedTasks.length}
+                      onPageChange={handlePageChange}
+                      onPageSizeChange={handlePageSizeChange}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Table View */}
+              {layout === "table" && (
             <div className="space-y-3" data-testid="task-list">
               <Card>
                 <div className="overflow-x-auto">
@@ -779,6 +999,8 @@ export default function DevelopmentTasks() {
                 />
               )}
             </div>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -42,9 +42,21 @@ import {
   Trash2,
   Edit,
   Filter,
+  Columns3,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import TaskFormDialog from "@/components/task-form-dialog";
 import TaskDetailModal from "@/components/task-detail-modal";
+
+type LayoutType = "kanban" | "card" | "table";
+
+const TASK_STAGES = [
+  { id: "pending", title: "Pending", color: "bg-yellow-600" },
+  { id: "followup", title: "Follow Up", color: "bg-blue-600" },
+  { id: "get_information", title: "Get Info", color: "bg-purple-600" },
+  { id: "completed", title: "Completed", color: "bg-green-600" },
+];
 
 type TaskWithDetails = Task & {
   creator?: User;
@@ -78,7 +90,21 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<TaskWithDetails | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const [layout, setLayout] = useState<LayoutType>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("tasks-layout") as LayoutType) || "card";
+    }
+    return "card";
+  });
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+
+  useEffect(() => {
+    localStorage.setItem("tasks-layout", layout);
+  }, [layout]);
+
+  const getTasksByStatus = (status: string) => {
+    return filteredTasks.filter(t => t.status === status);
+  };
 
   // Get current user
   const { data: currentUser } = useQuery<User>({
@@ -142,14 +168,6 @@ export default function TasksPage() {
     
     return matchesSearch && matchesStatus;
   });
-
-  // Group tasks by status for kanban-like view
-  const tasksByStatus = {
-    pending: filteredTasks.filter(t => t.status === "pending"),
-    followup: filteredTasks.filter(t => t.status === "followup"),
-    get_information: filteredTasks.filter(t => t.status === "get_information"),
-    completed: filteredTasks.filter(t => t.status === "completed"),
-  };
 
   const renderTaskCard = (task: TaskWithDetails) => {
     const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
@@ -328,6 +346,38 @@ export default function TasksPage() {
         </div>
         
         <div className="flex gap-2">
+          <div className="flex border rounded-md">
+            <Button 
+              variant={layout === "kanban" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-r-none"
+              onClick={() => setLayout("kanban")}
+              title="Kanban View"
+              data-testid="button-layout-kanban"
+            >
+              <Columns3 className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "card" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-none border-x"
+              onClick={() => setLayout("card")}
+              title="Card View"
+              data-testid="button-layout-card"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "table" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-l-none"
+              onClick={() => setLayout("table")}
+              title="Table View"
+              data-testid="button-layout-table"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
               <Filter className="h-4 w-4 mr-2" />
@@ -358,15 +408,49 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="list" className="w-full">
-        <TabsList>
-          <TabsTrigger value="list" data-testid="tab-list-view">List View</TabsTrigger>
-          <TabsTrigger value="board" data-testid="tab-board-view">Board View</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="list" className="mt-4">
+      {/* Kanban View */}
+      {layout === "kanban" && (
+        <div className="grid grid-cols-4 gap-3 pb-4 overflow-x-auto">
+          {TASK_STAGES.map((stage) => {
+            const stageTasks = getTasksByStatus(stage.id);
+            return (
+              <div key={stage.id} className="min-w-[220px]">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
+                  <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
+                  <Badge variant="secondary" className="ml-auto text-xs">
+                    {stageTasks.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto">
+                  {isLoading ? (
+                    Array(2).fill(0).map((_, i) => (
+                      <Card key={i} className="animate-pulse">
+                        <CardContent className="p-3">
+                          <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-muted rounded w-1/2"></div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : stageTasks.length === 0 ? (
+                    <div className="text-center text-sm text-muted-foreground py-4 bg-muted/30 rounded-lg">
+                      No tasks
+                    </div>
+                  ) : (
+                    stageTasks.map(renderTaskCard)
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Card View */}
+      {layout === "card" && (
+        <>
           {isLoading ? (
-            <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[1, 2, 3].map((i) => (
                 <Card key={i} className="animate-pulse">
                   <CardContent className="p-4">
@@ -390,7 +474,7 @@ export default function TasksPage() {
             </Card>
           ) : (
             <>
-              <div className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {paginateData(filteredTasks).map(renderTaskCard)}
               </div>
               {filteredTasks.length > 0 && (
@@ -405,32 +489,177 @@ export default function TasksPage() {
               )}
             </>
           )}
-        </TabsContent>
-        
-        <TabsContent value="board" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {Object.entries(tasksByStatus).map(([status, statusTasks]) => {
-              const config = STATUS_CONFIG[status];
-              return (
-                <div key={status} className="space-y-3">
-                  <div className="flex items-center gap-2 px-2">
-                    <Badge className={config.color}>{config.label}</Badge>
-                    <span className="text-sm text-muted-foreground">({statusTasks.length})</span>
-                  </div>
-                  <div className="space-y-3 min-h-[200px] bg-muted/30 rounded-lg p-2">
-                    {statusTasks.map(renderTaskCard)}
-                    {statusTasks.length === 0 && (
-                      <div className="text-center text-sm text-muted-foreground py-8">
-                        No tasks
-                      </div>
-                    )}
-                  </div>
+        </>
+      )}
+
+      {/* Table View */}
+      {layout === "table" && (
+        <>
+          {isLoading ? (
+            <Card className="animate-pulse">
+              <CardContent className="p-4">
+                <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                <div className="h-3 bg-muted rounded w-1/2"></div>
+              </CardContent>
+            </Card>
+          ) : filteredTasks.length === 0 ? (
+            <Card className="p-8 text-center">
+              <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="font-medium mb-2">No tasks found</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {searchQuery ? "Try adjusting your search or filters" : "Create your first task to get started"}
+              </p>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Task
+              </Button>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Assignee</TableHead>
+                        <TableHead>Due Date</TableHead>
+                        <TableHead>Reminder</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginateData(filteredTasks).map((task) => {
+                        const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
+                        const priorityConfig = PRIORITY_CONFIG[task.priority || "medium"];
+                        const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+                        const hasReminder = task.reminderDate && new Date(task.reminderDate) <= new Date();
+                        
+                        return (
+                          <TableRow 
+                            key={task.id} 
+                            className={`cursor-pointer ${isOverdue ? "bg-red-50 dark:bg-red-950/30" : ""}`}
+                            onClick={() => setSelectedTask(task)}
+                            data-testid={`row-task-${task.id}`}
+                          >
+                            <TableCell className="font-medium max-w-[200px] truncate" data-testid={`text-task-title-${task.id}`}>
+                              <div className="flex items-center gap-2">
+                                {isOverdue && <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />}
+                                <span className="truncate">{task.title}</span>
+                                {task.voiceNoteUrl && <Mic className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={statusConfig.color} variant="secondary" data-testid={`badge-status-${task.id}`}>
+                                {statusConfig.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={priorityConfig.color} variant="secondary" data-testid={`badge-priority-${task.id}`}>
+                                {priorityConfig.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {task.assignee ? (
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={task.assignee.profileImageUrl || undefined} />
+                                    <AvatarFallback className="text-xs">
+                                      {task.assignee.firstName?.[0]}{task.assignee.lastName?.[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm truncate max-w-[80px]">
+                                    {task.assignee.firstName}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">Unassigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-due-${task.id}`}>
+                              {task.dueDate ? (
+                                <span className={isOverdue ? "text-red-500 font-medium" : ""}>
+                                  {format(new Date(task.dueDate), "MMM d, h:mm a")}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs" data-testid={`text-reminder-${task.id}`}>
+                              {task.reminderDate ? (
+                                <span className={hasReminder ? "text-orange-500 font-medium" : ""}>
+                                  {format(new Date(task.reminderDate), "MMM d")}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8" data-testid={`task-menu-${task.id}`}>
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingTask(task);
+                                    setShowCreateDialog(true);
+                                  }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateStatusMutation.mutate({ taskId: task.id, status: "completed" });
+                                    }}
+                                    disabled={task.status === "completed"}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                                    Mark Complete
+                                  </DropdownMenuItem>
+                                  {(isAdmin || task.createdBy === currentUser?.id) && (
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm("Are you sure you want to delete this task?")) {
+                                          deleteTaskMutation.mutate(task.id);
+                                        }
+                                      }}
+                                      className="text-red-600"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
-              );
-            })}
-          </div>
-        </TabsContent>
-      </Tabs>
+              </Card>
+              {filteredTasks.length > 0 && (
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={getTotalPages(filteredTasks.length)}
+                  pageSize={pageSize}
+                  totalItems={filteredTasks.length}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              )}
+            </>
+          )}
+        </>
+      )}
 
       <TaskFormDialog
         open={showCreateDialog}
