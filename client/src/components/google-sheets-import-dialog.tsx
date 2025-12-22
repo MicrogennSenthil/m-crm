@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { FileSpreadsheet, ChevronRight, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { FileSpreadsheet, ChevronRight, RefreshCw, AlertCircle, CheckCircle2, Link2, List } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -46,8 +48,20 @@ const LEAD_FIELDS = [
   { key: "notes", label: "Notes", required: false },
 ];
 
+// Extract spreadsheet ID from Google Sheets URL
+function extractSpreadsheetId(url: string): string | null {
+  // Match patterns like:
+  // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+  // https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit#gid=0
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return match ? match[1] : null;
+}
+
 export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImportDialogProps) {
   const [step, setStep] = useState<"select" | "mapping" | "confirm" | "result">("select");
+  const [importMode, setImportMode] = useState<"url" | "list">("url");
+  const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState<Spreadsheet | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [columnMapping, setColumnMapping] = useState<Record<string, number>>({});
@@ -55,25 +69,30 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
   const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const { toast } = useToast();
 
+  // Get spreadsheet ID from URL or selected spreadsheet
+  const spreadsheetId = importMode === "url" 
+    ? extractSpreadsheetId(spreadsheetUrl) 
+    : selectedSpreadsheet?.id;
+
   const { data: spreadsheets, isLoading: spreadsheetsLoading, error: spreadsheetsError, refetch: refetchSpreadsheets } = useQuery<Spreadsheet[]>({
     queryKey: ["/api/google-sheets/spreadsheets"],
-    enabled: open,
+    enabled: open && importMode === "list",
   });
 
-  const { data: sheetNames, isLoading: sheetsLoading } = useQuery<string[]>({
-    queryKey: ["/api/google-sheets", selectedSpreadsheet?.id, "sheets"],
-    enabled: !!selectedSpreadsheet?.id,
+  const { data: sheetNames, isLoading: sheetsLoading, error: sheetsError } = useQuery<string[]>({
+    queryKey: ["/api/google-sheets", spreadsheetId, "sheets"],
+    enabled: !!spreadsheetId,
   });
 
   const { data: previewData, isLoading: previewLoading } = useQuery<any[][]>({
-    queryKey: ["/api/google-sheets", selectedSpreadsheet?.id, selectedSheet, "preview"],
-    enabled: !!selectedSpreadsheet?.id && !!selectedSheet,
+    queryKey: ["/api/google-sheets", spreadsheetId, selectedSheet, "preview"],
+    enabled: !!spreadsheetId && !!selectedSheet,
   });
 
   const importMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/google-sheets/import-leads", {
-        spreadsheetId: selectedSpreadsheet?.id,
+        spreadsheetId: spreadsheetId,
         sheetName: selectedSheet,
         columnMapping,
         skipHeader,
@@ -106,11 +125,23 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
     setSelectedSheet("");
     setColumnMapping({});
     setImportResult(null);
+    setSpreadsheetUrl("");
+    setUrlError("");
   };
 
   const handleClose = () => {
     onOpenChange(false);
     setTimeout(handleReset, 300);
+  };
+
+  const handleUrlSubmit = () => {
+    const id = extractSpreadsheetId(spreadsheetUrl);
+    if (!id) {
+      setUrlError("Invalid Google Sheets URL. Please paste a valid URL like: https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit");
+      return;
+    }
+    setUrlError("");
+    // The query will automatically fetch sheet names when spreadsheetId is set
   };
 
   const headerRow = previewData?.[0] || [];
@@ -127,6 +158,7 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
   };
 
   const canProceedToConfirm = columnMapping.companyName !== undefined || columnMapping.contactPerson !== undefined;
+  const canProceedToMapping = (importMode === "url" ? !!spreadsheetId : !!selectedSpreadsheet) && !!selectedSheet;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -152,86 +184,164 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
         <ScrollArea className="flex-1 pr-4">
           {step === "select" && (
             <div className="space-y-4 py-4">
-              {spreadsheetsError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to connect to Google Sheets. Please ensure the integration is set up correctly.
-                  </AlertDescription>
-                </Alert>
-              )}
+              <Tabs value={importMode} onValueChange={(v) => setImportMode(v as "url" | "list")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="url" className="flex items-center gap-2" data-testid="tab-import-url">
+                    <Link2 className="h-4 w-4" />
+                    Import by URL
+                  </TabsTrigger>
+                  <TabsTrigger value="list" className="flex items-center gap-2" data-testid="tab-import-list">
+                    <List className="h-4 w-4" />
+                    Browse Sheets
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="flex items-center justify-between">
-                <Label>Select a Spreadsheet</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => refetchSpreadsheets()}
-                  disabled={spreadsheetsLoading}
-                  data-testid="button-refresh-spreadsheets"
-                >
-                  <RefreshCw className={`h-4 w-4 ${spreadsheetsLoading ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
+                <TabsContent value="url" className="space-y-4 mt-4">
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Paste the URL of any Google Sheet that's shared with your connected Google account. 
+                      Make sure the sheet is shared with view or edit access.
+                    </AlertDescription>
+                  </Alert>
 
-              {spreadsheetsLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid gap-2">
-                  {spreadsheets?.map((sheet) => (
-                    <Card
-                      key={sheet.id}
-                      className={`cursor-pointer transition-colors hover-elevate ${
-                        selectedSpreadsheet?.id === sheet.id ? "border-primary bg-primary/5" : ""
-                      }`}
-                      onClick={() => {
-                        setSelectedSpreadsheet(sheet);
-                        setSelectedSheet("");
-                      }}
-                      data-testid={`card-spreadsheet-${sheet.id}`}
-                    >
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                        <span className="font-medium">{sheet.name}</span>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {spreadsheets?.length === 0 && (
-                    <Alert>
+                  <div className="space-y-2">
+                    <Label>Google Sheets URL</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                        value={spreadsheetUrl}
+                        onChange={(e) => {
+                          setSpreadsheetUrl(e.target.value);
+                          setUrlError("");
+                          setSelectedSheet("");
+                        }}
+                        className="flex-1"
+                        data-testid="input-spreadsheet-url"
+                      />
+                      <Button onClick={handleUrlSubmit} data-testid="button-load-sheets">
+                        Load Sheets
+                      </Button>
+                    </div>
+                    {urlError && (
+                      <p className="text-sm text-destructive">{urlError}</p>
+                    )}
+                  </div>
+
+                  {spreadsheetId && (
+                    <div className="space-y-2">
+                      <Label>Select a Sheet</Label>
+                      {sheetsLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : sheetsError ? (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            Could not access this spreadsheet. Make sure it's shared with your connected Google account.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <Select value={selectedSheet} onValueChange={setSelectedSheet}>
+                          <SelectTrigger data-testid="select-sheet-name">
+                            <SelectValue placeholder="Choose a sheet" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {sheetNames?.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="list" className="space-y-4 mt-4">
+                  {spreadsheetsError && (
+                    <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        No spreadsheets found. Make sure you have Google Sheets in your connected account.
+                        Failed to connect to Google Sheets. Please ensure the integration is set up correctly.
                       </AlertDescription>
                     </Alert>
                   )}
-                </div>
-              )}
 
-              {selectedSpreadsheet && (
-                <div className="space-y-2 mt-4">
-                  <Label>Select a Sheet</Label>
-                  {sheetsLoading ? (
-                    <Skeleton className="h-10 w-full" />
+                  <div className="flex items-center justify-between">
+                    <Label>Select a Spreadsheet</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => refetchSpreadsheets()}
+                      disabled={spreadsheetsLoading}
+                      data-testid="button-refresh-spreadsheets"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${spreadsheetsLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+
+                  {spreadsheetsLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                      ))}
+                    </div>
                   ) : (
-                    <Select value={selectedSheet} onValueChange={setSelectedSheet}>
-                      <SelectTrigger data-testid="select-sheet-name">
-                        <SelectValue placeholder="Choose a sheet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sheetNames?.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="grid gap-2">
+                      {spreadsheets?.map((sheet) => (
+                        <Card
+                          key={sheet.id}
+                          className={`cursor-pointer transition-colors hover-elevate ${
+                            selectedSpreadsheet?.id === sheet.id ? "border-primary bg-primary/5" : ""
+                          }`}
+                          onClick={() => {
+                            setSelectedSpreadsheet(sheet);
+                            setSelectedSheet("");
+                          }}
+                          data-testid={`card-spreadsheet-${sheet.id}`}
+                        >
+                          <CardContent className="p-3 flex items-center gap-3">
+                            <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                            <span className="font-medium">{sheet.name}</span>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {spreadsheets?.length === 0 && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            No spreadsheets found in your connected account. Try using the "Import by URL" tab instead - 
+                            just paste the URL of any Google Sheet that's shared with your account.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
+
+                  {selectedSpreadsheet && (
+                    <div className="space-y-2 mt-4">
+                      <Label>Select a Sheet</Label>
+                      {sheetsLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : (
+                        <Select value={selectedSheet} onValueChange={setSelectedSheet}>
+                          <SelectTrigger data-testid="select-sheet-name-list">
+                            <SelectValue placeholder="Choose a sheet" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {sheetNames?.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </div>
           )}
 
@@ -311,7 +421,7 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  You are about to import leads from "{selectedSpreadsheet?.name}" - {selectedSheet}.
+                  You are about to import leads from {importMode === "url" ? "the provided spreadsheet" : `"${selectedSpreadsheet?.name}"`} - {selectedSheet}.
                   {previewData && (
                     <span className="block mt-1">
                       Approximately {skipHeader ? previewData.length - 1 : previewData.length}+ rows will be processed.
@@ -394,7 +504,7 @@ export function GoogleSheetsImportDialog({ open, onOpenChange }: GoogleSheetsImp
               </Button>
             )}
 
-            {step === "select" && selectedSheet && (
+            {step === "select" && canProceedToMapping && (
               <Button onClick={() => setStep("mapping")} data-testid="button-next-mapping">
                 Next: Map Columns
               </Button>
