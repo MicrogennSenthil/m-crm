@@ -69,7 +69,19 @@ export default function DevelopmentDashboard() {
   const { user } = useAuth();
   const { canView, isLoading: permissionsLoading } = usePermissions();
 
-  if (permissionsLoading || !user) {
+  const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
+    queryKey: ["/api/development/dashboard"],
+  });
+
+  const { data: developerSummary } = useQuery<DeveloperSummary[]>({
+    queryKey: ["/api/development/developer-summary"],
+  });
+
+  const { data: clientSummary } = useQuery<ClientSummary[]>({
+    queryKey: ["/api/development/client-summary"],
+  });
+
+  if (permissionsLoading || !user || metricsLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
@@ -92,26 +104,6 @@ export default function DevelopmentDashboard() {
         <Button variant="outline" onClick={() => window.history.back()} data-testid="button-go-back">
           Go Back
         </Button>
-      </div>
-    );
-  }
-  
-  const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
-    queryKey: ["/api/development/dashboard"],
-  });
-
-  const { data: developerSummary } = useQuery<DeveloperSummary[]>({
-    queryKey: ["/api/development/developer-summary"],
-  });
-
-  const { data: clientSummary } = useQuery<ClientSummary[]>({
-    queryKey: ["/api/development/client-summary"],
-  });
-
-  if (metricsLoading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-metrics"></div>
       </div>
     );
   }
