@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,13 +52,24 @@ const STAGES = [
   { id: "closed_won", title: "Closed Won", color: "bg-green-600" },
 ];
 
+type LayoutType = "kanban" | "list" | "compact";
+
 export default function Sales() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [rescheduleLeadId, setRescheduleLeadId] = useState<string | null>(null);
+  const [layout, setLayout] = useState<LayoutType>(() => {
+    const saved = localStorage.getItem("sales-layout");
+    return (saved as LayoutType) || "kanban";
+  });
   const { toast } = useToast();
+
+  const handleLayoutChange = (newLayout: LayoutType) => {
+    setLayout(newLayout);
+    localStorage.setItem("sales-layout", newLayout);
+  };
 
   const { data: leads, isLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
@@ -259,183 +270,427 @@ export default function Sales() {
             data-testid="input-search-leads"
           />
         </div>
+        <div className="flex items-center border rounded-md">
+          <Button 
+            variant={layout === "kanban" ? "secondary" : "ghost"} 
+            size="icon" 
+            className="min-h-[44px] min-w-[44px] rounded-r-none"
+            onClick={() => handleLayoutChange("kanban")}
+            title="Kanban View"
+            data-testid="button-layout-kanban"
+          >
+            <Columns className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant={layout === "compact" ? "secondary" : "ghost"} 
+            size="icon" 
+            className="min-h-[44px] min-w-[44px] rounded-none border-x"
+            onClick={() => handleLayoutChange("compact")}
+            title="Compact View"
+            data-testid="button-layout-compact"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant={layout === "list" ? "secondary" : "ghost"} 
+            size="icon" 
+            className="min-h-[44px] min-w-[44px] rounded-l-none"
+            onClick={() => handleLayoutChange("list")}
+            title="List View"
+            data-testid="button-layout-list"
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
         <Button variant="outline" size="icon" className="min-h-[44px] min-w-[44px]">
           <Filter className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-6 gap-2 sm:gap-3 pb-4">
-        {/* Today's Followups Column */}
-        <div className="min-w-0">
-          <div className="mb-2 flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full flex-shrink-0 bg-red-500" />
-            <h3 className="font-semibold text-xs sm:text-sm truncate">Today's Calls</h3>
-            <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-              <Badge variant="secondary" className="text-xs">
-                {todayFollowups.length}
-              </Badge>
-              {todayFollowups.filter(f => f.isOverdue).length > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {todayFollowups.filter(f => f.isOverdue).length} overdue
+      {/* Kanban Board - Original horizontal layout */}
+      {layout === "kanban" && (
+        <div className="grid grid-cols-6 gap-2 sm:gap-3 pb-4 overflow-x-auto">
+          {/* Today's Followups Column */}
+          <div className="min-w-0">
+            <div className="mb-2 flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full flex-shrink-0 bg-red-500" />
+              <h3 className="font-semibold text-xs sm:text-sm truncate">Today's Calls</h3>
+              <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                <Badge variant="secondary" className="text-xs">
+                  {todayFollowups.length}
                 </Badge>
+                {todayFollowups.filter(f => f.isOverdue).length > 0 && (
+                  <Badge variant="destructive" className="text-xs">
+                    {todayFollowups.filter(f => f.isOverdue).length} overdue
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2 sm:space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+              {followupsLoading ? (
+                Array(3)
+                  .fill(0)
+                  .map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
+              ) : todayFollowups.length > 0 ? (
+                todayFollowups.map((followup) => {
+                  const lead = leads?.find(l => l.id === followup.leadId);
+                  return (
+                    <Card
+                      key={followup.id}
+                      className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
+                      onClick={() => lead && setSelectedLead(lead)}
+                      data-testid={`card-followup-${followup.id}`}
+                    >
+                      <CardContent className="p-2 sm:p-3 space-y-1.5">
+                        <div className="flex items-start gap-1.5">
+                          {followup.isOverdue ? (
+                            <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <Phone className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs sm:text-sm font-semibold truncate">
+                              {followup.leadCompanyName || 'Unknown'}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {followup.leadContactPerson}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="h-3 w-3" />
+                            {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
+                          </div>
+                          {followup.isOverdue && followup.daysOverdue > 0 && (
+                            <Badge variant="destructive" className="text-[10px] px-1 h-4">
+                              {followup.daysOverdue}d overdue
+                            </Badge>
+                          )}
+                        </div>
+                        {followup.notes && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
+                    No calls due
+                  </CardContent>
+                </Card>
               )}
             </div>
           </div>
-          <div className="space-y-2 sm:space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-            {followupsLoading ? (
-              Array(3)
-                .fill(0)
-                .map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
-            ) : todayFollowups.length > 0 ? (
-              todayFollowups.map((followup) => {
-                const lead = leads?.find(l => l.id === followup.leadId);
-                return (
-                  <Card
-                    key={followup.id}
-                    className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
-                    onClick={() => lead && setSelectedLead(lead)}
-                    data-testid={`card-followup-${followup.id}`}
-                  >
-                    <CardContent className="p-2 sm:p-3 space-y-1.5">
-                      <div className="flex items-start gap-1.5">
-                        {followup.isOverdue ? (
-                          <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                        ) : (
-                          <Phone className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs sm:text-sm font-semibold truncate">
-                            {followup.leadCompanyName || 'Unknown'}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {followup.leadContactPerson}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
-                        </div>
-                        {followup.isOverdue && followup.daysOverdue > 0 && (
-                          <Badge variant="destructive" className="text-[10px] px-1 h-4">
-                            {followup.daysOverdue}d overdue
-                          </Badge>
-                        )}
-                      </div>
-                      {followup.notes && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })
-            ) : (
-              <Card className="border-dashed">
-                <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
-                  No calls due
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
 
-        {/* Lead Stage Columns */}
-        {STAGES.map((stage) => {
-          const stageLeads = getLeadsByStage(stage.id);
-          return (
-            <div
-              key={stage.id}
-              className="min-w-0"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, stage.id)}
-            >
-              <div className="mb-2 flex items-center gap-1.5">
-                <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
-                <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
-                <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-                  <Badge variant="secondary" className="text-xs">
-                    {stageLeads.length}
+          {/* Lead Stage Columns */}
+          {STAGES.map((stage) => {
+            const stageLeads = getLeadsByStage(stage.id);
+            return (
+              <div
+                key={stage.id}
+                className="min-w-0"
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, stage.id)}
+              >
+                <div className="mb-2 flex items-center gap-1.5">
+                  <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
+                  <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
+                  <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                    <Badge variant="secondary" className="text-xs">
+                      {stageLeads.length}
+                    </Badge>
+                    {getStageTotalValue(stage.id) > 0 && (
+                      <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                        ₹{formatCompactCurrency(getStageTotalValue(stage.id))}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2 sm:space-y-3">
+                  {isLoading ? (
+                    Array(3)
+                      .fill(0)
+                      .map((_, i) => <Skeleton key={i} className="h-28 sm:h-32 w-full" />)
+                  ) : stageLeads.length > 0 ? (
+                    stageLeads.map((lead) => (
+                      <Card
+                        key={lead.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, lead.id)}
+                        className="cursor-move hover-elevate active-elevate-2"
+                        onClick={() => setSelectedLead(lead)}
+                        data-testid={`card-lead-${lead.id}`}
+                      >
+                        <CardHeader className="p-2 sm:p-3 space-y-0.5">
+                          <CardTitle className="text-xs sm:text-sm font-semibold leading-tight truncate">
+                            {lead.companyName}
+                          </CardTitle>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {lead.contactPerson}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
+                          {lead.estimatedValue && (
+                            <div className="text-xs sm:text-sm font-medium">
+                              {getCurrencySymbol(lead.currency)}{lead.estimatedValue.toLocaleString()}
+                            </div>
+                          )}
+                          {lead.demoDate && (
+                            <div className="flex items-center gap-1 text-xs text-primary">
+                              <Clock className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate flex-1">{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 p-0 hover:bg-primary/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRescheduleLeadId(lead.id);
+                                }}
+                                title="Reschedule Demo"
+                                data-testid={`button-reschedule-demo-${lead.id}`}
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between gap-1 text-xs">
+                            <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
+                              {lead.leadSource}
+                            </Badge>
+                            <span className="text-muted-foreground whitespace-nowrap text-xs">
+                              {lead.daysInStage}d
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <Card className="border-dashed">
+                      <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
+                        No leads
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Compact View - Responsive grid cards */}
+      {layout === "compact" && (
+        <div className="space-y-6 pb-4">
+          {/* Today's Followups Section */}
+          {todayFollowups.length > 0 && (
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-red-500" />
+                <h3 className="font-semibold text-base">Today's Calls</h3>
+                <Badge variant="secondary">{todayFollowups.length}</Badge>
+                {todayFollowups.filter(f => f.isOverdue).length > 0 && (
+                  <Badge variant="destructive">
+                    {todayFollowups.filter(f => f.isOverdue).length} overdue
                   </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {todayFollowups.map((followup) => {
+                  const lead = leads?.find(l => l.id === followup.leadId);
+                  return (
+                    <Card
+                      key={followup.id}
+                      className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
+                      onClick={() => lead && setSelectedLead(lead)}
+                      data-testid={`card-followup-compact-${followup.id}`}
+                    >
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-start gap-2">
+                          {followup.isOverdue ? (
+                            <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <Phone className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">{followup.leadCompanyName || 'Unknown'}</p>
+                            <p className="text-sm text-muted-foreground">{followup.leadContactPerson}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
+                          </div>
+                          {followup.isOverdue && followup.daysOverdue > 0 && (
+                            <Badge variant="destructive">{followup.daysOverdue}d overdue</Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Lead Stages */}
+          {STAGES.map((stage) => {
+            const stageLeads = getLeadsByStage(stage.id);
+            if (stageLeads.length === 0) return null;
+            return (
+              <div key={stage.id}>
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
+                  <div className={`h-3 w-3 rounded-full ${stage.color}`} />
+                  <h3 className="font-semibold text-base">{stage.title}</h3>
+                  <Badge variant="secondary">{stageLeads.length}</Badge>
                   {getStageTotalValue(stage.id) > 0 && (
-                    <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                    <Badge variant="outline" className="text-green-600 border-green-300">
                       ₹{formatCompactCurrency(getStageTotalValue(stage.id))}
                     </Badge>
                   )}
                 </div>
-              </div>
-              <div className="space-y-2 sm:space-y-3">
-                {isLoading ? (
-                  Array(3)
-                    .fill(0)
-                    .map((_, i) => <Skeleton key={i} className="h-28 sm:h-32 w-full" />)
-                ) : stageLeads.length > 0 ? (
-                  stageLeads.map((lead) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {stageLeads.map((lead) => (
                     <Card
                       key={lead.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, lead.id)}
-                      className="cursor-move hover-elevate active-elevate-2"
+                      className="cursor-pointer hover-elevate active-elevate-2"
                       onClick={() => setSelectedLead(lead)}
-                      data-testid={`card-lead-${lead.id}`}
+                      data-testid={`card-lead-compact-${lead.id}`}
                     >
-                      <CardHeader className="p-2 sm:p-3 space-y-0.5">
-                        <CardTitle className="text-xs sm:text-sm font-semibold leading-tight truncate">
-                          {lead.companyName}
-                        </CardTitle>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {lead.contactPerson}
-                        </div>
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-sm font-semibold">{lead.companyName}</CardTitle>
+                        <div className="text-sm text-muted-foreground">{lead.contactPerson}</div>
                       </CardHeader>
-                      <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
+                      <CardContent className="p-4 pt-0 space-y-2">
                         {lead.estimatedValue && (
-                          <div className="text-xs sm:text-sm font-medium">
+                          <div className="text-base font-medium">
                             {getCurrencySymbol(lead.currency)}{lead.estimatedValue.toLocaleString()}
                           </div>
                         )}
                         {lead.demoDate && (
-                          <div className="flex items-center gap-1 text-xs text-primary">
-                            <Clock className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate flex-1">{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 p-0 hover:bg-primary/10"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRescheduleLeadId(lead.id);
-                              }}
-                              title="Reschedule Demo"
-                              data-testid={`button-reschedule-demo-${lead.id}`}
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                            </Button>
+                          <div className="flex items-center gap-2 text-sm text-primary">
+                            <Clock className="h-4 w-4 flex-shrink-0" />
+                            <span>{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
                           </div>
                         )}
-                        <div className="flex items-center justify-between gap-1 text-xs">
-                          <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
-                            {lead.leadSource}
-                          </Badge>
-                          <span className="text-muted-foreground whitespace-nowrap text-xs">
-                            {lead.daysInStage}d
-                          </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                          <span className="text-sm text-muted-foreground">{lead.daysInStage}d in stage</span>
                         </div>
                       </CardContent>
                     </Card>
-                  ))
-                ) : (
-                  <Card className="border-dashed">
-                    <CardContent className="p-3 sm:p-4 text-center text-xs text-muted-foreground">
-                      No leads
-                    </CardContent>
-                  </Card>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* List View - Full-width rows */}
+      {layout === "list" && (
+        <div className="space-y-4 pb-4">
+          {/* Today's Followups */}
+          {todayFollowups.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-3 w-3 rounded-full bg-red-500" />
+                  <CardTitle className="text-base">Today's Calls</CardTitle>
+                  <Badge variant="secondary">{todayFollowups.length}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {todayFollowups.map((followup) => {
+                  const lead = leads?.find(l => l.id === followup.leadId);
+                  return (
+                    <div
+                      key={followup.id}
+                      className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer hover-elevate ${followup.isOverdue ? 'bg-red-50 dark:bg-red-900/20' : 'bg-muted/50'}`}
+                      onClick={() => lead && setSelectedLead(lead)}
+                      data-testid={`row-followup-${followup.id}`}
+                    >
+                      {followup.isOverdue ? (
+                        <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                      ) : (
+                        <Phone className="h-5 w-5 text-primary flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">{followup.leadCompanyName || 'Unknown'}</p>
+                        <p className="text-sm text-muted-foreground">{followup.leadContactPerson}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="text-sm text-muted-foreground">
+                          {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
+                        </div>
+                        {followup.isOverdue && followup.daysOverdue > 0 && (
+                          <Badge variant="destructive">{followup.daysOverdue}d overdue</Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lead Stages as Sections */}
+          {STAGES.map((stage) => {
+            const stageLeads = getLeadsByStage(stage.id);
+            if (stageLeads.length === 0) return null;
+            return (
+              <Card key={stage.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className={`h-3 w-3 rounded-full ${stage.color}`} />
+                    <CardTitle className="text-base">{stage.title}</CardTitle>
+                    <Badge variant="secondary">{stageLeads.length}</Badge>
+                    {getStageTotalValue(stage.id) > 0 && (
+                      <Badge variant="outline" className="text-green-600 border-green-300">
+                        ₹{formatCompactCurrency(getStageTotalValue(stage.id))}
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {stageLeads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="flex items-center gap-4 p-3 rounded-lg cursor-pointer hover-elevate bg-muted/50"
+                      onClick={() => setSelectedLead(lead)}
+                      data-testid={`row-lead-${lead.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">{lead.companyName}</p>
+                        <p className="text-sm text-muted-foreground">{lead.contactPerson}</p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0 flex-wrap justify-end">
+                        {lead.estimatedValue && (
+                          <span className="font-medium text-green-600">
+                            {getCurrencySymbol(lead.currency)}{lead.estimatedValue.toLocaleString()}
+                          </span>
+                        )}
+                        {lead.demoDate && (
+                          <div className="flex items-center gap-1 text-sm text-primary">
+                            <Clock className="h-4 w-4" />
+                            {format(new Date(lead.demoDate), "MMM d")}
+                          </div>
+                        )}
+                        <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                        <span className="text-sm text-muted-foreground">{lead.daysInStage}d</span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Lead Detail Modal */}
       {selectedLead && (
