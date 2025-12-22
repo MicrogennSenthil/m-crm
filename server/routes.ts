@@ -2273,10 +2273,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
       const { stage, salesExecutiveId, limit } = req.query;
-      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const authId = req.user.claims.sub || (req.session as any).userId;
       
-      // Use centralized access control helper
-      const accessControl = await getAllowedUserIdsForUser(currentUserId);
+      // Fetch database user first - required for proper ID resolution
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Use the database user ID (not auth ID) for access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Build filters - enforce access control
       const filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] } = {
@@ -3509,10 +3515,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/projects", isAuthenticated, requirePermission('projects', 'view'), async (req: any, res) => {
     try {
       const { status } = req.query;
-      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const authId = req.user.claims.sub || (req.session as any).userId;
       
-      // Use centralized access control helper
-      const accessControl = await getAllowedUserIdsForUser(currentUserId);
+      // Fetch database user first - required for proper ID resolution
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Use the database user ID (not auth ID) for access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Build filters with access control
       const filters: { status?: string; engineerIds?: string[] } = {
@@ -6029,8 +6041,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authId = req.user.claims.sub;
       const { status, assignedTo, createdBy, view } = req.query;
       
-      // Use centralized access control helper
-      const accessControl = await getAllowedUserIdsForUser(authId);
+      // Fetch database user first - required for proper ID resolution
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Use the database user ID (not auth ID) for access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Only admins/super admins can request view=all (all tasks)
       if (view === 'all' && !accessControl.hasFullAccess) {
@@ -6058,13 +6076,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!includeAll) {
         if (accessControl.hasFullAccess) {
           // Admin viewing their own tasks (default view)
-          taskFilters.userId = authId;
+          taskFilters.userId = currentUser.id;
         } else if (accessControl.allowedUserIds && accessControl.allowedUserIds.length > 1) {
           // Department manager - use userIds for department filtering
           taskFilters.userIds = accessControl.allowedUserIds;
         } else {
           // Regular user - use single userId
-          taskFilters.userId = authId;
+          taskFilters.userId = currentUser.id;
         }
       }
       
