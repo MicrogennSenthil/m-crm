@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
 import { LeadImportDialog } from "@/components/lead-import-dialog";
+import { GoogleSheetsImportDialog } from "@/components/google-sheets-import-dialog";
 import { RescheduleDemoDialog } from "@/components/reschedule-demo-dialog";
 import type { Lead, FollowUp } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -58,6 +59,7 @@ export default function Sales() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [googleSheetsImportOpen, setGoogleSheetsImportOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [rescheduleLeadId, setRescheduleLeadId] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>(() => {
@@ -235,8 +237,18 @@ export default function Sales() {
             className="min-h-[44px]"
           >
             <Upload className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Import</span>
-            <span className="sm:hidden">Import</span>
+            <span className="hidden sm:inline">Import CSV</span>
+            <span className="sm:hidden">CSV</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setGoogleSheetsImportOpen(true)}
+            data-testid="button-import-google-sheets"
+            className="min-h-[44px]"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+            <span className="hidden sm:inline">Google Sheets</span>
+            <span className="sm:hidden">Sheets</span>
           </Button>
           <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
             <DialogTrigger asChild>
@@ -259,6 +271,7 @@ export default function Sales() {
       </div>
       
       <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <GoogleSheetsImportDialog open={googleSheetsImportOpen} onOpenChange={setGoogleSheetsImportOpen} />
 
       <div className="flex items-center gap-2 sm:gap-4">
         <div className="relative flex-1">

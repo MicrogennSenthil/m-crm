@@ -2607,6 +2607,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =============================================
+  // GOOGLE SHEETS INTEGRATION ROUTES
+  // =============================================
+  
+  // List available Google Spreadsheets
+  app.get("/api/google-sheets/spreadsheets", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
+    try {
+      const { listSpreadsheets } = await import("./google-sheets");
+      const spreadsheets = await listSpreadsheets();
+      res.json(spreadsheets);
+    } catch (error: any) {
+      console.error("Error listing spreadsheets:", error);
+      if (error.message?.includes('not connected')) {
+        res.status(400).json({ message: "Google Sheets is not connected. Please set up the integration first." });
+      } else {
+        res.status(500).json({ message: "Failed to list spreadsheets" });
+      }
+    }
+  });
+
+  // Get sheet names from a spreadsheet
+  app.get("/api/google-sheets/:spreadsheetId/sheets", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
+    try {
+      const { spreadsheetId } = req.params;
+      const { getSheetNames } = await import("./google-sheets");
+      const sheets = await getSheetNames(spreadsheetId);
+      res.json(sheets);
+    } catch (error: any) {
+      console.error("Error getting sheet names:", error);
+      res.status(500).json({ message: "Failed to get sheet names" });
+    }
+  });
+
+  // Get sheet data preview (first 10 rows)
+  app.get("/api/google-sheets/:spreadsheetId/:sheetName/preview", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
+    try {
+      const { spreadsheetId, sheetName } = req.params;
+      const { readSheetData } = await import("./google-sheets");
+      const data = await readSheetData(spreadsheetId, decodeURIComponent(sheetName), "A1:Z10");
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error reading sheet preview:", error);
+      res.status(500).json({ message: "Failed to read sheet data" });
+    }
+  });
+
+  // Import leads from Google Sheet
+  app.post("/api/google-sheets/import-leads", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
+    try {
+      const { spreadsheetId, sheetName, columnMapping, skipHeader = true } = req.body;
+      
+      if (!spreadsheetId || !sheetName || !columnMapping) {
+        return res.status(400).json({ message: "Missing required parameters" });
+      }
+      
+      const { readSheetData, parseLeadsFromSheetData } = await import("./google-sheets");
+      
+      // Read all data from the sheet
+      const data = await readSheetData(spreadsheetId, sheetName);
+      
+      if (!data || data.length === 0) {
+        return res.status(400).json({ message: "No data found in the sheet" });
+      }
+      
+      // Parse leads from sheet data
+      const parsedLeads = parseLeadsFromSheetData(data, columnMapping, skipHeader);
+      
+      if (parsedLeads.length === 0) {
+        return res.status(400).json({ message: "No valid leads found in the sheet" });
+      }
+      
+      const createdLeads = [];
+      const errors: string[] = [];
+      
+      for (let i = 0; i < parsedLeads.length; i++) {
+        try {
+          const lead = parsedLeads[i];
+          const validatedData = insertLeadSchema.parse({
+            companyName: lead.companyName || "Unknown Company",
+            contactPerson: lead.contactPerson || "Unknown",
+            contactEmail: lead.email || "",
+            contactPhone: lead.phone || "",
+            leadSource: lead.source || "google_sheet",
+            stage: "new_lead",
+            estimatedValue: 0,
+            notes: lead.notes || `Imported from Google Sheet: ${sheetName}`,
+          });
+          
+          const newLead = await storage.createLead(validatedData);
+          createdLeads.push(newLead);
+          
+          await storage.logActivity({
+            entityType: "lead",
+            entityId: newLead.id,
+            action: "imported",
+            description: `Lead imported from Google Sheets: ${newLead.companyName}`,
+            userId: req.user.claims.sub,
+          });
+        } catch (err) {
+          errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : "Invalid data"}`);
+        }
+      }
+      
+      res.json({
+        success: createdLeads.length,
+        failed: errors.length,
+        errors: errors.slice(0, 10),
+        leads: createdLeads,
+      });
+    } catch (error: any) {
+      console.error("Error importing leads from Google Sheets:", error);
+      res.status(500).json({ message: error.message || "Failed to import leads" });
+    }
+  });
+
   // Social Media Webhook Endpoints (public - no auth required for webhooks)
   // These endpoints receive lead data from social media platforms
 
