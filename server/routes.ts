@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
+import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
@@ -2273,65 +2274,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { stage, salesExecutiveId, limit } = req.query;
       const currentUserId = req.user.claims.sub || (req.session as any).userId;
-      const currentUser = await storage.getUser(currentUserId);
       
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Determine access level:
-      // 1. Super admin or admin: see all leads (and can use salesExecutiveId filter freely)
-      // 2. Department manager: see leads from all users in their department
-      // 3. Regular user: see only their own leads
-      
-      const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL;
-      const isAdminRole = currentUser.role === "admin";
-      
-      let allowedUserIds: string[] | undefined;
-      
-      if (!isSuperAdmin && !isAdminRole) {
-        // Check if user is a department manager
-        const departments = await storage.getDepartments();
-        const managedDepartments = departments.filter(d => d.managerId === currentUserId);
-        
-        if (managedDepartments.length > 0) {
-          // User is a department manager - get all users in their departments
-          const departmentUserIds: string[] = [currentUserId];
-          for (const dept of managedDepartments) {
-            const deptUsers = await storage.getUsersByDepartment(dept.id);
-            departmentUserIds.push(...deptUsers.map(u => u.id));
-          }
-          allowedUserIds = Array.from(new Set(departmentUserIds)); // Remove duplicates
-        } else {
-          // Regular user - only see their own leads
-          allowedUserIds = [currentUserId];
-        }
-      }
+      // Use centralized access control helper
+      const accessControl = await getAllowedUserIdsForUser(currentUserId);
       
       // Build filters - enforce access control
       const filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] } = {
         stage: stage as string,
       };
       
-      if (isSuperAdmin || isAdminRole) {
-        // Admins can filter by any salesExecutiveId
-        if (salesExecutiveId) {
-          filters.salesExecutiveId = salesExecutiveId as string;
-        }
-      } else if (allowedUserIds) {
-        // Non-admins: if salesExecutiveId is provided, validate it's in their allowed list
-        if (salesExecutiveId) {
-          const requestedId = salesExecutiveId as string;
-          if (allowedUserIds.includes(requestedId)) {
-            filters.salesExecutiveId = requestedId;
-          } else {
-            // Ignore invalid salesExecutiveId - just return their allowed leads
-            filters.salesExecutiveIds = allowedUserIds;
-          }
-        } else {
-          // No specific filter - return all allowed leads
-          filters.salesExecutiveIds = allowedUserIds;
-        }
+      const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
+      if (userFilter.userId) {
+        filters.salesExecutiveId = userFilter.userId;
+      } else if (userFilter.userIds) {
+        filters.salesExecutiveIds = userFilter.userIds;
       }
       
       let leadsList = await storage.getLeads(filters);
@@ -3550,10 +3506,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Project routes
-  app.get("/api/projects", isAuthenticated, requirePermission('projects', 'view'), async (req, res) => {
+  app.get("/api/projects", isAuthenticated, requirePermission('projects', 'view'), async (req: any, res) => {
     try {
       const { status } = req.query;
-      const projectsList = await storage.getProjects({ status: status as string });
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      
+      // Use centralized access control helper
+      const accessControl = await getAllowedUserIdsForUser(currentUserId);
+      
+      // Build filters with access control
+      const filters: { status?: string; engineerIds?: string[] } = {
+        status: status as string,
+      };
+      
+      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
+        filters.engineerIds = accessControl.allowedUserIds;
+      }
+      
+      const projectsList = await storage.getProjects(filters);
       
       // Attach engineers to each project
       const projectsWithEngineers = await Promise.all(
@@ -5001,53 +4971,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, priority, limit, assignedTo } = req.query;
       const authId = req.user?.claims?.sub;
       
-      // Get current user with database ID
-      const currentUser = await storage.getUser(authId);
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
+      // Use centralized access control helper
+      const accessControl = await getAllowedUserIdsForUser(authId);
       
-      let ticketsList = await storage.getTickets({
+      // Build filters with access control
+      const filters: { status?: string; priority?: string; assignedEngineerIds?: string[] } = {
         status: status as string,
         priority: priority as string,
-      });
+      };
       
-      // Check if user is super admin or has admin role
-      const isSuperAdminUser = currentUser?.email === SUPER_ADMIN_EMAIL || currentUser?.role === "admin";
-      
-      // Super admin or admin role sees all tickets
-      if (isSuperAdminUser) {
-        // Admin/Super admin sees all tickets - no filtering
-        console.log(`[Tickets] Super admin/admin ${currentUser.email} viewing all ${ticketsList.length} tickets`);
-      } else if (currentUser?.departmentId) {
-        const department = await storage.getDepartment(currentUser.departmentId);
-        const isDepartmentHead = department?.managerId === currentUser.id;
-        
-        if (isDepartmentHead) {
-          // Department head sees all tickets assigned to users in their department
-          const allUsers = await storage.getUsers();
-          const departmentUserIds = allUsers
-            .filter(u => u.departmentId === currentUser.departmentId)
-            .map(u => u.id);
-          ticketsList = ticketsList.filter(ticket => 
-            ticket.assignedEngineerId && departmentUserIds.includes(ticket.assignedEngineerId)
-          );
-          console.log(`[Tickets] Dept head ${currentUser.email} viewing ${ticketsList.length} department tickets`);
+      // Apply access control for non-admins
+      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
+        // If explicit assignedTo filter, validate it's allowed
+        if (assignedTo) {
+          if (accessControl.allowedUserIds.includes(assignedTo as string)) {
+            filters.assignedEngineerIds = [assignedTo as string];
+          } else {
+            // Ignore invalid filter, use allowed list
+            filters.assignedEngineerIds = accessControl.allowedUserIds;
+          }
         } else {
-          // Regular users only see their assigned tickets (using database user ID)
-          ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === currentUser.id);
-          console.log(`[Tickets] User ${currentUser.email} (db id: ${currentUser.id}) viewing ${ticketsList.length} assigned tickets`);
+          filters.assignedEngineerIds = accessControl.allowedUserIds;
         }
-      } else {
-        // User without department - only see their assigned tickets
-        ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === currentUser.id);
-        console.log(`[Tickets] User ${currentUser.email} viewing ${ticketsList.length} assigned tickets`);
+      } else if (assignedTo) {
+        // Admin with explicit filter
+        filters.assignedEngineerIds = [assignedTo as string];
       }
       
-      // Allow explicit assignedTo filter (for dashboard "My Tickets" etc.)
-      if (assignedTo) {
-        ticketsList = ticketsList.filter(ticket => ticket.assignedEngineerId === assignedTo);
-      }
+      let ticketsList = await storage.getTickets(filters);
       
       if (limit) {
         ticketsList = ticketsList.slice(0, parseInt(limit as string));
@@ -6076,36 +6027,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tasks", isAuthenticated, async (req: any, res) => {
     try {
       const authId = req.user.claims.sub;
-      const user = await storage.getUser(authId);
       const { status, assignedTo, createdBy, view } = req.query;
       
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Role-based access control for view=all
-      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
-      const isAdmin = user?.role === 'admin' || isSuperAdmin;
+      // Use centralized access control helper
+      const accessControl = await getAllowedUserIdsForUser(authId);
       
       // Only admins/super admins can request view=all (all tasks)
-      if (view === 'all' && !isAdmin) {
+      if (view === 'all' && !accessControl.hasFullAccess) {
         return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
       }
       
-      const includeAll = isAdmin && view === 'all';
+      const includeAll = accessControl.hasFullAccess && view === 'all';
       
-      // Use the database user ID (not auth ID) since tasks are assigned by database ID
-      console.log(`[Tasks] Fetching tasks for user ${user.email} (db id: ${user.id}), view=${view || 'default'}, includeAll=${includeAll}`);
-      
-      const taskList = await storage.getTasks({
-        userId: !includeAll ? user.id : undefined,
+      // Build task filters with access control
+      const taskFilters: {
+        userId?: string;
+        userIds?: string[];
+        status?: string;
+        assignedTo?: string;
+        createdBy?: string;
+        includeAll?: boolean;
+      } = {
         status: status as string || undefined,
         assignedTo: assignedTo as string || undefined,
         createdBy: createdBy as string || undefined,
         includeAll,
-      });
+      };
       
-      console.log(`[Tasks] Found ${taskList.length} tasks for user ${user.email}`);
+      // Apply department-based filtering for non-admins
+      if (!includeAll) {
+        if (accessControl.hasFullAccess) {
+          // Admin viewing their own tasks (default view)
+          taskFilters.userId = authId;
+        } else if (accessControl.allowedUserIds && accessControl.allowedUserIds.length > 1) {
+          // Department manager - use userIds for department filtering
+          taskFilters.userIds = accessControl.allowedUserIds;
+        } else {
+          // Regular user - use single userId
+          taskFilters.userId = authId;
+        }
+      }
+      
+      const taskList = await storage.getTasks(taskFilters);
       
       res.json(taskList);
     } catch (error) {

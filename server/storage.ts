@@ -225,7 +225,7 @@ export interface IStorage {
   updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote>;
 
   // Project operations
-  getProjects(filters?: { status?: string }): Promise<Project[]>;
+  getProjects(filters?: { status?: string; engineerIds?: string[] }): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
   createProject(project: InsertProject, selectedModuleNames?: string[]): Promise<Project>;
   updateProject(id: string, data: Partial<InsertProject>): Promise<Project>;
@@ -266,7 +266,7 @@ export interface IStorage {
   createTrainingRecord(training: InsertTrainingRecord): Promise<TrainingRecord>;
 
   // Ticket operations
-  getTickets(filters?: { status?: string; priority?: string }): Promise<Ticket[]>;
+  getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[] }): Promise<Ticket[]>;
   getTicket(id: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<InsertTicket>): Promise<Ticket>;
@@ -315,6 +315,7 @@ export interface IStorage {
   // Task operations
   getTasks(filters?: { 
     userId?: string; 
+    userIds?: string[]; // For department-based filtering
     assignedTo?: string; 
     createdBy?: string; 
     status?: string;
@@ -1108,12 +1109,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Project operations
-  async getProjects(filters?: { status?: string }): Promise<Project[]> {
+  async getProjects(filters?: { status?: string; engineerIds?: string[] }): Promise<Project[]> {
+    const conditions: any[] = [];
+    
     if (filters?.status) {
+      conditions.push(eq(projects.status, filters.status));
+    }
+    
+    // Filter by engineers assigned to projects
+    if (filters?.engineerIds && filters.engineerIds.length > 0) {
+      // Get project IDs that have any of the specified engineers
+      const engineerProjectIds = await db
+        .select({ projectId: projectEngineers.projectId })
+        .from(projectEngineers)
+        .where(inArray(projectEngineers.engineerId, filters.engineerIds));
+      
+      const projectIdList = engineerProjectIds.map(p => p.projectId);
+      if (projectIdList.length === 0) {
+        return []; // No projects for these engineers
+      }
+      conditions.push(inArray(projects.id, projectIdList));
+    }
+    
+    if (conditions.length > 0) {
       return await db
         .select()
         .from(projects)
-        .where(eq(projects.status, filters.status))
+        .where(and(...conditions))
         .orderBy(desc(projects.createdAt));
     }
     return await db.select().from(projects).orderBy(desc(projects.createdAt));
@@ -1380,18 +1402,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Ticket operations
-  async getTickets(filters?: { status?: string; priority?: string }): Promise<Ticket[]> {
-    let query = db.select().from(tickets).orderBy(desc(tickets.createdAt));
+  async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[] }): Promise<Ticket[]> {
+    const conditions: any[] = [];
     
     if (filters?.status) {
-      query = db.select().from(tickets).where(eq(tickets.status, filters.status)).orderBy(desc(tickets.createdAt)) as any;
+      conditions.push(eq(tickets.status, filters.status));
     }
     
     if (filters?.priority) {
-      query = db.select().from(tickets).where(eq(tickets.priority, filters.priority)).orderBy(desc(tickets.createdAt)) as any;
+      conditions.push(eq(tickets.priority, filters.priority));
     }
     
-    return await query;
+    if (filters?.assignedEngineerIds && filters.assignedEngineerIds.length > 0) {
+      conditions.push(inArray(tickets.assignedEngineerId, filters.assignedEngineerIds));
+    }
+    
+    if (conditions.length > 0) {
+      return await db
+        .select()
+        .from(tickets)
+        .where(and(...conditions))
+        .orderBy(desc(tickets.createdAt));
+    }
+    
+    return await db.select().from(tickets).orderBy(desc(tickets.createdAt));
   }
 
   async getTicket(id: string): Promise<Ticket | undefined> {
@@ -2062,6 +2096,7 @@ export class DatabaseStorage implements IStorage {
   // Task operations
   async getTasks(filters?: { 
     userId?: string; 
+    userIds?: string[];
     assignedTo?: string; 
     createdBy?: string; 
     status?: string;
@@ -2080,7 +2115,17 @@ export class DatabaseStorage implements IStorage {
     
     if (!filters?.includeAll) {
       // If not admin viewing all, filter by user involvement
-      if (filters?.userId) {
+      if (filters?.userIds && filters.userIds.length > 0) {
+        // Department-based filtering: show tasks where any of the users is creator, assignee, or mentioned
+        const userIdConditions = filters.userIds.map(uid => 
+          or(
+            eq(tasks.createdBy, uid),
+            eq(tasks.assignedTo, uid),
+            sql`COALESCE(${tasks.mentionedUsers}, ARRAY[]::text[]) @> ARRAY[${uid}]::text[]`
+          )
+        );
+        conditions.push(or(...userIdConditions));
+      } else if (filters?.userId) {
         // Show tasks where user is creator, assignee, or mentioned
         // Use raw SQL for the array check to avoid parameterization issues
         conditions.push(
