@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight, Zap } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns, LayoutGrid, List } from "lucide-react";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,16 @@ const STATUS_CONFIG: Record<string, { variant: "secondary" | "default" | "outlin
   development: { variant: "secondary", label: "Development", className: "bg-purple-600/20 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400" },
 };
 
+const TICKET_STAGES = [
+  { id: "open", title: "Open", color: "bg-blue-600" },
+  { id: "in_progress", title: "In Progress", color: "bg-yellow-600" },
+  { id: "pending_customer", title: "Pending Customer", color: "bg-orange-500" },
+  { id: "escalated", title: "Escalated", color: "bg-red-600" },
+  { id: "closed", title: "Closed", color: "bg-green-600" },
+];
+
+type LayoutType = "kanban" | "card" | "table";
+
 // Helper to get display status config (shows "Development" if ticket has active dev task)
 const getDisplayStatusConfig = (ticket: any) => {
   if (ticket.hasActiveDevelopmentTask) {
@@ -61,7 +71,20 @@ export default function Support() {
   const [sortOrder, setSortOrder] = useState<string>("status");
   const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [layout, setLayout] = useState<LayoutType>(() => {
+    const saved = localStorage.getItem("support-layout");
+    return (saved as LayoutType) || "table";
+  });
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+
+  const handleLayoutChange = (newLayout: LayoutType) => {
+    setLayout(newLayout);
+    localStorage.setItem("support-layout", newLayout);
+  };
+
+  const getTicketsByStatus = (status: string) => {
+    return categoryFilteredTickets?.filter(t => t.status === status) || [];
+  };
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets"],
@@ -221,6 +244,38 @@ export default function Support() {
               data-testid="input-search-tickets"
             />
           </div>
+          <div className="flex border rounded-md">
+            <Button 
+              variant={layout === "kanban" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-r-none"
+              onClick={() => handleLayoutChange("kanban")}
+              title="Kanban View"
+              data-testid="button-layout-kanban"
+            >
+              <Columns className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "card" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-none border-x"
+              onClick={() => handleLayoutChange("card")}
+              title="Card View"
+              data-testid="button-layout-card"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={layout === "table" ? "secondary" : "ghost"} 
+              size="icon" 
+              className="min-h-[44px] min-w-[44px] rounded-l-none"
+              onClick={() => handleLayoutChange("table")}
+              title="Table View"
+              data-testid="button-layout-table"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           <Select value={sortOrder} onValueChange={setSortOrder}>
             <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]" data-testid="select-sort-order">
               <ArrowUpDown className="h-4 w-4 mr-2" />
@@ -237,7 +292,139 @@ export default function Support() {
         </div>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {/* Mobile Card View */}
+          {/* Kanban View */}
+          {layout === "kanban" && (
+            <div className="grid grid-cols-5 gap-3 pb-4 overflow-x-auto">
+              {TICKET_STAGES.map((stage) => {
+                const stageTickets = getTicketsByStatus(stage.id);
+                return (
+                  <div key={stage.id} className="min-w-[180px]">
+                    <div className="mb-2 flex items-center gap-1.5">
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${stage.color}`} />
+                      <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
+                      <Badge variant="secondary" className="ml-auto text-xs">
+                        {stageTickets.length}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto">
+                      {isLoading ? (
+                        Array(2).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
+                      ) : stageTickets.length > 0 ? (
+                        stageTickets.map((ticket) => {
+                          const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
+                          return (
+                            <Card
+                              key={ticket.id}
+                              className="hover-elevate cursor-pointer"
+                              onClick={() => setSelectedTicket(ticket)}
+                              data-testid={`card-ticket-kanban-${ticket.id}`}
+                            >
+                              <CardContent className="p-2 space-y-1.5">
+                                <div className="flex items-start justify-between gap-1">
+                                  <span className="font-mono text-xs text-muted-foreground">{ticket.ticketNumber}</span>
+                                  <Badge variant={priorityConfig.variant} className={`${priorityConfig.className} text-xs`}>
+                                    {priorityConfig.label}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-medium leading-tight line-clamp-1">{ticket.customerName}</p>
+                                <p className="text-xs text-muted-foreground line-clamp-2">{ticket.issueSummary}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="text-xs">L{ticket.escalationLevel}</Badge>
+                                  <span className="text-xs text-muted-foreground ml-auto">
+                                    {ticket.createdAt && calculateAge(ticket.createdAt)}
+                                  </span>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground text-xs">
+                          No tickets
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Card View */}
+          {layout === "card" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {isLoading ? (
+                Array(6).fill(0).map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4 space-y-3">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-full" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-6 w-16" />
+                        <Skeleton className="h-6 w-20" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : sortedTickets && sortedTickets.length > 0 ? (
+                sortedTickets.map((ticket) => {
+                  const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
+                  const statusConfig = getDisplayStatusConfig(ticket);
+                  const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
+                  return (
+                    <Card
+                      key={ticket.id}
+                      className={`hover-elevate cursor-pointer ${isAutoAssigned ? 'auto-assigned-ticket' : ''}`}
+                      onClick={() => setSelectedTicket(ticket)}
+                      data-testid={`card-ticket-${ticket.id}`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
+                            {isAutoAssigned && (
+                              <Badge variant="outline" className="bg-warning/20 text-warning-foreground border-warning text-xs">
+                                <Zap className="h-3 w-3 mr-1" />
+                                Auto
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <h3 className="font-medium text-sm mb-1 leading-tight">{ticket.customerName}</h3>
+                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{ticket.issueSummary}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={priorityConfig.variant} className={priorityConfig.className}>
+                            {priorityConfig.label}
+                          </Badge>
+                          <Badge variant={statusConfig.variant} className={statusConfig.className}>
+                            {statusConfig.label}
+                          </Badge>
+                          <Badge variant="outline">L{ticket.escalationLevel}</Badge>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {ticket.createdAt && calculateAge(ticket.createdAt)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              ) : (
+                <Card className="col-span-full">
+                  <CardContent className="p-8 text-center">
+                    <p className="text-muted-foreground mb-4">No tickets found</p>
+                    <Button onClick={() => setNewTicketOpen(true)} className="min-h-[44px]">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Ticket
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Table View - Mobile Card View */}
+          {layout === "table" && (
+            <>
       <div className="md:hidden space-y-3">
         {isLoading ? (
           Array(5)
@@ -321,8 +508,8 @@ export default function Support() {
         )}
       </div>
 
-      {/* Desktop Table View */}
-      <div className="hidden md:block border rounded-md">
+              {/* Desktop Table View */}
+              <div className="hidden md:block border rounded-md">
         <Table>
           <TableHeader>
             <TableRow>
@@ -453,6 +640,8 @@ export default function Support() {
           />
         )}
       </div>
+            </>
+          )}
             </TabsContent>
           </Tabs>
         </TabsContent>
