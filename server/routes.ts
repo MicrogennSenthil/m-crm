@@ -6099,27 +6099,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tasks/today", isAuthenticated, async (req: any, res) => {
     try {
       const authId = req.user.claims.sub;
-      const user = await storage.getUser(authId);
       const { view } = req.query;
       
-      if (!user) {
+      // Fetch database user first
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
         return res.status(401).json({ message: "User not found" });
       }
       
-      // Admin/Super admin can view all tasks
-      const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
-      const isAdmin = user?.role === 'admin' || isSuperAdmin;
+      // Use centralized access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Only admins/super admins can request view=all
-      if (view === 'all' && !isAdmin) {
+      if (view === 'all' && !accessControl.hasFullAccess) {
         return res.status(403).json({ message: "Access denied: Only admins can view all tasks" });
       }
       
-      const includeAll = isAdmin && view === 'all';
+      const includeAll = accessControl.hasFullAccess && view === 'all';
       
       // Use the database user ID (not auth ID) since tasks are assigned by database ID
-      const todayTasks = await storage.getTodayTasks(user.id, includeAll);
-      console.log(`[TodayTasks] User ${user.email} (db id: ${user.id}) fetching tasks, includeAll: ${includeAll}, found: ${todayTasks.length}`);
+      const todayTasks = await storage.getTodayTasks(currentUser.id, includeAll);
       res.json(todayTasks);
     } catch (error) {
       console.error("Error fetching today's tasks:", error);
@@ -8962,12 +8961,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get development dashboard metrics
   app.get("/api/development/dashboard", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
-      const role = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
       
-      // Admins can see all metrics, others only their own
-      const assignedTo = (role === 'admin' || role === 'superadmin') ? undefined : userId;
-      const metrics = await storage.getDevelopmentDashboardMetrics(assignedTo);
+      // Fetch database user first
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Use centralized access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      // Admins see all metrics, others see their own or department's
+      let assignedTo: string | undefined;
+      let assignedToIds: string[] | undefined;
+      
+      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
+        if (accessControl.allowedUserIds.length === 1) {
+          assignedTo = currentUser.id;
+        } else {
+          assignedToIds = accessControl.allowedUserIds;
+        }
+      }
+      
+      const metrics = await storage.getDevelopmentDashboardMetrics(assignedTo, assignedToIds);
       res.json(metrics);
     } catch (error) {
       console.error("Error fetching development dashboard:", error);
@@ -9085,8 +9102,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/development/tasks", isAuthenticated, async (req: any, res) => {
     try {
       const { status, sourceType, sourceId, priority, isOverdue } = req.query;
-      const userId = req.user?.id;
-      const role = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      
+      // Fetch database user first - required for proper ID resolution
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Use the database user ID (not auth ID) for access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       const filters: any = {};
       if (status) filters.status = status;
@@ -9094,9 +9119,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (priority) filters.priority = priority;
       if (isOverdue) filters.isOverdue = isOverdue === 'true';
       
-      // Non-admins can only see their own tasks
-      if (role !== 'admin' && role !== 'superadmin') {
-        filters.assignedTo = userId;
+      // Apply access control - non-admins can only see their own tasks or department tasks
+      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
+        if (accessControl.allowedUserIds.length === 1) {
+          filters.assignedTo = currentUser.id;
+        } else {
+          filters.assignedToIds = accessControl.allowedUserIds;
+        }
       }
       
       let tasks = await storage.getDevelopmentTasks(filters);
@@ -10885,32 +10914,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================== HR FEEDBACK MANAGEMENT ==================
 
   // Get HR Feedback stats - summary of closed tickets feedback status
-  app.get("/api/hr/feedback/stats", isAuthenticated, async (req, res) => {
+  // Restricted to users with HR feedback permission
+  app.get("/api/hr/feedback/stats", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      const { and, or, isNull } = await import('drizzle-orm');
+      const authId = req.user?.claims?.sub || req.user?.id;
       
-      // Get counts for all ticket status
-      const stats = await db.select({
-        totalOpen: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'open')`,
-        totalInProgress: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'in_progress')`,
-        totalPendingCustomer: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'pending_customer')`,
-        totalEscalated: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'escalated')`,
-        totalClosed: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed')`,
-        totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'resolved')`,
-        closedWithFeedback: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed' AND ${tickets.id} IN (SELECT ticket_id FROM feedback))`,
-        closedWithoutFeedback: sql<number>`COUNT(*) FILTER (WHERE ${tickets.status} = 'closed' AND ${tickets.id} NOT IN (SELECT ticket_id FROM feedback))`,
-      }).from(tickets);
+      // Fetch database user for access control
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
-      res.json(stats[0] || {
-        totalOpen: 0,
-        totalInProgress: 0,
-        totalPendingCustomer: 0,
-        totalEscalated: 0,
-        totalClosed: 0,
-        totalResolved: 0,
+      // Use centralized access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      // Get all tickets and filter based on access control
+      const allTickets = await storage.getTickets({});
+      const filteredTickets = accessControl.hasFullAccess 
+        ? allTickets 
+        : allTickets.filter(t => t.assignedEngineerId && accessControl.allowedUserIds?.includes(t.assignedEngineerId));
+      
+      // Calculate stats from filtered tickets
+      const stats = {
+        totalOpen: filteredTickets.filter(t => t.status === 'open').length,
+        totalInProgress: filteredTickets.filter(t => t.status === 'in_progress').length,
+        totalPendingCustomer: filteredTickets.filter(t => t.status === 'pending_customer').length,
+        totalEscalated: filteredTickets.filter(t => t.status === 'escalated').length,
+        totalClosed: filteredTickets.filter(t => t.status === 'closed').length,
+        totalResolved: filteredTickets.filter(t => t.status === 'resolved').length,
         closedWithFeedback: 0,
         closedWithoutFeedback: 0,
-      });
+      };
+      
+      // Get feedback to check which closed tickets have feedback
+      const closedTicketIds = filteredTickets.filter(t => t.status === 'closed').map(t => t.id);
+      if (closedTicketIds.length > 0) {
+        const allFeedback = await db.select().from(feedback);
+        const ticketsWithFeedback = new Set(allFeedback.map(f => f.ticketId));
+        stats.closedWithFeedback = closedTicketIds.filter(id => ticketsWithFeedback.has(id)).length;
+        stats.closedWithoutFeedback = closedTicketIds.filter(id => !ticketsWithFeedback.has(id)).length;
+      }
+      
+      res.json(stats);
     } catch (error) {
       console.error("Error fetching HR feedback stats:", error);
       res.status(500).json({ message: "Failed to fetch feedback stats" });

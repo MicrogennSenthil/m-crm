@@ -469,6 +469,7 @@ export interface IStorage {
   getDevelopmentTasks(filters?: { 
     status?: string; 
     assignedTo?: string;
+    assignedToIds?: string[];
     sourceType?: string;
     priority?: string;
     isOverdue?: boolean;
@@ -494,7 +495,7 @@ export interface IStorage {
   createDevelopmentTaskComment(comment: InsertDevelopmentTaskComment): Promise<DevelopmentTaskComment>;
 
   // Development Dashboard metrics
-  getDevelopmentDashboardMetrics(assignedTo?: string): Promise<{
+  getDevelopmentDashboardMetrics(assignedTo?: string, assignedToIds?: string[]): Promise<{
     totalTasks: number;
     pendingTasks: number;
     inProgressTasks: number;
@@ -3242,6 +3243,7 @@ export class DatabaseStorage implements IStorage {
   async getDevelopmentTasks(filters?: { 
     status?: string; 
     assignedTo?: string;
+    assignedToIds?: string[];
     sourceType?: string;
     priority?: string;
     isOverdue?: boolean;
@@ -3254,7 +3256,10 @@ export class DatabaseStorage implements IStorage {
     if (filters?.status) {
       conditions.push(eq(developmentTasks.status, filters.status));
     }
-    if (filters?.assignedTo) {
+    // Support multi-user filtering for department managers
+    if (filters?.assignedToIds && filters.assignedToIds.length > 0) {
+      conditions.push(inArray(developmentTasks.assignedTo, filters.assignedToIds));
+    } else if (filters?.assignedTo) {
       conditions.push(eq(developmentTasks.assignedTo, filters.assignedTo));
     }
     if (filters?.sourceType) {
@@ -3376,7 +3381,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Development Dashboard metrics
-  async getDevelopmentDashboardMetrics(assignedTo?: string): Promise<{
+  async getDevelopmentDashboardMetrics(assignedTo?: string, assignedToIds?: string[]): Promise<{
     totalTasks: number;
     pendingTasks: number;
     inProgressTasks: number;
@@ -3393,7 +3398,14 @@ export class DatabaseStorage implements IStorage {
     taskModuleTasks: number;
     manualTasks: number;
   }> {
-    const conditions = assignedTo ? [eq(developmentTasks.assignedTo, assignedTo)] : [];
+    const conditions: any[] = [];
+    
+    // Support multi-user filtering for department managers
+    if (assignedToIds && assignedToIds.length > 0) {
+      conditions.push(inArray(developmentTasks.assignedTo, assignedToIds));
+    } else if (assignedTo) {
+      conditions.push(eq(developmentTasks.assignedTo, assignedTo));
+    }
     
     const allTasks = await db
       .select()
