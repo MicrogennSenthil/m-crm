@@ -64,6 +64,7 @@ export default function Sales() {
     const saved = localStorage.getItem("sales-layout");
     return (saved as LayoutType) || "kanban";
   });
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleLayoutChange = (newLayout: LayoutType) => {
@@ -307,6 +308,53 @@ export default function Sales() {
         </Button>
       </div>
 
+      {/* Stage Filter Buttons - shown in compact and list views */}
+      {(layout === "compact" || layout === "list") && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={selectedStage === null ? "default" : "outline"}
+            size="sm"
+            onClick={() => setSelectedStage(null)}
+            className="min-h-[40px]"
+            data-testid="button-stage-all"
+          >
+            <span>All</span>
+            <Badge variant="secondary" className="ml-2">
+              {leads?.length || 0}
+            </Badge>
+            <Badge variant="outline" className="ml-1 text-green-600 border-green-300">
+              ₹{formatCompactCurrency(leads?.reduce((sum, l) => sum + (l.estimatedValue || 0), 0) || 0)}
+            </Badge>
+          </Button>
+          {STAGES.map((stage) => {
+            const stageLeads = getLeadsByStage(stage.id);
+            const stageValue = getStageTotalValue(stage.id);
+            return (
+              <Button
+                key={stage.id}
+                variant={selectedStage === stage.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedStage(selectedStage === stage.id ? null : stage.id)}
+                className="min-h-[40px]"
+                data-testid={`button-stage-${stage.id}`}
+              >
+                <div className={`h-2.5 w-2.5 rounded-full mr-2 ${stage.color}`} />
+                <span className="hidden sm:inline">{stage.title}</span>
+                <span className="sm:hidden">{stage.title.split(' ')[0]}</span>
+                <Badge variant="secondary" className="ml-2">
+                  {stageLeads.length}
+                </Badge>
+                {stageValue > 0 && (
+                  <Badge variant="outline" className="ml-1 text-green-600 border-green-300">
+                    ₹{formatCompactCurrency(stageValue)}
+                  </Badge>
+                )}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Kanban Board - Original horizontal layout */}
       {layout === "kanban" && (
         <div className="grid grid-cols-6 gap-2 sm:gap-3 pb-4 overflow-x-auto">
@@ -537,8 +585,8 @@ export default function Sales() {
             </div>
           )}
 
-          {/* Lead Stages */}
-          {STAGES.map((stage) => {
+          {/* Lead Stages - filtered by selectedStage */}
+          {STAGES.filter(stage => selectedStage === null || selectedStage === stage.id).map((stage) => {
             const stageLeads = getLeadsByStage(stage.id);
             if (stageLeads.length === 0) return null;
             return (
@@ -638,8 +686,8 @@ export default function Sales() {
             </Card>
           )}
 
-          {/* Lead Stages as Sections */}
-          {STAGES.map((stage) => {
+          {/* Lead Stages as Sections - filtered by selectedStage */}
+          {STAGES.filter(stage => selectedStage === null || selectedStage === stage.id).map((stage) => {
             const stageLeads = getLeadsByStage(stage.id);
             if (stageLeads.length === 0) return null;
             return (
