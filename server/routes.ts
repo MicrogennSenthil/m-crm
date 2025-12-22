@@ -2269,13 +2269,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =============================================
 
   // Lead routes
-  app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
+  app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
       const { stage, salesExecutiveId, limit } = req.query;
-      let leadsList = await storage.getLeads({
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(currentUserId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Determine access level:
+      // 1. Super admin or admin: see all leads (and can use salesExecutiveId filter freely)
+      // 2. Department manager: see leads from all users in their department
+      // 3. Regular user: see only their own leads
+      
+      const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL;
+      const isAdminRole = currentUser.role === "admin";
+      
+      let allowedUserIds: string[] | undefined;
+      
+      if (!isSuperAdmin && !isAdminRole) {
+        // Check if user is a department manager
+        const departments = await storage.getDepartments();
+        const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+        
+        if (managedDepartments.length > 0) {
+          // User is a department manager - get all users in their departments
+          const departmentUserIds: string[] = [currentUserId];
+          for (const dept of managedDepartments) {
+            const deptUsers = await storage.getUsersByDepartment(dept.id);
+            departmentUserIds.push(...deptUsers.map(u => u.id));
+          }
+          allowedUserIds = Array.from(new Set(departmentUserIds)); // Remove duplicates
+        } else {
+          // Regular user - only see their own leads
+          allowedUserIds = [currentUserId];
+        }
+      }
+      
+      // Build filters - enforce access control
+      const filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] } = {
         stage: stage as string,
-        salesExecutiveId: salesExecutiveId as string,
-      });
+      };
+      
+      if (isSuperAdmin || isAdminRole) {
+        // Admins can filter by any salesExecutiveId
+        if (salesExecutiveId) {
+          filters.salesExecutiveId = salesExecutiveId as string;
+        }
+      } else if (allowedUserIds) {
+        // Non-admins: if salesExecutiveId is provided, validate it's in their allowed list
+        if (salesExecutiveId) {
+          const requestedId = salesExecutiveId as string;
+          if (allowedUserIds.includes(requestedId)) {
+            filters.salesExecutiveId = requestedId;
+          } else {
+            // Ignore invalid salesExecutiveId - just return their allowed leads
+            filters.salesExecutiveIds = allowedUserIds;
+          }
+        } else {
+          // No specific filter - return all allowed leads
+          filters.salesExecutiveIds = allowedUserIds;
+        }
+      }
+      
+      let leadsList = await storage.getLeads(filters);
       
       if (limit) {
         leadsList = leadsList.slice(0, parseInt(limit as string));
@@ -2288,12 +2347,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/leads/:id", isAuthenticated, requirePermission('leads', 'view'), async (req, res) => {
+  app.get("/api/leads/:id", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
       const lead = await storage.getLead(req.params.id);
       if (!lead) {
         return res.status(404).json({ message: "Lead not found" });
       }
+      
+      // Check access control
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(currentUserId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL;
+      const isAdminRole = currentUser.role === "admin";
+      
+      // Super admin and admin can access all leads
+      if (!isSuperAdmin && !isAdminRole) {
+        // Check if lead is assigned to the user
+        if (lead.salesExecutiveId !== currentUserId) {
+          // Check if user is a department manager and the lead's assignee is in their department
+          const departments = await storage.getDepartments();
+          const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+          
+          let hasAccess = false;
+          if (managedDepartments.length > 0 && lead.salesExecutiveId) {
+            const leadAssignee = await storage.getUser(lead.salesExecutiveId);
+            if (leadAssignee && leadAssignee.departmentId) {
+              for (const dept of managedDepartments) {
+                if (leadAssignee.departmentId === dept.id) {
+                  hasAccess = true;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (!hasAccess) {
+            return res.status(403).json({ message: "You do not have access to this lead" });
+          }
+        }
+      }
+      
       res.json(lead);
     } catch (error) {
       console.error("Error fetching lead:", error);
@@ -3231,9 +3329,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to check if user has access to a lead
+  async function userHasLeadAccess(userId: string, leadId: string): Promise<boolean> {
+    const lead = await storage.getLead(leadId);
+    if (!lead) return false;
+    
+    const user = await storage.getUser(userId);
+    if (!user) return false;
+    
+    // Super admin or admin can access all leads
+    if (user.email === SUPER_ADMIN_EMAIL || user.role === "admin") {
+      return true;
+    }
+    
+    // Check if lead is assigned to the user
+    if (lead.salesExecutiveId === userId) {
+      return true;
+    }
+    
+    // Check if user is a department manager and the lead's assignee is in their department
+    const departments = await storage.getDepartments();
+    const managedDepartments = departments.filter(d => d.managerId === userId);
+    
+    if (managedDepartments.length > 0 && lead.salesExecutiveId) {
+      const leadAssignee = await storage.getUser(lead.salesExecutiveId);
+      if (leadAssignee && leadAssignee.departmentId) {
+        for (const dept of managedDepartments) {
+          if (leadAssignee.departmentId === dept.id) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+
   // Follow-up routes
-  app.get("/api/leads/:id/follow-ups", isAuthenticated, async (req, res) => {
+  app.get("/api/leads/:id/follow-ups", isAuthenticated, async (req: any, res) => {
     try {
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      
+      // Check if user has access to this lead
+      const hasAccess = await userHasLeadAccess(currentUserId, req.params.id);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You do not have access to this lead's follow-ups" });
+      }
+      
       const followUpsList = await storage.getFollowUpsByLead(req.params.id);
       res.json(followUpsList);
     } catch (error) {
@@ -3244,6 +3386,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leads/:id/follow-ups", isAuthenticated, async (req: any, res) => {
     try {
+      const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      
+      // Check if user has access to this lead
+      const hasAccess = await userHasLeadAccess(currentUserId, req.params.id);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You do not have access to this lead" });
+      }
+      
       // Convert date string to Date object
       const followUpDate = req.body.followUpDate ? new Date(req.body.followUpDate) : undefined;
       const validatedData = insertFollowUpSchema.parse({
