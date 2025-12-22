@@ -142,7 +142,7 @@ import {
   type InsertDevelopmentTaskComment,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, sql, isNotNull } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -156,6 +156,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getUsersByRole(role: string): Promise<User[]>;
+  getUsersByDepartment(departmentId: string): Promise<User[]>;
   getSupportAssignableUsers(): Promise<User[]>;
   getUserAssignments(userId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number; total: number }>;
   reassignUserItems(fromUserId: string, toUserId: string): Promise<{ leads: number; tasks: number; tickets: number; projects: number }>;
@@ -190,7 +191,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
 
   // Lead operations
-  getLeads(filters?: { stage?: string; salesExecutiveId?: string }): Promise<Lead[]>;
+  getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
   getLead(id: string): Promise<Lead | undefined>;
   createLead(lead: InsertLead): Promise<Lead>;
   updateLead(id: string, data: Partial<InsertLead>): Promise<Lead>;
@@ -555,6 +556,15 @@ export class DatabaseStorage implements IStorage {
         eq(users.role, role),
         eq(users.isActive, true),
         isNotNull(users.approvedAt)
+      )
+    );
+  }
+
+  async getUsersByDepartment(departmentId: string): Promise<User[]> {
+    return await db.select().from(users).where(
+      and(
+        eq(users.departmentId, departmentId),
+        eq(users.isActive, true)
       )
     );
   }
@@ -930,18 +940,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Lead operations
-  async getLeads(filters?: { stage?: string; salesExecutiveId?: string }): Promise<Lead[]> {
-    let query = db.select().from(leads).orderBy(desc(leads.createdAt));
+  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]> {
+    const conditions: any[] = [];
     
     if (filters?.stage) {
-      query = db.select().from(leads).where(eq(leads.stage, filters.stage)).orderBy(desc(leads.createdAt)) as any;
+      conditions.push(eq(leads.stage, filters.stage));
     }
     
     if (filters?.salesExecutiveId) {
-      query = db.select().from(leads).where(eq(leads.salesExecutiveId, filters.salesExecutiveId)).orderBy(desc(leads.createdAt)) as any;
+      conditions.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
     }
     
-    return await query;
+    if (filters?.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
+      conditions.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
+    }
+    
+    if (conditions.length > 0) {
+      return await db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt));
+    }
+    
+    return await db.select().from(leads).orderBy(desc(leads.createdAt));
   }
 
   async getLead(id: string): Promise<Lead | undefined> {
