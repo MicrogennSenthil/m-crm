@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, Columns, LayoutGrid, List, Filter } from "lucide-react";
+import { Plus, Search, Columns3, LayoutGrid, List, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
@@ -36,23 +36,24 @@ const STATUS_BADGES: Record<string, { variant: "secondary" | "default" | "outlin
   completed: { variant: "default", label: "Completed", className: "bg-green-600" },
 };
 
-type LayoutType = "kanban" | "grid" | "list";
+type LayoutType = "kanban" | "card" | "table";
 
 export default function Implementations() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [layout, setLayout] = useState<LayoutType>(() => {
-    const saved = localStorage.getItem("implementations-layout");
-    return (saved as LayoutType) || "grid";
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("implementations-layout") as LayoutType) || "card";
+    }
+    return "card";
   });
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(9);
 
-  const handleLayoutChange = (newLayout: LayoutType) => {
-    setLayout(newLayout);
-    localStorage.setItem("implementations-layout", newLayout);
-  };
+  useEffect(() => {
+    localStorage.setItem("implementations-layout", layout);
+  }, [layout]);
 
   const { data: projects, isLoading } = useQuery<(Project & { engineers?: User[] })[]>({
     queryKey: ["/api/projects"],
@@ -168,37 +169,37 @@ export default function Implementations() {
             variant={layout === "kanban" ? "secondary" : "ghost"} 
             size="icon" 
             className="min-h-[44px] min-w-[44px] rounded-r-none"
-            onClick={() => handleLayoutChange("kanban")}
+            onClick={() => setLayout("kanban")}
             title="Kanban View"
             data-testid="button-layout-kanban"
           >
-            <Columns className="h-4 w-4" />
+            <Columns3 className="h-4 w-4" />
           </Button>
           <Button 
-            variant={layout === "grid" ? "secondary" : "ghost"} 
+            variant={layout === "card" ? "secondary" : "ghost"} 
             size="icon" 
             className="min-h-[44px] min-w-[44px] rounded-none border-x"
-            onClick={() => handleLayoutChange("grid")}
-            title="Grid View"
-            data-testid="button-layout-grid"
+            onClick={() => setLayout("card")}
+            title="Card View"
+            data-testid="button-layout-card"
           >
             <LayoutGrid className="h-4 w-4" />
           </Button>
           <Button 
-            variant={layout === "list" ? "secondary" : "ghost"} 
+            variant={layout === "table" ? "secondary" : "ghost"} 
             size="icon" 
             className="min-h-[44px] min-w-[44px] rounded-l-none"
-            onClick={() => handleLayoutChange("list")}
-            title="List View"
-            data-testid="button-layout-list"
+            onClick={() => setLayout("table")}
+            title="Table View"
+            data-testid="button-layout-table"
           >
             <List className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Stage Filter Buttons - for grid and list views */}
-      {(layout === "grid" || layout === "list") && (
+      {/* Stage Filter Buttons - for card and table views */}
+      {(layout === "card" || layout === "table") && (
         <div className="flex flex-wrap gap-2">
           <Button
             variant={selectedStage === null ? "default" : "outline"}
@@ -266,8 +267,8 @@ export default function Implementations() {
         </div>
       )}
 
-      {/* Grid View */}
-      {layout === "grid" && (
+      {/* Card View */}
+      {layout === "card" && (
         <div className="space-y-6">
           {STAGES.filter(stage => selectedStage === null || selectedStage === stage.id).map((stage) => {
             const stageProjects = getProjectsByStage(stage.id);
@@ -299,8 +300,8 @@ export default function Implementations() {
         </div>
       )}
 
-      {/* List View */}
-      {layout === "list" && (
+      {/* Table View */}
+      {layout === "table" && (
         <div className="space-y-4">
           {STAGES.filter(stage => selectedStage === null || selectedStage === stage.id).map((stage) => {
             const stageProjects = getProjectsByStage(stage.id);

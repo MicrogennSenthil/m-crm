@@ -70,7 +70,16 @@ import {
   UserX,
   ThumbsUp,
   ThumbsDown,
+  LayoutGrid,
+  Columns3,
+  List,
 } from "lucide-react";
+
+const URGENCY_STAGES = [
+  { id: "urgent", title: "Urgent (7+ days)", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+  { id: "warning", title: "Warning (4-7 days)", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" },
+  { id: "normal", title: "Normal (0-3 days)", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
+];
 
 interface FeedbackStats {
   totalOpen: number;
@@ -190,6 +199,17 @@ export default function HRFeedback() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
   const [showReopenDialog, setShowReopenDialog] = useState(false);
+  
+  const [layout, setLayout] = useState<"kanban" | "card" | "table">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("hr-feedback-layout") as "kanban" | "card" | "table") || "table";
+    }
+    return "table";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("hr-feedback-layout", layout);
+  }, [layout]);
   
   const [feedbackRating, setFeedbackRating] = useState<number>(0);
   const [feedbackComments, setFeedbackComments] = useState("");
@@ -795,6 +815,36 @@ export default function HRFeedback() {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
+            
+            <div className="flex gap-1 border rounded-md p-1">
+              <Button
+                variant={layout === "kanban" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setLayout("kanban")}
+                title="Kanban View"
+                data-testid="button-layout-kanban"
+              >
+                <Columns3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={layout === "card" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setLayout("card")}
+                title="Card View"
+                data-testid="button-layout-card"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={layout === "table" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setLayout("table")}
+                title="Table View"
+                data-testid="button-layout-table"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -815,26 +865,132 @@ export default function HRFeedback() {
         </TabsList>
 
         <TabsContent value="pending" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-orange-500" />
-                Closed Tickets Awaiting Feedback
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pendingLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 w-full" />
-                  ))}
-                </div>
-              ) : !pendingTickets?.length ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                  <p>All closed tickets have received feedback!</p>
-                </div>
-              ) : (
+          {pendingLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : !pendingTickets?.length ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                <p className="text-muted-foreground">All closed tickets have received feedback!</p>
+              </CardContent>
+            </Card>
+          ) : layout === "kanban" ? (
+            <div className="flex gap-4 overflow-x-auto pb-4">
+              {URGENCY_STAGES.map((stage) => {
+                const stageTickets = pendingTickets.filter((t) => {
+                  if (stage.id === "urgent") return t.daysSinceClosed >= 7;
+                  if (stage.id === "warning") return t.daysSinceClosed >= 4 && t.daysSinceClosed < 7;
+                  return t.daysSinceClosed < 4;
+                });
+                return (
+                  <div key={stage.id} className="flex-shrink-0 w-80">
+                    <div className="flex items-center justify-between mb-3 px-2">
+                      <Badge className={stage.color}>{stage.title}</Badge>
+                      <span className="text-sm text-muted-foreground">{stageTickets.length}</span>
+                    </div>
+                    <div className="space-y-3 min-h-[300px] bg-muted/30 rounded-lg p-2">
+                      {stageTickets.length === 0 ? (
+                        <div className="text-center text-sm text-muted-foreground py-8">No tickets</div>
+                      ) : (
+                        stageTickets.map((ticket) => (
+                          <Card key={ticket.id} className="hover-elevate cursor-pointer" data-testid={`card-ticket-${ticket.id}`}>
+                            <CardContent className="p-3">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <span className="font-medium text-sm">{ticket.ticketNumber}</span>
+                                {getDaysBadge(ticket.daysSinceClosed)}
+                              </div>
+                              <p className="text-sm font-medium mb-1">{ticket.customerName}</p>
+                              <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{ticket.issueSummary}</p>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {getPriorityBadge(ticket.priority)}
+                              </div>
+                              {ticket.assignedEngineerName && (
+                                <p className="text-xs text-muted-foreground mb-2">
+                                  <User className="h-3 w-3 inline mr-1" />
+                                  {ticket.assignedEngineerName}
+                                </p>
+                              )}
+                              <div className="flex gap-1 mt-2">
+                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleViewDetail(ticket)}>
+                                  <FileText className="h-3 w-3 mr-1" />
+                                  Detail
+                                </Button>
+                                <Button variant="default" size="sm" className="h-7 text-xs" onClick={() => openFeedbackDialog(ticket)}>
+                                  <Star className="h-3 w-3 mr-1" />
+                                  Feedback
+                                </Button>
+                                <Button variant="outline" size="sm" className="h-7 text-xs text-orange-600 border-orange-300" onClick={() => openReopenDialog(ticket)}>
+                                  <RotateCcw className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : layout === "card" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingTickets.map((ticket) => (
+                <Card key={ticket.id} className="hover-elevate" data-testid={`card-ticket-${ticket.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <span className="font-semibold">{ticket.ticketNumber}</span>
+                      {getDaysBadge(ticket.daysSinceClosed)}
+                    </div>
+                    <h3 className="font-medium mb-1">{ticket.customerName}</h3>
+                    <p className="text-sm text-muted-foreground mb-1">{ticket.customerEmail}</p>
+                    {ticket.customerPhone && (
+                      <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {ticket.customerPhone}
+                      </p>
+                    )}
+                    <p className="text-sm mb-3 line-clamp-2">{ticket.issueSummary}</p>
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {getPriorityBadge(ticket.priority)}
+                    </div>
+                    {ticket.assignedEngineerName && (
+                      <p className="text-sm text-muted-foreground mb-3">
+                        <User className="h-4 w-4 inline mr-1" />
+                        {ticket.assignedEngineerName}
+                      </p>
+                    )}
+                    <div className="text-xs text-muted-foreground mb-3">
+                      Closed: {ticket.closedAt ? format(new Date(ticket.closedAt), "dd/MM/yyyy") : "-"}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetail(ticket)} data-testid={`button-detail-${ticket.id}`}>
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      <Button variant="default" size="sm" onClick={() => openFeedbackDialog(ticket)} data-testid={`button-feedback-${ticket.id}`}>
+                        <Star className="h-4 w-4 mr-1" />
+                        Feedback
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={() => openReopenDialog(ticket)} data-testid={`button-reopen-${ticket.id}`}>
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <XCircle className="h-5 w-5 text-orange-500" />
+                  Closed Tickets Awaiting Feedback
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -927,9 +1083,9 @@ export default function HRFeedback() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">

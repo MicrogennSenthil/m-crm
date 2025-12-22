@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List } from "lucide-react";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,15 +72,16 @@ export default function Support() {
   const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
   const [layout, setLayout] = useState<LayoutType>(() => {
-    const saved = localStorage.getItem("support-layout");
-    return (saved as LayoutType) || "table";
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("support-layout") as LayoutType) || "table";
+    }
+    return "table";
   });
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
-  const handleLayoutChange = (newLayout: LayoutType) => {
-    setLayout(newLayout);
-    localStorage.setItem("support-layout", newLayout);
-  };
+  useEffect(() => {
+    localStorage.setItem("support-layout", layout);
+  }, [layout]);
 
   const getTicketsByStatus = (status: string) => {
     return categoryFilteredTickets?.filter(t => t.status === status) || [];
@@ -249,17 +250,17 @@ export default function Support() {
               variant={layout === "kanban" ? "secondary" : "ghost"} 
               size="icon" 
               className="min-h-[44px] min-w-[44px] rounded-r-none"
-              onClick={() => handleLayoutChange("kanban")}
+              onClick={() => setLayout("kanban")}
               title="Kanban View"
               data-testid="button-layout-kanban"
             >
-              <Columns className="h-4 w-4" />
+              <Columns3 className="h-4 w-4" />
             </Button>
             <Button 
               variant={layout === "card" ? "secondary" : "ghost"} 
               size="icon" 
               className="min-h-[44px] min-w-[44px] rounded-none border-x"
-              onClick={() => handleLayoutChange("card")}
+              onClick={() => setLayout("card")}
               title="Card View"
               data-testid="button-layout-card"
             >
@@ -269,7 +270,7 @@ export default function Support() {
               variant={layout === "table" ? "secondary" : "ghost"} 
               size="icon" 
               className="min-h-[44px] min-w-[44px] rounded-l-none"
-              onClick={() => handleLayoutChange("table")}
+              onClick={() => setLayout("table")}
               title="Table View"
               data-testid="button-layout-table"
             >
