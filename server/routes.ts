@@ -11044,39 +11044,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================== HR FEEDBACK MANAGEMENT ==================
 
   // Get HR Feedback stats - summary of closed tickets feedback status
-  // Restricted to users with HR feedback permission
+  // HR Feedback grants full access to all users with hr_feedback permission (no department filtering)
   // Optimized: Uses database-level aggregation for better performance
   app.get("/api/hr/feedback/stats", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      const authId = req.user?.claims?.sub || req.user?.id;
-      
-      // Fetch database user for access control
-      const currentUser = await storage.getUser(authId);
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Use centralized access control
-      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
-      
-      // Build access control condition as raw SQL
-      let accessConditionSql = '';
-      if (!accessControl.hasFullAccess && accessControl.allowedUserIds && accessControl.allowedUserIds.length > 0) {
-        const escapedIds = accessControl.allowedUserIds.map(id => `'${id}'`).join(',');
-        accessConditionSql = `AND assigned_engineer_id IN (${escapedIds})`;
-      }
-      
-      // Use a single efficient raw SQL query with conditional aggregation
+      // HR Feedback shows ALL tickets - no department filtering needed
+      // The purpose is for HR to see the complete picture of customer feedback
       const result = await db.execute(sql`
         SELECT 
-          COUNT(*) FILTER (WHERE status = 'open' ${sql.raw(accessConditionSql)}) as "totalOpen",
-          COUNT(*) FILTER (WHERE status = 'in_progress' ${sql.raw(accessConditionSql)}) as "totalInProgress",
-          COUNT(*) FILTER (WHERE status = 'pending_customer' ${sql.raw(accessConditionSql)}) as "totalPendingCustomer",
-          COUNT(*) FILTER (WHERE status = 'escalated' ${sql.raw(accessConditionSql)}) as "totalEscalated",
-          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)}) as "totalClosed",
-          COUNT(*) FILTER (WHERE status = 'resolved' ${sql.raw(accessConditionSql)}) as "totalResolved",
-          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)} AND id IN (SELECT ticket_id FROM feedback)) as "closedWithFeedback",
-          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)} AND id NOT IN (SELECT ticket_id FROM feedback)) as "closedWithoutFeedback"
+          COUNT(*) FILTER (WHERE status = 'open') as "totalOpen",
+          COUNT(*) FILTER (WHERE status = 'in_progress') as "totalInProgress",
+          COUNT(*) FILTER (WHERE status = 'pending_customer') as "totalPendingCustomer",
+          COUNT(*) FILTER (WHERE status = 'escalated') as "totalEscalated",
+          COUNT(*) FILTER (WHERE status = 'closed') as "totalClosed",
+          COUNT(*) FILTER (WHERE status = 'resolved') as "totalResolved",
+          COUNT(*) FILTER (WHERE status = 'closed' AND id IN (SELECT ticket_id FROM feedback)) as "closedWithFeedback",
+          COUNT(*) FILTER (WHERE status = 'closed' AND id NOT IN (SELECT ticket_id FROM feedback)) as "closedWithoutFeedback"
         FROM tickets
       `);
       
@@ -11100,32 +11083,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get closed tickets without feedback for HR follow-up
-  // Uses centralized access control for department-based filtering
+  // HR Feedback grants full access to all users with hr_feedback permission (no department filtering)
+  // The purpose is for HR to call ALL customers regardless of which engineer handled the ticket
   app.get("/api/hr/feedback/pending", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      const authId = req.user?.claims?.sub || req.user?.id;
-      
-      // Fetch database user for access control
-      const currentUser = await storage.getUser(authId);
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Use centralized access control
-      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
-      
       const { search, dateFrom, dateTo, priority } = req.query;
-      const { and, gte, lte, or, inArray } = await import('drizzle-orm');
+      const { and, gte, lte, or } = await import('drizzle-orm');
       
+      // Show ALL closed tickets without feedback - HR needs access to all for customer calls
       const conditions: any[] = [
         eq(tickets.status, 'closed'),
         sql`${tickets.id} NOT IN (SELECT ticket_id FROM feedback)`,
       ];
-      
-      // Apply access control filter
-      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
-        conditions.push(inArray(tickets.assignedEngineerId, accessControl.allowedUserIds));
-      }
       
       // Date range filter
       if (dateFrom) {
