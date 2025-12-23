@@ -11048,32 +11048,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get closed tickets WITH feedback (for comparison/tracking)
-  // Uses centralized access control for department-based filtering
+  // Shows ALL tickets with feedback regardless of userId - for HR to review all completed calls
   app.get("/api/hr/feedback/completed", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      const authId = req.user?.claims?.sub || req.user?.id;
-      
-      // Fetch database user for access control
-      const currentUser = await storage.getUser(authId);
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Use centralized access control
-      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
-      
       const { search, dateFrom, dateTo } = req.query;
-      const { and, gte, lte, or, inArray } = await import('drizzle-orm');
+      const { and, gte, lte, or } = await import('drizzle-orm');
       
+      // Show ALL tickets with feedback - no user/department filtering for completed calls
       const conditions: any[] = [
         eq(tickets.status, 'closed'),
         sql`${tickets.id} IN (SELECT ticket_id FROM feedback)`,
       ];
-      
-      // Apply access control filter
-      if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
-        conditions.push(inArray(tickets.assignedEngineerId, accessControl.allowedUserIds));
-      }
       
       // Date range filter
       if (dateFrom) {
