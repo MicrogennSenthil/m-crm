@@ -11085,10 +11085,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get closed tickets without feedback for HR follow-up
   // HR Feedback grants full access to all users with hr_feedback permission (no department filtering)
   // The purpose is for HR to call ALL customers regardless of which engineer handled the ticket
+  // Supports pagination with page/limit query params
   app.get("/api/hr/feedback/pending", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      const { search, dateFrom, dateTo, priority } = req.query;
+      const { search, dateFrom, dateTo, priority, page = '1', limit = '20' } = req.query;
       const { and, gte, lte, or } = await import('drizzle-orm');
+      
+      const pageNum = Math.max(1, parseInt(page as string) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+      const offset = (pageNum - 1) * limitNum;
       
       // Show ALL closed tickets without feedback - HR needs access to all for customer calls
       const conditions: any[] = [
@@ -11123,6 +11128,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ));
       }
       
+      // Get total count for pagination
+      const countResult = await db.select({
+        count: sql<number>`COUNT(*)::int`,
+      })
+        .from(tickets)
+        .where(and(...conditions));
+      
+      const totalCount = countResult[0]?.count || 0;
+      const totalPages = Math.ceil(totalCount / limitNum);
+      
       const pendingTickets = await db.select({
         id: tickets.id,
         ticketNumber: tickets.ticketNumber,
@@ -11145,9 +11160,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(tickets)
         .where(and(...conditions))
         .orderBy(sql`${tickets.closedAt} DESC`)
-        .limit(100); // Limit for performance - paginate if needed
+        .limit(limitNum)
+        .offset(offset);
       
-      res.json(pendingTickets);
+      res.json({
+        data: pendingTickets,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          totalCount,
+          totalPages,
+          hasMore: pageNum < totalPages,
+        }
+      });
     } catch (error) {
       console.error("Error fetching pending feedback tickets:", error);
       res.status(500).json({ message: "Failed to fetch pending feedback tickets" });

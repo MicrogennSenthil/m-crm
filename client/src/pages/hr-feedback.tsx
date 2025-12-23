@@ -73,6 +73,10 @@ import {
   LayoutGrid,
   Columns3,
   List,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 const URGENCY_STAGES = [
@@ -90,6 +94,19 @@ interface FeedbackStats {
   totalResolved: number;
   closedWithFeedback: number;
   closedWithoutFeedback: number;
+}
+
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationInfo;
 }
 
 interface PendingTicket {
@@ -232,16 +249,28 @@ export default function HRFeedback() {
   const [showTaskHistoryDialog, setShowTaskHistoryDialog] = useState(false);
   const [followupDescription, setFollowupDescription] = useState("");
   const [nextFollowupDate, setNextFollowupDate] = useState("");
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, priorityFilter]);
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<FeedbackStats>({
     queryKey: ["/api/hr/feedback/stats"],
   });
 
-  const { data: pendingTickets, isLoading: pendingLoading, refetch: refetchPending } = useQuery<PendingTicket[]>({
-    queryKey: ["/api/hr/feedback/pending", { search: searchQuery, priority: priorityFilter !== 'all' ? priorityFilter : '' }],
+  const { data: pendingResponse, isLoading: pendingLoading, refetch: refetchPending } = useQuery<PaginatedResponse<PendingTicket>>({
+    queryKey: ["/api/hr/feedback/pending", { search: searchQuery, priority: priorityFilter !== 'all' ? priorityFilter : '', page: currentPage, limit: pageSize }],
     enabled: activeTab === "pending",
     staleTime: 0, // Always refetch
   });
+  
+  const pendingTickets = pendingResponse?.data || [];
+  const pagination = pendingResponse?.pagination;
 
   const { data: completedTickets, isLoading: completedLoading, refetch: refetchCompleted } = useQuery<CompletedTicket[]>({
     queryKey: ["/api/hr/feedback/completed", { search: searchQuery }],
@@ -1083,6 +1112,88 @@ export default function HRFeedback() {
                     </TableBody>
                   </Table>
                 </div>
+                
+                {/* Pagination Controls */}
+                {pagination && pagination.totalPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>
+                        Showing {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.totalCount)} of {pagination.totalCount} tickets
+                      </span>
+                      <Select value={pageSize.toString()} onValueChange={(value) => { setPageSize(parseInt(value)); setCurrentPage(1); }}>
+                        <SelectTrigger className="w-[80px] h-8" data-testid="select-page-size">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span>per page</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={pagination.page <= 1}
+                        data-testid="button-first-page"
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={pagination.page <= 1}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      
+                      <div className="flex items-center gap-1 mx-2">
+                        <span className="text-sm">Page</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={pagination.totalPages}
+                          value={currentPage}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (val >= 1 && val <= pagination.totalPages) {
+                              setCurrentPage(val);
+                            }
+                          }}
+                          className="w-16 h-8 text-center"
+                          data-testid="input-page-number"
+                        />
+                        <span className="text-sm">of {pagination.totalPages}</span>
+                      </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                        disabled={!pagination.hasMore}
+                        data-testid="button-next-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setCurrentPage(pagination.totalPages)}
+                        disabled={!pagination.hasMore}
+                        data-testid="button-last-page"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
