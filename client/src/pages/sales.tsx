@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
 import { LeadImportDialog } from "@/components/lead-import-dialog";
 import { GoogleSheetsImportDialog } from "@/components/google-sheets-import-dialog";
+import { WebhookAuthSettingsDialog } from "@/components/webhook-auth-settings";
 import { RescheduleDemoDialog } from "@/components/reschedule-demo-dialog";
 import type { Lead, FollowUp } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -60,6 +61,7 @@ export default function Sales() {
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [googleSheetsImportOpen, setGoogleSheetsImportOpen] = useState(false);
+  const [webhookSettingsOpen, setWebhookSettingsOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [rescheduleLeadId, setRescheduleLeadId] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>(() => {
@@ -250,6 +252,16 @@ export default function Sales() {
             <span className="hidden sm:inline">Google Sheets</span>
             <span className="sm:hidden">Sheets</span>
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setWebhookSettingsOpen(true)}
+            data-testid="button-webhook-settings"
+            className="min-h-[44px]"
+          >
+            <Shield className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Webhook Auth</span>
+            <span className="sm:hidden">Webhook</span>
+          </Button>
           <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-lead" className="min-h-[44px]">
@@ -272,6 +284,7 @@ export default function Sales() {
       
       <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <GoogleSheetsImportDialog open={googleSheetsImportOpen} onOpenChange={setGoogleSheetsImportOpen} />
+      <WebhookAuthSettingsDialog open={webhookSettingsOpen} onOpenChange={setWebhookSettingsOpen} />
 
       <div className="flex items-center gap-2 sm:gap-4">
         <div className="relative flex-1">

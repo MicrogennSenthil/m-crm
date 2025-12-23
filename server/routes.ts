@@ -91,7 +91,13 @@ async function validateWebhookAuth(req: any, res: any, next: any) {
     // Decode Base64 credentials
     const base64Credentials = authHeader.slice(6);
     const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-    const [username, password] = credentials.split(":");
+    // Use indexOf to find the first colon - passwords may contain colons
+    const colonIndex = credentials.indexOf(":");
+    if (colonIndex === -1) {
+      return res.status(401).json({ error: "Invalid credentials format" });
+    }
+    const username = credentials.substring(0, colonIndex);
+    const password = credentials.substring(colonIndex + 1);
     
     // Validate credentials
     if (username === usernameSetting.settingValue && password === passwordSetting.settingValue) {
