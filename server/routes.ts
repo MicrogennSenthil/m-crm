@@ -11045,6 +11045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get HR Feedback stats - summary of closed tickets feedback status
   // Restricted to users with HR feedback permission
+  // Optimized: Uses database-level aggregation for better performance
   app.get("/api/hr/feedback/stats", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
       const authId = req.user?.claims?.sub || req.user?.id;
@@ -11058,32 +11059,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use centralized access control
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
-      // Get all tickets and filter based on access control
-      const allTickets = await storage.getTickets({});
-      const filteredTickets = accessControl.hasFullAccess 
-        ? allTickets 
-        : allTickets.filter(t => t.assignedEngineerId && accessControl.allowedUserIds?.includes(t.assignedEngineerId));
-      
-      // Calculate stats from filtered tickets
-      const stats = {
-        totalOpen: filteredTickets.filter(t => t.status === 'open').length,
-        totalInProgress: filteredTickets.filter(t => t.status === 'in_progress').length,
-        totalPendingCustomer: filteredTickets.filter(t => t.status === 'pending_customer').length,
-        totalEscalated: filteredTickets.filter(t => t.status === 'escalated').length,
-        totalClosed: filteredTickets.filter(t => t.status === 'closed').length,
-        totalResolved: filteredTickets.filter(t => t.status === 'resolved').length,
-        closedWithFeedback: 0,
-        closedWithoutFeedback: 0,
-      };
-      
-      // Get feedback to check which closed tickets have feedback
-      const closedTicketIds = filteredTickets.filter(t => t.status === 'closed').map(t => t.id);
-      if (closedTicketIds.length > 0) {
-        const allFeedback = await db.select().from(feedback);
-        const ticketsWithFeedback = new Set(allFeedback.map(f => f.ticketId));
-        stats.closedWithFeedback = closedTicketIds.filter(id => ticketsWithFeedback.has(id)).length;
-        stats.closedWithoutFeedback = closedTicketIds.filter(id => !ticketsWithFeedback.has(id)).length;
+      // Build access control condition as raw SQL
+      let accessConditionSql = '';
+      if (!accessControl.hasFullAccess && accessControl.allowedUserIds && accessControl.allowedUserIds.length > 0) {
+        const escapedIds = accessControl.allowedUserIds.map(id => `'${id}'`).join(',');
+        accessConditionSql = `AND assigned_engineer_id IN (${escapedIds})`;
       }
+      
+      // Use a single efficient raw SQL query with conditional aggregation
+      const result = await db.execute(sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE status = 'open' ${sql.raw(accessConditionSql)}) as "totalOpen",
+          COUNT(*) FILTER (WHERE status = 'in_progress' ${sql.raw(accessConditionSql)}) as "totalInProgress",
+          COUNT(*) FILTER (WHERE status = 'pending_customer' ${sql.raw(accessConditionSql)}) as "totalPendingCustomer",
+          COUNT(*) FILTER (WHERE status = 'escalated' ${sql.raw(accessConditionSql)}) as "totalEscalated",
+          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)}) as "totalClosed",
+          COUNT(*) FILTER (WHERE status = 'resolved' ${sql.raw(accessConditionSql)}) as "totalResolved",
+          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)} AND id IN (SELECT ticket_id FROM feedback)) as "closedWithFeedback",
+          COUNT(*) FILTER (WHERE status = 'closed' ${sql.raw(accessConditionSql)} AND id NOT IN (SELECT ticket_id FROM feedback)) as "closedWithoutFeedback"
+        FROM tickets
+      `);
+      
+      const row = result.rows[0] as any || {};
+      const stats = {
+        totalOpen: Number(row.totalOpen) || 0,
+        totalInProgress: Number(row.totalInProgress) || 0,
+        totalPendingCustomer: Number(row.totalPendingCustomer) || 0,
+        totalEscalated: Number(row.totalEscalated) || 0,
+        totalClosed: Number(row.totalClosed) || 0,
+        totalResolved: Number(row.totalResolved) || 0,
+        closedWithFeedback: Number(row.closedWithFeedback) || 0,
+        closedWithoutFeedback: Number(row.closedWithoutFeedback) || 0,
+      };
       
       res.json(stats);
     } catch (error) {
@@ -11168,7 +11175,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
         .from(tickets)
         .where(and(...conditions))
-        .orderBy(sql`${tickets.closedAt} DESC`);
+        .orderBy(sql`${tickets.closedAt} DESC`)
+        .limit(100); // Limit for performance - paginate if needed
       
       res.json(pendingTickets);
     } catch (error) {
