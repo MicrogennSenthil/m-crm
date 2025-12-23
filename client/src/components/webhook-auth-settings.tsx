@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Eye, EyeOff, Copy, Check, Link2, AlertCircle } from "lucide-react";
+import { Shield, Eye, EyeOff, Copy, Check, Link2, AlertCircle, HelpCircle, ChevronUp, ExternalLink, ListOrdered } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -31,19 +36,212 @@ interface WebhookAuthSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const WEBHOOK_ENDPOINTS = [
-  { name: "Facebook Lead Ads", path: "/api/webhooks/facebook" },
-  { name: "LinkedIn Lead Gen", path: "/api/webhooks/linkedin" },
-  { name: "Instagram Lead Ads", path: "/api/webhooks/instagram" },
-  { name: "Twitter/X", path: "/api/webhooks/twitter" },
-  { name: "Google Ads", path: "/api/webhooks/google" },
-  { name: "YouTube", path: "/api/webhooks/youtube" },
-  { name: "TikTok", path: "/api/webhooks/tiktok" },
-  { name: "Pinterest", path: "/api/webhooks/pinterest" },
-  { name: "Snapchat", path: "/api/webhooks/snapchat" },
-  { name: "WhatsApp Business", path: "/api/webhooks/whatsapp" },
-  { name: "Microsoft/Bing Ads", path: "/api/webhooks/microsoft" },
-  { name: "Website Forms", path: "/api/webhooks/website" },
+interface WebhookEndpoint {
+  name: string;
+  path: string;
+  icon?: string;
+  steps: string[];
+  hints: string[];
+  docUrl?: string;
+}
+
+const WEBHOOK_ENDPOINTS: WebhookEndpoint[] = [
+  { 
+    name: "Facebook Lead Ads", 
+    path: "/api/webhooks/facebook",
+    steps: [
+      "Go to Facebook Business Manager → Events Manager",
+      "Select your Lead Ads form → Settings",
+      "Under 'Leads Access', click 'CRM Setup'",
+      "Choose 'Connect through Webhooks'",
+      "Paste the webhook URL and configure authentication",
+      "Test the connection by submitting a test lead"
+    ],
+    hints: [
+      "Ensure your Facebook App has 'leads_retrieval' permission",
+      "Use the same field names: email, name, phone, company"
+    ],
+    docUrl: "https://developers.facebook.com/docs/marketing-api/guides/lead-ads/"
+  },
+  { 
+    name: "LinkedIn Lead Gen", 
+    path: "/api/webhooks/linkedin",
+    steps: [
+      "Go to LinkedIn Campaign Manager → Account Assets",
+      "Navigate to Lead Gen Forms → Forms",
+      "Select your form → Integrations",
+      "Click 'Connect' under Webhook integration",
+      "Enter the webhook URL and authentication details",
+      "Map fields: firstName, lastName, email, company, phone"
+    ],
+    hints: [
+      "LinkedIn requires HTTPS webhook URLs",
+      "Test with the 'Send Test Lead' feature"
+    ],
+    docUrl: "https://learn.microsoft.com/en-us/linkedin/marketing/integrations/ads/advertising-targeting/lead-gen-forms"
+  },
+  { 
+    name: "Instagram Lead Ads", 
+    path: "/api/webhooks/instagram",
+    steps: [
+      "Instagram Lead Ads use the same setup as Facebook",
+      "Go to Facebook Business Manager → Events Manager",
+      "Select your Instagram Lead Ads form",
+      "Configure webhook under 'Leads Access'",
+      "Paste the webhook URL with authentication"
+    ],
+    hints: [
+      "Instagram leads are managed through Facebook Business Manager",
+      "Same API structure as Facebook Lead Ads"
+    ],
+    docUrl: "https://developers.facebook.com/docs/marketing-api/guides/lead-ads/"
+  },
+  { 
+    name: "Twitter/X", 
+    path: "/api/webhooks/twitter",
+    steps: [
+      "Go to X Ads Manager → Tools → Conversions",
+      "Create a new conversion event or select existing",
+      "Under 'Setup', choose 'Website tag or API'",
+      "Configure webhook endpoint URL",
+      "Add authentication headers if required"
+    ],
+    hints: [
+      "X/Twitter webhooks may require OAuth 2.0",
+      "Use the conversion API for server-side tracking"
+    ],
+    docUrl: "https://developer.x.com/en/docs/twitter-ads-api"
+  },
+  { 
+    name: "Google Ads", 
+    path: "/api/webhooks/google",
+    steps: [
+      "Go to Google Ads → Tools & Settings → Conversions",
+      "Create a new conversion action → Import",
+      "Select 'Other data sources or CRMs'",
+      "Choose webhook integration method",
+      "Configure the webhook URL and authentication",
+      "Map lead fields: email, phone, name"
+    ],
+    hints: [
+      "Google Ads may require Google Tag Manager for some setups",
+      "Use Enhanced Conversions for better tracking"
+    ],
+    docUrl: "https://support.google.com/google-ads/answer/7014069"
+  },
+  { 
+    name: "YouTube", 
+    path: "/api/webhooks/youtube",
+    steps: [
+      "YouTube lead forms are managed through Google Ads",
+      "Go to Google Ads → Campaigns → Video campaigns",
+      "Set up Lead form extensions",
+      "Configure webhook under form settings",
+      "Test with a sample submission"
+    ],
+    hints: [
+      "YouTube Lead Forms require a linked Google Ads account",
+      "Same webhook structure as Google Ads"
+    ],
+    docUrl: "https://support.google.com/google-ads/answer/9769498"
+  },
+  { 
+    name: "TikTok", 
+    path: "/api/webhooks/tiktok",
+    steps: [
+      "Go to TikTok Ads Manager → Tools → Events",
+      "Create or select a Lead Generation event",
+      "Under 'Connection Method', select 'Webhooks'",
+      "Enter the webhook URL",
+      "Configure authentication (API Key or Basic Auth)",
+      "Test the integration using TikTok's test tool"
+    ],
+    hints: [
+      "TikTok requires webhook URLs to respond within 5 seconds",
+      "Use TikTok Pixel for additional tracking"
+    ],
+    docUrl: "https://ads.tiktok.com/marketing_api/docs"
+  },
+  { 
+    name: "Pinterest", 
+    path: "/api/webhooks/pinterest",
+    steps: [
+      "Go to Pinterest Ads Manager → Conversions",
+      "Set up Pinterest Tag or API integration",
+      "Navigate to Lead Form settings",
+      "Configure webhook URL for lead delivery",
+      "Add authentication headers"
+    ],
+    hints: [
+      "Pinterest Conversions API can send server-side events",
+      "Test with Pinterest's conversion testing tool"
+    ],
+    docUrl: "https://developers.pinterest.com/docs/conversions/overview/"
+  },
+  { 
+    name: "Snapchat", 
+    path: "/api/webhooks/snapchat",
+    steps: [
+      "Go to Snapchat Ads Manager → Events Manager",
+      "Create a new custom event",
+      "Select 'Server-to-Server' integration",
+      "Enter the webhook URL",
+      "Configure authentication and field mapping"
+    ],
+    hints: [
+      "Snapchat uses the Conversions API for webhooks",
+      "Ensure proper event deduplication"
+    ],
+    docUrl: "https://businesshelp.snapchat.com/s/article/conversions-api"
+  },
+  { 
+    name: "WhatsApp Business", 
+    path: "/api/webhooks/whatsapp",
+    steps: [
+      "Go to Meta Business Manager → WhatsApp Manager",
+      "Navigate to Configuration → Webhooks",
+      "Add the webhook URL for lead messages",
+      "Subscribe to 'messages' webhook field",
+      "Verify the webhook with the verification token"
+    ],
+    hints: [
+      "WhatsApp requires webhook verification via GET request",
+      "Use 'messages' type for lead conversation capture"
+    ],
+    docUrl: "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/set-up"
+  },
+  { 
+    name: "Microsoft/Bing Ads", 
+    path: "/api/webhooks/microsoft",
+    steps: [
+      "Go to Microsoft Advertising → Tools → Conversion goals",
+      "Create a new conversion goal",
+      "Select 'Offline conversions' or API import",
+      "Configure webhook integration",
+      "Map fields and set up authentication"
+    ],
+    hints: [
+      "Use UET tag for enhanced tracking",
+      "Microsoft supports batch import via API"
+    ],
+    docUrl: "https://learn.microsoft.com/en-us/advertising/guides/offline-conversions"
+  },
+  { 
+    name: "Website Forms", 
+    path: "/api/webhooks/website",
+    steps: [
+      "Add a form to your website (Contact, Quote, etc.)",
+      "Configure form to POST data to this webhook URL",
+      "Include fields: name, email, phone, company, message",
+      "Add authentication headers if enabled",
+      "Test by submitting the form"
+    ],
+    hints: [
+      "Use JSON format: { \"name\": \"...\", \"email\": \"...\", \"phone\": \"...\" }",
+      "Add Content-Type: application/json header",
+      "Include source field to identify form origin"
+    ]
+  },
 ];
 
 export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSettingsDialogProps) {
@@ -52,6 +250,7 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: settings, isLoading } = useQuery<WebhookAuthSettings>({
@@ -226,40 +425,105 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
                   Webhook Endpoints
                 </CardTitle>
                 <CardDescription>
-                  Use these URLs to configure lead capture from external platforms
+                  Use these URLs to configure lead capture from external platforms. Click on any endpoint to see integration steps.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {WEBHOOK_ENDPOINTS.map((endpoint) => (
-                    <div
+                    <Collapsible
                       key={endpoint.path}
-                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover-elevate"
+                      open={expandedEndpoint === endpoint.path}
+                      onOpenChange={(open) => setExpandedEndpoint(open ? endpoint.path : null)}
                     >
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          POST
-                        </Badge>
-                        <span className="text-sm font-medium">{endpoint.name}</span>
+                      <div className="rounded-md border bg-muted/30">
+                        <div className="flex items-center justify-between p-2">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Badge variant="outline" className="text-xs">
+                              POST
+                            </Badge>
+                            <span className="text-sm font-medium">{endpoint.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <code className="text-xs text-muted-foreground hidden sm:block max-w-[180px] truncate">
+                              {getWebhookUrl(endpoint.path)}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(getWebhookUrl(endpoint.path));
+                              }}
+                              data-testid={`button-copy-${endpoint.path.split('/').pop()}`}
+                            >
+                              {copiedUrl === getWebhookUrl(endpoint.path) ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="icon" data-testid={`button-help-${endpoint.path.split('/').pop()}`}>
+                                {expandedEndpoint === endpoint.path ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </Button>
+                            </CollapsibleTrigger>
+                          </div>
+                        </div>
+                        
+                        <CollapsibleContent>
+                          <div className="px-3 pb-3 pt-1 border-t bg-background/50">
+                            <div className="space-y-3">
+                              {/* Integration Steps */}
+                              <div>
+                                <h4 className="text-xs font-semibold text-primary mb-2 flex items-center gap-1">
+                                  <ListOrdered className="h-3 w-3" />
+                                  Integration Steps
+                                </h4>
+                                <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                                  {endpoint.steps.map((step, idx) => (
+                                    <li key={idx} className="leading-relaxed">{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                              
+                              {/* Hints */}
+                              <div>
+                                <h4 className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Tips & Hints
+                                </h4>
+                                <ul className="text-xs text-muted-foreground space-y-1">
+                                  {endpoint.hints.map((hint, idx) => (
+                                    <li key={idx} className="flex items-start gap-1">
+                                      <span className="text-amber-500 mt-0.5">•</span>
+                                      <span>{hint}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              
+                              {/* Documentation Link */}
+                              {endpoint.docUrl && (
+                                <a
+                                  href={endpoint.docUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Official Documentation
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs text-muted-foreground hidden sm:block max-w-[200px] truncate">
-                          {getWebhookUrl(endpoint.path)}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => copyToClipboard(getWebhookUrl(endpoint.path))}
-                          data-testid={`button-copy-${endpoint.path.split('/').pop()}`}
-                        >
-                          {copiedUrl === getWebhookUrl(endpoint.path) ? (
-                            <Check className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                    </Collapsible>
                   ))}
                 </div>
               </CardContent>
