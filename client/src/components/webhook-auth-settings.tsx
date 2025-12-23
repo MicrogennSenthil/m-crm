@@ -125,8 +125,8 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
             Webhook Authentication Settings
@@ -136,7 +136,7 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4" style={{ maxHeight: "calc(85vh - 180px)" }}>
           <div className="space-y-6 py-4">
             <Card>
               <CardHeader>
@@ -267,7 +267,7 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
           </div>
         </ScrollArea>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-2 pt-4 border-t flex-shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
