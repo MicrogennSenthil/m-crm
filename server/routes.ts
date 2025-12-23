@@ -61,6 +61,50 @@ function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// Webhook Basic Auth middleware
+async function validateWebhookAuth(req: any, res: any, next: any) {
+  try {
+    // Get webhook auth settings from database
+    const enabledSetting = await storage.getSystemSetting("webhook_auth_enabled");
+    const isEnabled = enabledSetting?.settingValue === "true";
+    
+    if (!isEnabled) {
+      // Webhook auth is disabled, allow request
+      return next();
+    }
+    
+    const usernameSetting = await storage.getSystemSetting("webhook_auth_username");
+    const passwordSetting = await storage.getSystemSetting("webhook_auth_password");
+    
+    if (!usernameSetting?.settingValue || !passwordSetting?.settingValue) {
+      // No credentials configured but auth is enabled - deny access
+      console.warn("[Webhook] Auth enabled but no credentials configured");
+      return res.status(401).json({ error: "Webhook authentication required" });
+    }
+    
+    // Check for Basic Auth header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    
+    // Decode Base64 credentials
+    const base64Credentials = authHeader.slice(6);
+    const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+    const [username, password] = credentials.split(":");
+    
+    // Validate credentials
+    if (username === usernameSetting.settingValue && password === passwordSetting.settingValue) {
+      return next();
+    }
+    
+    return res.status(401).json({ error: "Invalid credentials" });
+  } catch (error) {
+    console.error("[Webhook] Auth validation error:", error);
+    return res.status(500).json({ error: "Authentication error" });
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up email service storage getter for database SMTP configuration
   setStorageGetter(async () => storage);
@@ -2668,6 +2712,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
+  // WEBHOOK AUTHENTICATION SETTINGS ROUTES
+  // =============================================
+  
+  // Get webhook auth settings
+  app.get("/api/settings/webhook-auth", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const enabled = await storage.getSystemSetting("webhook_auth_enabled");
+      const username = await storage.getSystemSetting("webhook_auth_username");
+      // Don't return the actual password for security
+      const password = await storage.getSystemSetting("webhook_auth_password");
+      
+      res.json({
+        enabled: enabled?.settingValue === "true",
+        username: username?.settingValue || "",
+        hasPassword: !!password?.settingValue,
+      });
+    } catch (error) {
+      console.error("Error fetching webhook auth settings:", error);
+      res.status(500).json({ message: "Failed to fetch webhook auth settings" });
+    }
+  });
+  
+  // Save webhook auth settings
+  app.post("/api/settings/webhook-auth", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { enabled, username, password } = req.body;
+      
+      // Validate inputs if enabling
+      if (enabled && (!username || !password)) {
+        return res.status(400).json({ message: "Username and password are required when enabling webhook authentication" });
+      }
+      
+      // Get auth user ID
+      const authId = (req as any).user?.claims?.sub || (req as any).user?.id;
+      
+      // Save enabled setting
+      await storage.upsertSystemSetting({
+        settingKey: "webhook_auth_enabled",
+        settingValue: enabled ? "true" : "false",
+        settingType: "boolean",
+        category: "webhook",
+        description: "Enable/disable webhook authentication",
+        isSecret: false,
+        updatedBy: authId,
+      });
+      
+      // Save username
+      if (username !== undefined) {
+        await storage.upsertSystemSetting({
+          settingKey: "webhook_auth_username",
+          settingValue: username,
+          settingType: "string",
+          category: "webhook",
+          description: "Webhook authentication username",
+          isSecret: false,
+          updatedBy: authId,
+        });
+      }
+      
+      // Save password (only if provided)
+      if (password) {
+        await storage.upsertSystemSetting({
+          settingKey: "webhook_auth_password",
+          settingValue: password,
+          settingType: "string",
+          category: "webhook",
+          description: "Webhook authentication password",
+          isSecret: true,
+          updatedBy: authId,
+        });
+      }
+      
+      res.json({ success: true, message: "Webhook authentication settings saved" });
+    } catch (error) {
+      console.error("Error saving webhook auth settings:", error);
+      res.status(500).json({ message: "Failed to save webhook auth settings" });
+    }
+  });
+
+  // =============================================
   // GOOGLE SHEETS INTEGRATION ROUTES
   // =============================================
   
@@ -2786,7 +2910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // These endpoints receive lead data from social media platforms
 
   // Facebook Lead Ads Webhook
-  app.post("/api/webhooks/facebook", async (req, res) => {
+  app.post("/api/webhooks/facebook", validateWebhookAuth, async (req, res) => {
     try {
       const { leadgen_id, form_id, field_data, created_time, ad_id, page_id } = req.body;
       
@@ -2844,7 +2968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // LinkedIn Lead Gen Webhook
-  app.post("/api/webhooks/linkedin", async (req, res) => {
+  app.post("/api/webhooks/linkedin", validateWebhookAuth, async (req, res) => {
     try {
       const { lead, campaign, form } = req.body;
       
@@ -2894,7 +3018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Instagram Lead Ads Webhook (uses Facebook's API)
-  app.post("/api/webhooks/instagram", async (req, res) => {
+  app.post("/api/webhooks/instagram", validateWebhookAuth, async (req, res) => {
     try {
       const { leadgen_id, form_id, field_data, instagram_user_id } = req.body;
       
@@ -2935,7 +3059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Twitter/X Lead Ads Webhook
-  app.post("/api/webhooks/twitter", async (req, res) => {
+  app.post("/api/webhooks/twitter", validateWebhookAuth, async (req, res) => {
     try {
       const { card_data, user_data } = req.body;
       
@@ -2969,7 +3093,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Google Ads Lead Form Extension Webhook
-  app.post("/api/webhooks/google", async (req, res) => {
+  app.post("/api/webhooks/google", validateWebhookAuth, async (req, res) => {
     try {
       const { lead_id, campaign_id, adgroup_id, form_id, gcl_id, google_key, is_test, user_column_data } = req.body;
       
@@ -3016,7 +3140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // YouTube Lead Form Webhook (via Google Ads infrastructure)
-  app.post("/api/webhooks/youtube", async (req, res) => {
+  app.post("/api/webhooks/youtube", validateWebhookAuth, async (req, res) => {
     try {
       const { lead_id, campaign_id, video_id, form_id, user_column_data } = req.body;
       
@@ -3057,7 +3181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // TikTok Lead Generation Webhook
-  app.post("/api/webhooks/tiktok", async (req, res) => {
+  app.post("/api/webhooks/tiktok", validateWebhookAuth, async (req, res) => {
     try {
       const { event, lead_info, page_info, ad_info } = req.body;
       
@@ -3091,7 +3215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pinterest Lead Ads Webhook
-  app.post("/api/webhooks/pinterest", async (req, res) => {
+  app.post("/api/webhooks/pinterest", validateWebhookAuth, async (req, res) => {
     try {
       const { lead_data, pin_info, campaign_info } = req.body;
       
@@ -3125,7 +3249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Snapchat Lead Ads Webhook
-  app.post("/api/webhooks/snapchat", async (req, res) => {
+  app.post("/api/webhooks/snapchat", validateWebhookAuth, async (req, res) => {
     try {
       const { lead, campaign, ad_squad } = req.body;
       
@@ -3159,7 +3283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // WhatsApp Click-to-Message Webhook (via Facebook Business API)
-  app.post("/api/webhooks/whatsapp", async (req, res) => {
+  app.post("/api/webhooks/whatsapp", validateWebhookAuth, async (req, res) => {
     try {
       const { entry } = req.body;
       
@@ -3216,7 +3340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Microsoft/Bing Ads Lead Form Extension Webhook
-  app.post("/api/webhooks/microsoft", async (req, res) => {
+  app.post("/api/webhooks/microsoft", validateWebhookAuth, async (req, res) => {
     try {
       const { leadFormId, campaignId, adGroupId, leadId, formData } = req.body;
       
@@ -3258,7 +3382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generic Website Form Webhook (for custom integrations)
-  app.post("/api/webhooks/website", async (req, res) => {
+  app.post("/api/webhooks/website", validateWebhookAuth, async (req, res) => {
     try {
       const { company, name, email, phone, source, notes } = req.body;
       
