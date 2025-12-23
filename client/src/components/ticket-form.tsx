@@ -37,7 +37,9 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Camera, Upload, X, Image, Loader2, CheckCircle, Cog, Users, UserPlus, ChevronsUpDown, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/useAuth";
+import { Building2, Plus, Camera, Upload, X, Image, Loader2, CheckCircle, Cog, Users, UserPlus, ChevronsUpDown, Search, UserCheck } from "lucide-react";
 import { useState, useRef, useMemo } from "react";
 
 const PRIORITIES = [
@@ -61,11 +63,13 @@ interface PendingUpload {
 
 export function TicketForm({ onSuccess }: TicketFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [selfAssign, setSelfAssign] = useState(true); // Default to self-assign enabled
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -374,6 +378,10 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
   });
 
   const onSubmit = (data: InsertTicket) => {
+    // If self-assign is enabled and user is logged in, assign ticket to current user
+    if (selfAssign && user?.id) {
+      data.assignedEngineerId = user.id;
+    }
     createTicketMutation.mutate(data);
   };
 
@@ -728,6 +736,24 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
                   <FormMessage />
                 </FormItem>
               )}
+            />
+          </div>
+
+          {/* Self-Assignment Toggle */}
+          <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-3">
+              <UserCheck className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-medium">Assign to Me</p>
+                <p className="text-xs text-muted-foreground">
+                  Automatically assign this ticket to yourself
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={selfAssign}
+              onCheckedChange={setSelfAssign}
+              data-testid="switch-self-assign"
             />
           </div>
 
