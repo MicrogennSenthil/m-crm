@@ -942,8 +942,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Lead operations
-  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]> {
+  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number }): Promise<Lead[]> {
     const conditions: any[] = [];
+    const maxLimit = filters?.limit || 500; // Default limit for performance
     
     if (filters?.stage) {
       conditions.push(eq(leads.stage, filters.stage));
@@ -958,10 +959,10 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (conditions.length > 0) {
-      return await db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt));
+      return await db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt)).limit(maxLimit);
     }
     
-    return await db.select().from(leads).orderBy(desc(leads.createdAt));
+    return await db.select().from(leads).orderBy(desc(leads.createdAt)).limit(maxLimit);
   }
 
   async getLead(id: string): Promise<Lead | undefined> {
@@ -1110,8 +1111,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Project operations
-  async getProjects(filters?: { status?: string; engineerIds?: string[] }): Promise<Project[]> {
+  async getProjects(filters?: { status?: string; engineerIds?: string[]; limit?: number }): Promise<Project[]> {
     const conditions: any[] = [];
+    const maxLimit = filters?.limit || 200; // Default limit for performance
     
     if (filters?.status) {
       conditions.push(eq(projects.status, filters.status));
@@ -1137,9 +1139,10 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(projects)
         .where(and(...conditions))
-        .orderBy(desc(projects.createdAt));
+        .orderBy(desc(projects.createdAt))
+        .limit(maxLimit);
     }
-    return await db.select().from(projects).orderBy(desc(projects.createdAt));
+    return await db.select().from(projects).orderBy(desc(projects.createdAt)).limit(maxLimit);
   }
 
   async getProject(id: string): Promise<Project | undefined> {
@@ -1403,8 +1406,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Ticket operations
-  async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[] }): Promise<Ticket[]> {
+  async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number }): Promise<Ticket[]> {
     const conditions: any[] = [];
+    const maxLimit = filters?.limit || 500; // Default limit for performance
     
     if (filters?.status) {
       conditions.push(eq(tickets.status, filters.status));
@@ -1423,10 +1427,11 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(tickets)
         .where(and(...conditions))
-        .orderBy(desc(tickets.createdAt));
+        .orderBy(desc(tickets.createdAt))
+        .limit(maxLimit);
     }
     
-    return await db.select().from(tickets).orderBy(desc(tickets.createdAt));
+    return await db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(maxLimit);
   }
 
   async getTicket(id: string): Promise<Ticket | undefined> {
@@ -2102,6 +2107,7 @@ export class DatabaseStorage implements IStorage {
     createdBy?: string; 
     status?: string;
     includeAll?: boolean;
+    limit?: number;
   }): Promise<(Task & { 
     creator?: User; 
     assignee?: User; 
@@ -2109,6 +2115,7 @@ export class DatabaseStorage implements IStorage {
     commentsCount?: number;
   })[]> {
     const conditions: any[] = [];
+    const maxLimit = filters?.limit || 200; // Default limit for performance
     
     if (filters?.status) {
       conditions.push(eq(tasks.status, filters.status));
@@ -2149,7 +2156,8 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(tasks)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(tasks.createdAt));
+      .orderBy(desc(tasks.createdAt))
+      .limit(maxLimit);
 
     // Enrich with user details and comment counts
     const enrichedTasks = await Promise.all(
@@ -3247,11 +3255,13 @@ export class DatabaseStorage implements IStorage {
     sourceType?: string;
     priority?: string;
     isOverdue?: boolean;
+    limit?: number;
   }): Promise<(DevelopmentTask & { 
     assignee?: User; 
     assignedByUser?: User;
   })[]> {
     const conditions: any[] = [];
+    const maxLimit = filters?.limit || 200; // Default limit for performance
     
     if (filters?.status) {
       conditions.push(eq(developmentTasks.status, filters.status));
@@ -3276,7 +3286,8 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(developmentTasks)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(developmentTasks.createdAt));
+      .orderBy(desc(developmentTasks.createdAt))
+      .limit(maxLimit);
 
     // Enrich with user details
     const enrichedTasks = await Promise.all(
