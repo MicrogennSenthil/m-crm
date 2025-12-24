@@ -12150,7 +12150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketing-reports", isAuthenticated, async (req, res) => {
     try {
       const { userId, status, startDate, endDate } = req.query;
-      const user = req.user as User;
+      const user = req.user as any;
       
       // Digital Marketing users can only see their own reports unless admin
       const filters: any = {};
@@ -12158,7 +12158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check if user is a department head for Digital Marketing
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-        const isDeptHead = marketingDept?.departmentHead === user.id;
+        const isDeptHead = marketingDept?.managerId === user.id;
         
         if (!isDeptHead) {
           // Regular marketing staff can only see their own reports
@@ -12186,7 +12186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as User;
+      const user = req.user as any;
       
       const report = await storage.getMarketingDailyReport(id);
       if (!report) {
@@ -12197,7 +12197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (report.userId !== user.id && user.role !== 'admin' && user.role !== 'super_admin') {
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-        if (marketingDept?.departmentHead !== user.id) {
+        if (marketingDept?.managerId !== user.id) {
           return res.status(403).json({ message: "Access denied" });
         }
       }
@@ -12213,7 +12213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketing-reports/by-date/:date", isAuthenticated, async (req, res) => {
     try {
       const { date } = req.params;
-      const user = req.user as User;
+      const user = req.user as any;
       
       const report = await storage.getMarketingDailyReportByDate(user.id, new Date(date));
       res.json(report || null);
@@ -12226,7 +12226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new marketing daily report
   app.post("/api/marketing-reports", isAuthenticated, async (req, res) => {
     try {
-      const user = req.user as User;
+      const user = req.user as any;
       const reportData = {
         ...req.body,
         userId: user.id,
@@ -12257,15 +12257,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Log activity
-      await storage.createActivityLog({
-        userId: user.id,
-        action: 'created',
-        entityType: 'marketing_report',
-        entityId: report.id,
-        details: `Created daily marketing report`,
-      });
-      
       res.status(201).json(report);
     } catch (error) {
       console.error("Error creating marketing report:", error);
@@ -12277,7 +12268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as User;
+      const user = req.user as any;
       
       const existingReport = await storage.getMarketingDailyReport(id);
       if (!existingReport) {
@@ -12304,15 +12295,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Log activity
-      await storage.createActivityLog({
-        userId: user.id,
-        action: 'updated',
-        entityType: 'marketing_report',
-        entityId: id,
-        details: `Updated daily marketing report`,
-      });
-      
       res.json(report);
     } catch (error) {
       console.error("Error updating marketing report:", error);
@@ -12324,7 +12306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as User;
+      const user = req.user as any;
       
       const existingReport = await storage.getMarketingDailyReport(id);
       if (!existingReport) {
@@ -12338,15 +12320,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteMarketingDailyReport(id);
       
-      // Log activity
-      await storage.createActivityLog({
-        userId: user.id,
-        action: 'deleted',
-        entityType: 'marketing_report',
-        entityId: id,
-        details: `Deleted daily marketing report`,
-      });
-      
       res.json({ message: "Report deleted successfully" });
     } catch (error) {
       console.error("Error deleting marketing report:", error);
@@ -12358,7 +12331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/marketing-reports/:id/submit", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as User;
+      const user = req.user as any;
       
       const existingReport = await storage.getMarketingDailyReport(id);
       if (!existingReport) {
@@ -12375,16 +12348,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const report = await storage.updateMarketingDailyReport(id, { 
         status: 'submitted',
-        submittedAt: new Date(),
-      });
-      
-      // Log activity
-      await storage.createActivityLog({
-        userId: user.id,
-        action: 'updated',
-        entityType: 'marketing_report',
-        entityId: id,
-        details: `Submitted daily marketing report for approval`,
       });
       
       res.json(report);
@@ -12398,13 +12361,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/marketing-reports/:id/review", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
-      const { action, reviewNotes } = req.body;
-      const user = req.user as User;
+      const { action } = req.body;
+      const user = req.user as any;
       
       // Must be admin or department head
       const departments = await storage.getDepartments();
       const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-      const isDeptHead = marketingDept?.departmentHead === user.id;
+      const isDeptHead = marketingDept?.managerId === user.id;
       
       if (user.role !== 'admin' && user.role !== 'super_admin' && !isDeptHead) {
         return res.status(403).json({ message: "Only department heads or admins can review reports" });
@@ -12422,18 +12385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newStatus = action === 'approve' ? 'approved' : 'rejected';
       const report = await storage.updateMarketingDailyReport(id, { 
         status: newStatus,
-        reviewedBy: user.id,
-        reviewedAt: new Date(),
-        reviewNotes: reviewNotes || null,
-      });
-      
-      // Log activity
-      await storage.createActivityLog({
-        userId: user.id,
-        action: 'updated',
-        entityType: 'marketing_report',
-        entityId: id,
-        details: `${action === 'approve' ? 'Approved' : 'Rejected'} daily marketing report`,
+        approvedBy: user.id,
       });
       
       res.json(report);
