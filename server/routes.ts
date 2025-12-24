@@ -12142,6 +12142,307 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =====================
+  // Marketing Daily Reports API
+  // =====================
+
+  // Get all marketing daily reports (with optional filters)
+  app.get("/api/marketing-reports", isAuthenticated, async (req, res) => {
+    try {
+      const { userId, status, startDate, endDate } = req.query;
+      const user = req.user as User;
+      
+      // Digital Marketing users can only see their own reports unless admin
+      const filters: any = {};
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
+        // Check if user is a department head for Digital Marketing
+        const departments = await storage.getDepartments();
+        const marketingDept = departments.find(d => d.name === 'Digital Marketing');
+        const isDeptHead = marketingDept?.departmentHead === user.id;
+        
+        if (!isDeptHead) {
+          // Regular marketing staff can only see their own reports
+          filters.userId = user.id;
+        } else if (userId) {
+          filters.userId = userId as string;
+        }
+      } else if (userId) {
+        filters.userId = userId as string;
+      }
+      
+      if (status) filters.status = status as string;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      
+      const reports = await storage.getMarketingDailyReports(filters);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching marketing reports:", error);
+      res.status(500).json({ message: "Failed to fetch marketing reports" });
+    }
+  });
+
+  // Get a single marketing report by ID
+  app.get("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.user as User;
+      
+      const report = await storage.getMarketingDailyReport(id);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      // Access control: own report, admin, or dept head
+      if (report.userId !== user.id && user.role !== 'admin' && user.role !== 'super_admin') {
+        const departments = await storage.getDepartments();
+        const marketingDept = departments.find(d => d.name === 'Digital Marketing');
+        if (marketingDept?.departmentHead !== user.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Error fetching marketing report:", error);
+      res.status(500).json({ message: "Failed to fetch marketing report" });
+    }
+  });
+
+  // Get marketing report by date (for checking if today's report exists)
+  app.get("/api/marketing-reports/by-date/:date", isAuthenticated, async (req, res) => {
+    try {
+      const { date } = req.params;
+      const user = req.user as User;
+      
+      const report = await storage.getMarketingDailyReportByDate(user.id, new Date(date));
+      res.json(report || null);
+    } catch (error) {
+      console.error("Error fetching marketing report by date:", error);
+      res.status(500).json({ message: "Failed to fetch marketing report" });
+    }
+  });
+
+  // Create a new marketing daily report
+  app.post("/api/marketing-reports", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const reportData = {
+        ...req.body,
+        userId: user.id,
+      };
+      
+      // Check if a report for this date already exists
+      const existingReport = await storage.getMarketingDailyReportByDate(
+        user.id, 
+        new Date(req.body.reportDate || new Date())
+      );
+      
+      if (existingReport) {
+        return res.status(400).json({ 
+          message: "A report for this date already exists",
+          existingReportId: existingReport.id 
+        });
+      }
+      
+      const report = await storage.createMarketingDailyReport(reportData);
+      
+      // Create task entries if provided
+      if (req.body.taskEntries && Array.isArray(req.body.taskEntries)) {
+        for (const entry of req.body.taskEntries) {
+          await storage.createMarketingTaskEntry({
+            ...entry,
+            reportId: report.id,
+          });
+        }
+      }
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId: user.id,
+        action: 'created',
+        entityType: 'marketing_report',
+        entityId: report.id,
+        details: `Created daily marketing report`,
+      });
+      
+      res.status(201).json(report);
+    } catch (error) {
+      console.error("Error creating marketing report:", error);
+      res.status(500).json({ message: "Failed to create marketing report" });
+    }
+  });
+
+  // Update a marketing daily report
+  app.patch("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.user as User;
+      
+      const existingReport = await storage.getMarketingDailyReport(id);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      // Only the creator can update, unless admin
+      if (existingReport.userId !== user.id && user.role !== 'admin' && user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { taskEntries, ...reportData } = req.body;
+      const report = await storage.updateMarketingDailyReport(id, reportData);
+      
+      // Update task entries if provided
+      if (taskEntries && Array.isArray(taskEntries)) {
+        // Delete existing entries and recreate
+        await storage.deleteMarketingTaskEntriesByReport(id);
+        for (const entry of taskEntries) {
+          await storage.createMarketingTaskEntry({
+            ...entry,
+            reportId: id,
+          });
+        }
+      }
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId: user.id,
+        action: 'updated',
+        entityType: 'marketing_report',
+        entityId: id,
+        details: `Updated daily marketing report`,
+      });
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Error updating marketing report:", error);
+      res.status(500).json({ message: "Failed to update marketing report" });
+    }
+  });
+
+  // Delete a marketing daily report
+  app.delete("/api/marketing-reports/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.user as User;
+      
+      const existingReport = await storage.getMarketingDailyReport(id);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      // Only admin can delete
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Only admins can delete reports" });
+      }
+      
+      await storage.deleteMarketingDailyReport(id);
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId: user.id,
+        action: 'deleted',
+        entityType: 'marketing_report',
+        entityId: id,
+        details: `Deleted daily marketing report`,
+      });
+      
+      res.json({ message: "Report deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting marketing report:", error);
+      res.status(500).json({ message: "Failed to delete marketing report" });
+    }
+  });
+
+  // Submit a marketing report for approval
+  app.post("/api/marketing-reports/:id/submit", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = req.user as User;
+      
+      const existingReport = await storage.getMarketingDailyReport(id);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      if (existingReport.userId !== user.id) {
+        return res.status(403).json({ message: "Only the creator can submit the report" });
+      }
+      
+      if (existingReport.status !== 'draft') {
+        return res.status(400).json({ message: "Report has already been submitted" });
+      }
+      
+      const report = await storage.updateMarketingDailyReport(id, { 
+        status: 'submitted',
+        submittedAt: new Date(),
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId: user.id,
+        action: 'updated',
+        entityType: 'marketing_report',
+        entityId: id,
+        details: `Submitted daily marketing report for approval`,
+      });
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Error submitting marketing report:", error);
+      res.status(500).json({ message: "Failed to submit marketing report" });
+    }
+  });
+
+  // Approve/reject a marketing report
+  app.post("/api/marketing-reports/:id/review", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, reviewNotes } = req.body;
+      const user = req.user as User;
+      
+      // Must be admin or department head
+      const departments = await storage.getDepartments();
+      const marketingDept = departments.find(d => d.name === 'Digital Marketing');
+      const isDeptHead = marketingDept?.departmentHead === user.id;
+      
+      if (user.role !== 'admin' && user.role !== 'super_admin' && !isDeptHead) {
+        return res.status(403).json({ message: "Only department heads or admins can review reports" });
+      }
+      
+      const existingReport = await storage.getMarketingDailyReport(id);
+      if (!existingReport) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      
+      if (existingReport.status !== 'submitted') {
+        return res.status(400).json({ message: "Report must be submitted before review" });
+      }
+      
+      const newStatus = action === 'approve' ? 'approved' : 'rejected';
+      const report = await storage.updateMarketingDailyReport(id, { 
+        status: newStatus,
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || null,
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        userId: user.id,
+        action: 'updated',
+        entityType: 'marketing_report',
+        entityId: id,
+        details: `${action === 'approve' ? 'Approved' : 'Rejected'} daily marketing report`,
+      });
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Error reviewing marketing report:", error);
+      res.status(500).json({ message: "Failed to review marketing report" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
