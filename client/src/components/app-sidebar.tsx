@@ -38,6 +38,8 @@ import {
   Wallet,
   UserSquare2,
   MessageSquareHeart,
+  Megaphone,
+  CalendarDays,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -219,6 +221,23 @@ const menuGroups = [
         color: "text-pink-500",
         bgColor: "bg-pink-500/10",
         module: "hr_feedback",
+      },
+    ],
+  },
+  {
+    id: "digital_marketing",
+    label: "Digital Marketing",
+    icon: Megaphone,
+    color: "text-fuchsia-500",
+    bgColor: "bg-fuchsia-500/10",
+    items: [
+      {
+        title: "Daily Report",
+        url: "/marketing/daily-report",
+        icon: CalendarDays,
+        color: "text-fuchsia-500",
+        bgColor: "bg-fuchsia-500/10",
+        module: "marketing_reports",
       },
     ],
   },
