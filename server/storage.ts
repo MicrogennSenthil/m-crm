@@ -140,6 +140,12 @@ import {
   type InsertDevelopmentTask,
   type DevelopmentTaskComment,
   type InsertDevelopmentTaskComment,
+  marketingDailyReports,
+  marketingTaskEntries,
+  type MarketingDailyReport,
+  type InsertMarketingDailyReport,
+  type MarketingTaskEntry,
+  type InsertMarketingTaskEntry,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
@@ -515,6 +521,29 @@ export interface IStorage {
   
   // Check and apply penalties for overdue tasks
   checkAndApplyOverduePenalties(): Promise<number>;
+
+  // Marketing Daily Report operations
+  getMarketingDailyReports(filters?: { 
+    userId?: string; 
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<(MarketingDailyReport & { user?: User })[]>;
+  getMarketingDailyReport(id: string): Promise<(MarketingDailyReport & { 
+    user?: User; 
+    taskEntries?: MarketingTaskEntry[];
+  }) | undefined>;
+  getMarketingDailyReportByDate(userId: string, date: Date): Promise<MarketingDailyReport | undefined>;
+  createMarketingDailyReport(report: InsertMarketingDailyReport): Promise<MarketingDailyReport>;
+  updateMarketingDailyReport(id: string, data: Partial<InsertMarketingDailyReport>): Promise<MarketingDailyReport>;
+  deleteMarketingDailyReport(id: string): Promise<void>;
+
+  // Marketing Task Entry operations
+  getMarketingTaskEntries(reportId: string): Promise<MarketingTaskEntry[]>;
+  createMarketingTaskEntry(entry: InsertMarketingTaskEntry): Promise<MarketingTaskEntry>;
+  updateMarketingTaskEntry(id: string, data: Partial<InsertMarketingTaskEntry>): Promise<MarketingTaskEntry>;
+  deleteMarketingTaskEntry(id: string): Promise<void>;
+  deleteMarketingTaskEntriesByReport(reportId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3509,6 +3538,137 @@ export class DatabaseStorage implements IStorage {
     }
 
     return penaltyCount;
+  }
+
+  // Marketing Daily Report operations
+  async getMarketingDailyReports(filters?: { 
+    userId?: string; 
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<(MarketingDailyReport & { user?: User })[]> {
+    const conditions: any[] = [];
+    
+    if (filters?.userId) {
+      conditions.push(eq(marketingDailyReports.userId, filters.userId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(marketingDailyReports.status, filters.status));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(marketingDailyReports.reportDate, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(marketingDailyReports.reportDate, filters.endDate));
+    }
+    
+    const reports = await db
+      .select()
+      .from(marketingDailyReports)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(marketingDailyReports.reportDate));
+    
+    // Get user details for each report
+    const reportsWithUser = await Promise.all(
+      reports.map(async (report) => {
+        const user = await this.getUser(report.userId);
+        return { ...report, user };
+      })
+    );
+    
+    return reportsWithUser;
+  }
+
+  async getMarketingDailyReport(id: string): Promise<(MarketingDailyReport & { 
+    user?: User; 
+    taskEntries?: MarketingTaskEntry[];
+  }) | undefined> {
+    const [report] = await db
+      .select()
+      .from(marketingDailyReports)
+      .where(eq(marketingDailyReports.id, id));
+    
+    if (!report) return undefined;
+    
+    const user = await this.getUser(report.userId);
+    const taskEntries = await this.getMarketingTaskEntries(id);
+    
+    return { ...report, user, taskEntries };
+  }
+
+  async getMarketingDailyReportByDate(userId: string, date: Date): Promise<MarketingDailyReport | undefined> {
+    // Get reports for the same day (normalize to start and end of day)
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const [report] = await db
+      .select()
+      .from(marketingDailyReports)
+      .where(and(
+        eq(marketingDailyReports.userId, userId),
+        gte(marketingDailyReports.reportDate, startOfDay),
+        lte(marketingDailyReports.reportDate, endOfDay)
+      ));
+    
+    return report;
+  }
+
+  async createMarketingDailyReport(report: InsertMarketingDailyReport): Promise<MarketingDailyReport> {
+    const [newReport] = await db
+      .insert(marketingDailyReports)
+      .values(report)
+      .returning();
+    return newReport;
+  }
+
+  async updateMarketingDailyReport(id: string, data: Partial<InsertMarketingDailyReport>): Promise<MarketingDailyReport> {
+    const [updated] = await db
+      .update(marketingDailyReports)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(marketingDailyReports.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMarketingDailyReport(id: string): Promise<void> {
+    // Task entries will be deleted automatically due to cascade
+    await db.delete(marketingDailyReports).where(eq(marketingDailyReports.id, id));
+  }
+
+  // Marketing Task Entry operations
+  async getMarketingTaskEntries(reportId: string): Promise<MarketingTaskEntry[]> {
+    return await db
+      .select()
+      .from(marketingTaskEntries)
+      .where(eq(marketingTaskEntries.reportId, reportId))
+      .orderBy(marketingTaskEntries.sortOrder);
+  }
+
+  async createMarketingTaskEntry(entry: InsertMarketingTaskEntry): Promise<MarketingTaskEntry> {
+    const [newEntry] = await db
+      .insert(marketingTaskEntries)
+      .values(entry)
+      .returning();
+    return newEntry;
+  }
+
+  async updateMarketingTaskEntry(id: string, data: Partial<InsertMarketingTaskEntry>): Promise<MarketingTaskEntry> {
+    const [updated] = await db
+      .update(marketingTaskEntries)
+      .set(data)
+      .where(eq(marketingTaskEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMarketingTaskEntry(id: string): Promise<void> {
+    await db.delete(marketingTaskEntries).where(eq(marketingTaskEntries.id, id));
+  }
+
+  async deleteMarketingTaskEntriesByReport(reportId: string): Promise<void> {
+    await db.delete(marketingTaskEntries).where(eq(marketingTaskEntries.reportId, reportId));
   }
 }
 
