@@ -11096,8 +11096,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = (pageNum - 1) * limitNum;
       
       // Show ALL closed tickets without feedback - HR needs access to all for customer calls
+      // Must have both status='closed' AND a valid closedAt date
       const conditions: any[] = [
         eq(tickets.status, 'closed'),
+        sql`${tickets.closedAt} IS NOT NULL`,
         sql`${tickets.id} NOT IN (SELECT ticket_id FROM feedback)`,
       ];
       
@@ -11187,8 +11189,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { and, gte, lte, or } = await import('drizzle-orm');
       
       // Show ALL tickets with feedback - no user/department filtering for completed calls
+      // Must have both status='closed' AND a valid closedAt date
       const conditions: any[] = [
         eq(tickets.status, 'closed'),
+        sql`${tickets.closedAt} IS NOT NULL`,
         sql`${tickets.id} IN (SELECT ticket_id FROM feedback)`,
       ];
       
