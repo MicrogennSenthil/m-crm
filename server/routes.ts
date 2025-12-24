@@ -6256,13 +6256,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single task
+  // Get single task - with proper access control
   app.get("/api/tasks/:id", isAuthenticated, requirePermission('tasks', 'view'), async (req: any, res) => {
     try {
+      const authId = req.user.claims.sub;
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
       const task = await storage.getTask(req.params.id);
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
+      
+      // Check access: user must be creator, assignee, mentioned, department head, or admin
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      // Admins and super admins can view all tasks
+      if (!accessControl.hasFullAccess) {
+        const allowedIds = accessControl.allowedUserIds || [currentUser.id];
+        const isCreator = task.createdBy && allowedIds.includes(task.createdBy);
+        const isAssignee = task.assignedTo && allowedIds.includes(task.assignedTo);
+        const isMentioned = task.mentionedUsers?.some(uid => allowedIds.includes(uid));
+        
+        if (!isCreator && !isAssignee && !isMentioned) {
+          return res.status(403).json({ message: "Access denied: You don't have permission to view this task" });
+        }
+      }
+      
       res.json(task);
     } catch (error) {
       console.error("Error fetching task:", error);
@@ -6362,23 +6384,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update task
+  // Update task - with proper department-based access control
   app.patch("/api/tasks/:id", isAuthenticated, requirePermission('tasks', 'edit'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const task = await storage.getTask(req.params.id);
+      const authId = req.user.claims.sub;
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
+      const task = await storage.getTask(req.params.id);
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
       
-      // Check permission (creator, assignee, or admin can update)
-      const user = await storage.getUser(userId);
-      const isAdmin = user?.role === 'admin';
-      const canUpdate = isAdmin || task.createdBy === userId || task.assignedTo === userId;
+      // Check access: user must be creator, assignee, mentioned, department head, or admin
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
-      if (!canUpdate) {
-        return res.status(403).json({ message: "You don't have permission to update this task" });
+      if (!accessControl.hasFullAccess) {
+        const allowedIds = accessControl.allowedUserIds || [currentUser.id];
+        const isCreator = task.createdBy && allowedIds.includes(task.createdBy);
+        const isAssignee = task.assignedTo && allowedIds.includes(task.assignedTo);
+        const isMentioned = task.mentionedUsers?.some(uid => allowedIds.includes(uid));
+        
+        if (!isCreator && !isAssignee && !isMentioned) {
+          return res.status(403).json({ message: "You don't have permission to update this task" });
+        }
       }
       
       // Parse dates properly and update assignedAt if assignment changes
@@ -6403,7 +6434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           entityId: task.id,
           newAssigneeId: req.body.assignedTo,
           previousAssigneeId: task.assignedTo,
-          assignedById: userId,
+          assignedById: authId,
         });
       }
       
@@ -6422,7 +6453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: updatedTask.id,
         action: "updated",
         description: `Task updated: ${updatedTask.title}`,
-        userId,
+        userId: authId,
         metadata: { status: updatedTask.status },
       });
       
@@ -6433,22 +6464,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete task
+  // Delete task - with proper department-based access control
   app.delete("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const task = await storage.getTask(req.params.id);
+      const authId = req.user.claims.sub;
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
       
+      const task = await storage.getTask(req.params.id);
       if (!task) {
         return res.status(404).json({ message: "Task not found" });
       }
       
-      // Only creator or admin can delete
-      const user = await storage.getUser(userId);
-      const isAdmin = user?.role === 'admin';
+      // Check access: only creator, department head, or admin can delete
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
-      if (!isAdmin && task.createdBy !== userId) {
-        return res.status(403).json({ message: "You don't have permission to delete this task" });
+      if (!accessControl.hasFullAccess) {
+        const allowedIds = accessControl.allowedUserIds || [currentUser.id];
+        const isCreator = task.createdBy && allowedIds.includes(task.createdBy);
+        
+        // Only creator or department head can delete (not just assignee)
+        if (!isCreator) {
+          return res.status(403).json({ message: "You don't have permission to delete this task" });
+        }
       }
       
       await storage.deleteTask(req.params.id);
@@ -6459,7 +6499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: req.params.id,
         action: "deleted",
         description: `Task deleted: ${task.title}`,
-        userId,
+        userId: authId,
       });
       
       res.json({ success: true });
