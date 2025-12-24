@@ -1555,3 +1555,76 @@ export const insertCustomerModuleContractSchema = createInsertSchema(customerMod
 
 export type InsertCustomerModuleContract = z.infer<typeof insertCustomerModuleContractSchema>;
 export type CustomerModuleContract = typeof customerModuleContracts.$inferSelect;
+
+// Marketing Daily Reports - Main report table
+export const marketingDailyReports = pgTable("marketing_daily_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  reportDate: timestamp("report_date").notNull(),
+  // Performance Metrics - Website Traffic
+  websiteSessions: integer("website_sessions"),
+  bounceRate: text("bounce_rate"), // e.g., "45.2%"
+  websiteConversions: integer("website_conversions"),
+  // Performance Metrics - Social Media
+  socialLikes: integer("social_likes"),
+  socialShares: integer("social_shares"),
+  socialComments: integer("social_comments"),
+  socialCtr: text("social_ctr"), // Click-through rate
+  // Performance Metrics - Email Campaign
+  emailOpenRate: text("email_open_rate"),
+  emailClickRate: text("email_click_rate"),
+  emailConversions: integer("email_conversions"),
+  // Performance Metrics - Ad Spend
+  adBudgetUsed: integer("ad_budget_used"), // In cents/paise
+  leadsGenerated: integer("leads_generated"),
+  costPerLead: integer("cost_per_lead"), // In cents/paise
+  // Key Achievements (stored as JSON array of strings)
+  achievements: text("achievements").array(),
+  // Issues/Challenges (stored as JSON array of strings)
+  issues: text("issues").array(),
+  // Plan for Tomorrow (stored as JSON array of strings)
+  tomorrowPlan: text("tomorrow_plan").array(),
+  // Additional Notes
+  additionalNotes: text("additional_notes"),
+  // Status
+  status: text("status").notNull().default("draft"), // draft, submitted, approved
+  submittedAt: timestamp("submitted_at"),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  // Audit
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMarketingDailyReportSchema = createInsertSchema(marketingDailyReports).omit({
+  id: true,
+  submittedAt: true,
+  approvedBy: true,
+  approvedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMarketingDailyReport = z.infer<typeof insertMarketingDailyReportSchema>;
+export type MarketingDailyReport = typeof marketingDailyReports.$inferSelect;
+
+// Marketing Task Entries - Time-based task log for each report
+export const marketingTaskEntries = pgTable("marketing_task_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportId: varchar("report_id").notNull().references(() => marketingDailyReports.id, { onDelete: "cascade" }),
+  timeSlot: text("time_slot").notNull(), // e.g., "09:00–10:00"
+  taskActivity: text("task_activity").notNull(), // e.g., "SEO keyword research"
+  platformTool: text("platform_tool"), // e.g., "SEMrush / Ahrefs"
+  status: text("status").notNull().default("in_progress"), // completed, in_progress, pending
+  remarks: text("remarks"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMarketingTaskEntrySchema = createInsertSchema(marketingTaskEntries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMarketingTaskEntry = z.infer<typeof insertMarketingTaskEntrySchema>;
+export type MarketingTaskEntry = typeof marketingTaskEntries.$inferSelect;
