@@ -1067,7 +1067,11 @@ export const knowledgeBaseCategories = [
   "product",
   "faq",
   "training",
-  "policy"
+  "policy",
+  "accounts",
+  "development",
+  "hr_admin",
+  "digital_marketing"
 ] as const;
 
 export type KnowledgeBaseCategory = typeof knowledgeBaseCategories[number];
