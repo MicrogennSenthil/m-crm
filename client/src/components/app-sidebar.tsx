@@ -240,7 +240,7 @@ const menuGroups = [
         module: "marketing_dashboard",
       },
       {
-        title: "Daily Report",
+        title: "DAR",
         url: "/marketing/daily-report",
         icon: CalendarDays,
         color: "text-fuchsia-500",
