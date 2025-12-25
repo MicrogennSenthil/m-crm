@@ -310,7 +310,6 @@ export default function MarketingDailyReport() {
 
   const handleSubmit = () => {
     const payload = {
-      reportDate: new Date(formData.reportDate).toISOString(),
       websiteSessions: formData.websiteSessions ? parseInt(formData.websiteSessions) : null,
       bounceRate: formData.bounceRate || null,
       websiteConversions: formData.websiteConversions ? parseInt(formData.websiteConversions) : null,
@@ -523,16 +522,6 @@ export default function MarketingDailyReport() {
           </DialogHeader>
           <ScrollArea className="max-h-[70vh] pr-4">
             <div className="space-y-6 p-1">
-              <div>
-                <Label>Report Date</Label>
-                <Input
-                  type="date"
-                  value={formData.reportDate}
-                  onChange={(e) => setFormData({ ...formData, reportDate: e.target.value })}
-                  data-testid="input-report-date"
-                />
-              </div>
-
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-lg flex items-center gap-2">
