@@ -53,6 +53,7 @@ import DevelopmentTasks from "@/pages/development-tasks";
 import AccountsContracts from "@/pages/accounts-contracts";
 import HRFeedback from "@/pages/hr-feedback";
 import MarketingDailyReport from "@/pages/marketing-daily-report";
+import MarketingDashboard from "@/pages/marketing-dashboard";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -122,6 +123,7 @@ function AuthenticatedLayout() {
               <Route path="/accounts/contracts" component={AccountsContracts} />
               <Route path="/hr/feedback" component={HRFeedback} />
               <Route path="/marketing/daily-report" component={MarketingDailyReport} />
+              <Route path="/marketing/dashboard" component={MarketingDashboard} />
               {/* Fallback to Home for any unmatched routes in authenticated layout */}
               <Route component={Home} />
             </Switch>

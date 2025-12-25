@@ -232,6 +232,14 @@ const menuGroups = [
     bgColor: "bg-fuchsia-500/10",
     items: [
       {
+        title: "Dashboard",
+        url: "/marketing/dashboard",
+        icon: LayoutDashboard,
+        color: "text-fuchsia-500",
+        bgColor: "bg-fuchsia-500/10",
+        module: "marketing_dashboard",
+      },
+      {
         title: "Daily Report",
         url: "/marketing/daily-report",
         icon: CalendarDays,

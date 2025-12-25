@@ -12146,6 +12146,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Marketing Daily Reports API
   // =====================
 
+  // Marketing Dashboard - Get summary metrics
+  app.get("/api/marketing/dashboard", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      
+      // Access control - admin, super_admin, or dept head
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
+        const departments = await storage.getDepartments();
+        const marketingDept = departments.find(d => d.name === 'Digital Marketing');
+        if (marketingDept?.managerId !== user.id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+      
+      // Get all reports for metrics calculation
+      const allReports = await storage.getMarketingDailyReports({});
+      
+      // Calculate date ranges
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(startOfToday);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      // Filter reports by time periods
+      const todayReports = allReports.filter(r => new Date(r.reportDate) >= startOfToday);
+      const weekReports = allReports.filter(r => new Date(r.reportDate) >= startOfWeek);
+      const monthReports = allReports.filter(r => new Date(r.reportDate) >= startOfMonth);
+      
+      // Status counts
+      const statusCounts = {
+        draft: allReports.filter(r => r.status === 'draft').length,
+        submitted: allReports.filter(r => r.status === 'submitted').length,
+        approved: allReports.filter(r => r.status === 'approved').length,
+        rejected: allReports.filter(r => r.status === 'rejected').length,
+      };
+      
+      // Aggregate metrics
+      const aggregateMetrics = (reports: any[]) => ({
+        totalReports: reports.length,
+        websiteSessions: reports.reduce((sum, r) => sum + (r.websiteSessions || 0), 0),
+        websiteConversions: reports.reduce((sum, r) => sum + (r.websiteConversions || 0), 0),
+        socialLikes: reports.reduce((sum, r) => sum + (r.socialLikes || 0), 0),
+        socialShares: reports.reduce((sum, r) => sum + (r.socialShares || 0), 0),
+        socialComments: reports.reduce((sum, r) => sum + (r.socialComments || 0), 0),
+        emailConversions: reports.reduce((sum, r) => sum + (r.emailConversions || 0), 0),
+        adBudgetUsed: reports.reduce((sum, r) => sum + (r.adBudgetUsed || 0), 0),
+        leadsGenerated: reports.reduce((sum, r) => sum + (r.leadsGenerated || 0), 0),
+        costPerLead: reports.filter(r => r.costPerLead).length > 0 
+          ? Math.round(reports.reduce((sum, r) => sum + (r.costPerLead || 0), 0) / reports.filter(r => r.costPerLead).length)
+          : 0,
+      });
+      
+      // Get team summary (reports grouped by user)
+      const users = await storage.getUsers();
+      const teamSummary = users
+        .filter(u => {
+          const userReports = allReports.filter(r => r.userId === u.id);
+          return userReports.length > 0;
+        })
+        .map(u => {
+          const userReports = allReports.filter(r => r.userId === u.id);
+          const approved = userReports.filter(r => r.status === 'approved').length;
+          const pending = userReports.filter(r => r.status === 'submitted').length;
+          const draft = userReports.filter(r => r.status === 'draft').length;
+          return {
+            user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email },
+            totalReports: userReports.length,
+            approved,
+            pending,
+            draft,
+            totalLeads: userReports.reduce((sum, r) => sum + (r.leadsGenerated || 0), 0),
+          };
+        })
+        .sort((a, b) => b.totalReports - a.totalReports);
+      
+      // Recent reports (last 10)
+      const recentReports = allReports
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10);
+      
+      res.json({
+        statusCounts,
+        metrics: {
+          today: aggregateMetrics(todayReports),
+          week: aggregateMetrics(weekReports),
+          month: aggregateMetrics(monthReports),
+          total: aggregateMetrics(allReports),
+        },
+        teamSummary,
+        recentReports,
+        pendingApproval: allReports.filter(r => r.status === 'submitted'),
+      });
+    } catch (error) {
+      console.error("Error fetching marketing dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch marketing dashboard" });
+    }
+  });
+
   // Get all marketing daily reports (with optional filters)
   app.get("/api/marketing-reports", isAuthenticated, async (req, res) => {
     try {

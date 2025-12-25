@@ -2066,6 +2066,197 @@ function DevelopmentDrilldown({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
+interface MarketingDashboardData {
+  statusCounts: { draft: number; submitted: number; approved: number; rejected: number };
+  metrics: {
+    today: { totalReports: number; websiteSessions: number; leadsGenerated: number; adBudgetUsed: number };
+    week: { totalReports: number; websiteSessions: number; leadsGenerated: number; adBudgetUsed: number };
+    month: { totalReports: number; websiteSessions: number; leadsGenerated: number; adBudgetUsed: number };
+    total: { totalReports: number; websiteSessions: number; leadsGenerated: number; adBudgetUsed: number };
+  };
+  teamSummary: Array<{ user: { firstName: string; lastName: string }; totalReports: number; approved: number; totalLeads: number }>;
+  pendingApproval: Array<{ id: string; reportDate: string; user?: { firstName: string; lastName: string } }>;
+}
+
+function MarketingDrilldown({ viewMode }: { viewMode: ViewMode }) {
+  const { data, isLoading } = useQuery<MarketingDashboardData>({
+    queryKey: ['/api/marketing/dashboard'],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return <div className="text-center text-muted-foreground py-8">No marketing data available</div>;
+  }
+
+  const statusData = [
+    { name: 'Draft', value: data.statusCounts.draft, fill: '#94a3b8' },
+    { name: 'Submitted', value: data.statusCounts.submitted, fill: '#60a5fa' },
+    { name: 'Approved', value: data.statusCounts.approved, fill: '#4ade80' },
+    { name: 'Rejected', value: data.statusCounts.rejected, fill: '#f87171' },
+  ];
+
+  const metricsData = [
+    { name: 'Today', leads: data.metrics.today.leadsGenerated, sessions: data.metrics.today.websiteSessions },
+    { name: 'Week', leads: data.metrics.week.leadsGenerated, sessions: data.metrics.week.websiteSessions },
+    { name: 'Month', leads: data.metrics.month.leadsGenerated, sessions: data.metrics.month.websiteSessions },
+  ];
+
+  const totalReports = data.statusCounts.draft + data.statusCounts.submitted + data.statusCounts.approved + data.statusCounts.rejected;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Reports</CardTitle>
+            <Layers className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalReports}</div>
+            <p className="text-xs text-muted-foreground">{data.statusCounts.approved} approved</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Approval</CardTitle>
+            <Clock className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{data.statusCounts.submitted}</div>
+            <p className="text-xs text-muted-foreground">Awaiting review</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Leads (Month)</CardTitle>
+            <Target className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{data.metrics.month.leadsGenerated}</div>
+            <p className="text-xs text-muted-foreground">This month</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Ad Budget (Month)</CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{data.metrics.month.adBudgetUsed.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">This month</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {viewMode === 'graphical' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Report Status Chart */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Report Status Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value">
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Leads Trend Chart */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Leads & Sessions Trend</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={metricsData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="leads" name="Leads" fill="#4ade80" />
+                  <Bar dataKey="sessions" name="Sessions" fill="#60a5fa" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {viewMode === 'statistics' && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Marketing Team Performance</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Team Member</TableHead>
+                  <TableHead className="text-center">Total Reports</TableHead>
+                  <TableHead className="text-center">Approved</TableHead>
+                  <TableHead className="text-center">Total Leads</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.teamSummary.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No team data</TableCell>
+                  </TableRow>
+                ) : (
+                  data.teamSummary.map((member, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{member.user.firstName} {member.user.lastName}</TableCell>
+                      <TableCell className="text-center">{member.totalReports}</TableCell>
+                      <TableCell className="text-center">{member.approved}</TableCell>
+                      <TableCell className="text-center text-green-600 font-medium">{member.totalLeads}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Approvals */}
+      {data.pendingApproval.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4 text-amber-500" />Pending Approvals</CardTitle></CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[200px]">
+              <div className="space-y-2">
+                {data.pendingApproval.map((report) => (
+                  <div key={report.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50">
+                    <div>
+                      <div className="font-medium">{report.user?.firstName} {report.user?.lastName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(report.reportDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    </div>
+                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">Submitted</Badge>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState('month');
   
@@ -3276,13 +3467,14 @@ export default function SuperAdminDashboard() {
       
       {/* Main Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full max-w-[840px] grid-cols-7">
+        <TabsList className="grid w-full max-w-[960px] grid-cols-8">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
           <TabsTrigger value="implementation" data-testid="tab-implementation">Implementation</TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">Support</TabsTrigger>
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
           <TabsTrigger value="development" data-testid="tab-development">Development</TabsTrigger>
+          <TabsTrigger value="marketing" data-testid="tab-marketing">Marketing</TabsTrigger>
           <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
         </TabsList>
         
@@ -3320,6 +3512,10 @@ export default function SuperAdminDashboard() {
         
         <TabsContent value="development">
           <DevelopmentDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="marketing">
+          <MarketingDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="performance">
