@@ -2332,39 +2332,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get access control for the user
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
-      // Get all follow-ups
-      const allFollowUps = await storage.getAllFollowUps();
+      // Get all follow-ups with lead info using a direct SQL query for better performance
+      const followUpsWithLeads = await db.execute(sql`
+        SELECT 
+          f.id,
+          f.lead_id as "leadId",
+          f.notes,
+          f.follow_up_date as "followUpDate",
+          f.completed,
+          f.created_at as "createdAt",
+          l.company_name as "companyName",
+          l.contact_person as "contactPerson",
+          l.contact_phone as "contactPhone",
+          l.stage,
+          l.sales_executive_id as "salesExecutiveId"
+        FROM follow_ups f
+        LEFT JOIN leads l ON f.lead_id = l.id
+        ORDER BY f.follow_up_date DESC
+      `);
       
-      // Get all leads for enrichment
-      const allLeads = await storage.getLeads({});
-      
-      // Filter follow-ups based on user's access (leads they can see)
-      const accessibleLeadIds = new Set(
-        allLeads
-          .filter(lead => {
-            if (accessControl.isAdmin) return true;
-            if (accessControl.allowedUserIds) {
-              return accessControl.allowedUserIds.includes(lead.salesExecutiveId || '');
-            }
-            return lead.salesExecutiveId === currentUser.id;
-          })
-          .map(lead => lead.id)
-      );
-      
-      // Enrich follow-ups with lead data and filter by access
-      const enrichedFollowUps = allFollowUps
-        .filter(followUp => accessibleLeadIds.has(followUp.leadId))
-        .map(followUp => {
-          const lead = allLeads.find(l => l.id === followUp.leadId);
-          return {
-            ...followUp,
-            leadId: followUp.leadId,
-            companyName: lead?.companyName || 'Unknown',
-            contactPerson: lead?.contactPerson || '',
-            contactPhone: lead?.contactPhone || '',
-            stage: lead?.stage || '',
-          };
-        });
+      // Filter by access control
+      const enrichedFollowUps = (followUpsWithLeads.rows as any[]).filter(followUp => {
+        if (accessControl.isAdmin) return true;
+        if (accessControl.allowedUserIds) {
+          return accessControl.allowedUserIds.includes(followUp.salesExecutiveId || '');
+        }
+        return followUp.salesExecutiveId === currentUser.id;
+      });
       
       res.json({
         followUps: enrichedFollowUps,
