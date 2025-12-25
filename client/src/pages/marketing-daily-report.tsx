@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   CalendarDays,
@@ -57,6 +58,8 @@ import {
   Eye,
   Edit,
   LayoutList,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
 interface MarketingTaskEntry {
@@ -140,6 +143,7 @@ const TASK_STATUSES = [
 
 export default function MarketingDailyReport() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("my-reports");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [viewingReport, setViewingReport] = useState<MarketingDailyReport | null>(null);
@@ -173,6 +177,13 @@ export default function MarketingDailyReport() {
   const { data: reports = [], isLoading } = useQuery<MarketingDailyReport[]>({
     queryKey: ["/api/marketing-reports"],
   });
+
+  const { data: departments = [] } = useQuery<Array<{ id: string; name: string; managerId: string | null }>>({
+    queryKey: ["/api/departments"],
+  });
+
+  const marketingDept = departments.find(d => d.name === 'Digital Marketing');
+  const isDeptHead = marketingDept?.managerId === user?.id;
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -227,6 +238,29 @@ export default function MarketingDailyReport() {
       toast({ title: "Error submitting report", description: error.message, variant: "destructive" });
     },
   });
+
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: 'approve' | 'reject' }) => {
+      return apiRequest(`/api/marketing-reports/${id}/review`, {
+        method: "POST",
+        body: JSON.stringify({ action }),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
+      toast({ 
+        title: variables.action === 'approve' ? "Report approved" : "Report rejected",
+        description: `The report has been ${variables.action === 'approve' ? 'approved' : 'rejected'} successfully.`
+      });
+      setViewingReport(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error reviewing report", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const canReviewReports = user?.role === 'admin' || user?.role === 'super_admin' || isDeptHead;
 
   const resetForm = () => {
     setFormData({
@@ -982,6 +1016,31 @@ export default function MarketingDailyReport() {
                   {submitMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   <Send className="h-4 w-4 mr-2" />
                   Submit for Approval
+                </Button>
+              </>
+            )}
+            {viewingReport?.status === "submitted" && canReviewReports && (
+              <>
+                <Button 
+                  variant="outline" 
+                  className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                  onClick={() => reviewMutation.mutate({ id: viewingReport.id, action: 'reject' })} 
+                  disabled={reviewMutation.isPending}
+                  data-testid="button-reject-report"
+                >
+                  {reviewMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <ThumbsDown className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => reviewMutation.mutate({ id: viewingReport.id, action: 'approve' })} 
+                  disabled={reviewMutation.isPending}
+                  data-testid="button-approve-report"
+                >
+                  {reviewMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <ThumbsUp className="h-4 w-4 mr-2" />
+                  Approve
                 </Button>
               </>
             )}

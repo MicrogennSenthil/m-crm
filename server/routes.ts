@@ -12348,6 +12348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const report = await storage.updateMarketingDailyReport(id, { 
         status: 'submitted',
+        submittedAt: new Date(),
       });
       
       res.json(report);
@@ -12386,6 +12387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const report = await storage.updateMarketingDailyReport(id, { 
         status: newStatus,
         approvedBy: user.id,
+        approvedAt: new Date(),
       });
       
       res.json(report);
