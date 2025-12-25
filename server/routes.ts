@@ -12326,9 +12326,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/marketing-reports", isAuthenticated, async (req, res) => {
     try {
       const user = req.user as any;
+      const { taskEntries, ...bodyData } = req.body;
+      
       const reportData = {
-        ...req.body,
+        ...bodyData,
         userId: user.id,
+        reportDate: new Date(bodyData.reportDate || new Date()),
       };
       
       // Check if a report for this date already exists
@@ -12347,8 +12350,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const report = await storage.createMarketingDailyReport(reportData);
       
       // Create task entries if provided
-      if (req.body.taskEntries && Array.isArray(req.body.taskEntries)) {
-        for (const entry of req.body.taskEntries) {
+      if (taskEntries && Array.isArray(taskEntries)) {
+        for (const entry of taskEntries) {
           await storage.createMarketingTaskEntry({
             ...entry,
             reportId: report.id,
@@ -12380,6 +12383,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { taskEntries, ...reportData } = req.body;
+      
+      // Convert reportDate to Date object if provided
+      if (reportData.reportDate) {
+        reportData.reportDate = new Date(reportData.reportDate);
+      }
+      
       const report = await storage.updateMarketingDailyReport(id, reportData);
       
       // Update task entries if provided
