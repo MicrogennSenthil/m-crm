@@ -85,6 +85,13 @@ const URGENCY_STAGES = [
   { id: "normal", title: "Normal (0-3 days)", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
 ];
 
+const PRIORITY_CONFIG: Record<string, { color: string; label: string }> = {
+  critical: { color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300", label: "Critical" },
+  high: { color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300", label: "High" },
+  medium: { color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300", label: "Medium" },
+  low: { color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300", label: "Low" },
+};
+
 interface FeedbackStats {
   totalOpen: number;
   totalInProgress: number;
@@ -121,6 +128,7 @@ interface PendingTicket {
   status: string;
   createdAt: string;
   closedAt: string;
+  closingNotes: string | null;
   resolvedAt: string | null;
   escalationLevel: number;
   assignedEngineerId: string | null;
@@ -139,11 +147,17 @@ interface CompletedTicket {
   issueSummary: string;
   priority: string;
   closedAt: string;
+  closingNotes: string | null;
   assignedEngineerName: string | null;
   feedbackRating: number | null;
   feedbackComments: string | null;
   feedbackSatisfied: boolean | null;
   feedbackSubmittedAt: string | null;
+  workStatus: string | null;
+  workDescription: string | null;
+  clientContactPerson: string | null;
+  clientContactPhone: string | null;
+  completedAt: string | null;
 }
 
 interface TicketAssignmentHistory {
@@ -1220,60 +1234,94 @@ export default function HRFeedback() {
                   <p>No feedback received yet</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ticket #</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Issue</TableHead>
-                        <TableHead>Engineer</TableHead>
-                        <TableHead>Rating</TableHead>
-                        <TableHead>Satisfied</TableHead>
-                        <TableHead>Comments</TableHead>
-                        <TableHead>Feedback Date</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {completedTickets.map((ticket) => (
-                        <TableRow key={ticket.id} data-testid={`row-completed-${ticket.id}`}>
-                          <TableCell className="font-medium">
-                            {ticket.ticketNumber}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{ticket.customerName}</span>
-                              <span className="text-xs text-muted-foreground">{ticket.customerEmail}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">
-                            {ticket.issueSummary}
-                          </TableCell>
-                          <TableCell>
-                            {ticket.assignedEngineerName || <span className="text-muted-foreground">-</span>}
-                          </TableCell>
-                          <TableCell>{renderStars(ticket.feedbackRating)}</TableCell>
-                          <TableCell>
+                <div className="space-y-4">
+                  {completedTickets.map((ticket) => (
+                    <div key={ticket.id} className="border rounded-lg p-4 space-y-3" data-testid={`card-completed-${ticket.id}`}>
+                      {/* Header Row */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono font-bold">{ticket.ticketNumber}</span>
+                            <Badge className={PRIORITY_CONFIG[ticket.priority || 'medium']?.color}>
+                              {PRIORITY_CONFIG[ticket.priority || 'medium']?.label || ticket.priority}
+                            </Badge>
                             {ticket.feedbackSatisfied === true ? (
-                              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Yes</Badge>
+                              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Satisfied</Badge>
                             ) : ticket.feedbackSatisfied === false ? (
-                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">No</Badge>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">
-                            {ticket.feedbackComments || <span className="text-muted-foreground">-</span>}
-                          </TableCell>
-                          <TableCell>
-                            {ticket.feedbackSubmittedAt
-                              ? format(new Date(ticket.feedbackSubmittedAt), "dd/MM/yyyy HH:mm")
-                              : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">Not Satisfied</Badge>
+                            ) : null}
+                          </div>
+                          <p className="font-medium">{ticket.customerName}</p>
+                          <p className="text-sm text-muted-foreground">{ticket.issueSummary}</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            {renderStars(ticket.feedbackRating)}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Closed: {ticket.closedAt ? format(new Date(ticket.closedAt), "dd/MM/yyyy") : "-"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Closing Notes */}
+                      {ticket.closingNotes && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+                          <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Closing Notes/Narration</p>
+                          <p className="text-sm">{ticket.closingNotes}</p>
+                        </div>
+                      )}
+
+                      {/* Work Completion Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                        <div className="bg-muted/50 p-2 rounded">
+                          <p className="text-xs text-muted-foreground">Work Status</p>
+                          <p className="font-medium">
+                            {ticket.workStatus === 'completed' ? 'Fully Completed' :
+                             ticket.workStatus === 'partially_completed' ? 'Partially Completed' :
+                             ticket.workStatus === 'not_completed' ? 'Not Completed' :
+                             ticket.workStatus || '-'}
+                          </p>
+                        </div>
+                        <div className="bg-muted/50 p-2 rounded">
+                          <p className="text-xs text-muted-foreground">Completion Date</p>
+                          <p className="font-medium">
+                            {ticket.completedAt ? format(new Date(ticket.completedAt), "dd/MM/yyyy") : '-'}
+                          </p>
+                        </div>
+                        <div className="bg-muted/50 p-2 rounded">
+                          <p className="text-xs text-muted-foreground">Client Contact Person</p>
+                          <p className="font-medium">{ticket.clientContactPerson || '-'}</p>
+                        </div>
+                        <div className="bg-muted/50 p-2 rounded">
+                          <p className="text-xs text-muted-foreground">Contact Phone</p>
+                          <p className="font-medium">{ticket.clientContactPhone || '-'}</p>
+                        </div>
+                      </div>
+
+                      {/* Work Description */}
+                      {ticket.workDescription && (
+                        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-md">
+                          <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Work Description</p>
+                          <p className="text-sm">{ticket.workDescription}</p>
+                        </div>
+                      )}
+
+                      {/* Feedback Comments */}
+                      {ticket.feedbackComments && (
+                        <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-md">
+                          <p className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-1">HR Feedback Comments</p>
+                          <p className="text-sm">{ticket.feedbackComments}</p>
+                        </div>
+                      )}
+
+                      {/* Footer */}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                        <span>Engineer: {ticket.assignedEngineerName || '-'}</span>
+                        <span>Feedback submitted: {ticket.feedbackSubmittedAt ? format(new Date(ticket.feedbackSubmittedAt), "dd/MM/yyyy HH:mm") : '-'}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -1745,6 +1793,12 @@ export default function HRFeedback() {
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Issue Description</p>
                   <p className="text-sm bg-background/50 p-2 rounded">{selectedTicket.issueDescription}</p>
+                </div>
+              )}
+              {selectedTicket?.closingNotes && (
+                <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Closing Notes/Narration</p>
+                  <p className="text-sm">{selectedTicket.closingNotes}</p>
                 </div>
               )}
             </div>

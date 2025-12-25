@@ -559,6 +559,7 @@ export const tickets = pgTable("tickets", {
   escalationLevel: integer("escalation_level").default(1), // 1: Support Engineer, 2: Senior Support, 3: Development Team
   escalatedAt: timestamp("escalated_at"),
   closedAt: timestamp("closed_at"),
+  closingNotes: text("closing_notes"), // Notes/narration when closing the ticket
   // Reopen tracking
   reopenedFromTicketId: varchar("reopened_from_ticket_id"), // Reference to original closed ticket
   reopenReason: text("reopen_reason"),

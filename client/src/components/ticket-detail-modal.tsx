@@ -45,6 +45,8 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   const [showReopenDialog, setShowReopenDialog] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [closingNotes, setClosingNotes] = useState("");
   const { toast } = useToast();
 
   const { data: comments } = useQuery<(TicketComment & { user?: User })[]>({
@@ -169,7 +171,7 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
 
   const closeTicketMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/tickets/${ticket.id}/close`, {});
+      await apiRequest("POST", `/api/tickets/${ticket.id}/close`, { closingNotes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
@@ -178,6 +180,8 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
         title: "Success",
         description: "Ticket closed. Feedback email sent to customer.",
       });
+      setShowCloseDialog(false);
+      setClosingNotes("");
       onClose();
     },
     onError: (error: Error) => {
@@ -506,8 +510,8 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                 <Button
                   variant="default"
                   className="w-full"
-                  onClick={() => closeTicketMutation.mutate()}
-                  disabled={closeTicketMutation.isPending || hasActiveDevelopmentTask}
+                  onClick={() => setShowCloseDialog(true)}
+                  disabled={hasActiveDevelopmentTask}
                   data-testid="button-close-ticket"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -545,6 +549,49 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
           sourceReference={ticket.ticketNumber}
           sourceDescription={ticket.issueDescription || undefined}
         />
+
+        {/* Close Ticket Dialog */}
+        <Dialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Close Ticket</DialogTitle>
+              <DialogDescription>
+                Add closing notes/narration for this ticket. This will be visible in feedback and reports.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="closing-notes">Closing Notes / Narration</Label>
+                <Textarea
+                  id="closing-notes"
+                  placeholder="Describe the resolution, work done, or any notes about closing this ticket..."
+                  value={closingNotes}
+                  onChange={(e) => setClosingNotes(e.target.value)}
+                  className="min-h-24"
+                  data-testid="textarea-closing-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCloseDialog(false);
+                  setClosingNotes("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => closeTicketMutation.mutate()}
+                disabled={closeTicketMutation.isPending}
+                data-testid="button-confirm-close"
+              >
+                {closeTicketMutation.isPending ? "Closing..." : "Close Ticket"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Reopen Ticket Dialog */}
         <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>

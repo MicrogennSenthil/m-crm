@@ -5596,9 +5596,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      const { closingNotes } = req.body || {};
+      
       const updated = await storage.updateTicket(req.params.id, {
         status: "closed",
         closedAt: new Date(),
+        closingNotes: closingNotes || null,
       });
       
       // Log activity
@@ -5606,7 +5609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "ticket",
         entityId: updated.id,
         action: "closed",
-        description: `Ticket closed: ${updated.ticketNumber}`,
+        description: `Ticket closed: ${updated.ticketNumber}${closingNotes ? ` - ${closingNotes}` : ''}`,
         userId: req.user.claims.sub,
       });
       
@@ -11193,6 +11196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: tickets.status,
         createdAt: tickets.createdAt,
         closedAt: tickets.closedAt,
+        closingNotes: tickets.closingNotes,
         resolvedAt: tickets.resolvedAt,
         escalationLevel: tickets.escalationLevel,
         assignedEngineerId: tickets.assignedEngineerId,
@@ -11266,12 +11270,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         issueSummary: tickets.issueSummary,
         priority: tickets.priority,
         closedAt: tickets.closedAt,
+        closingNotes: tickets.closingNotes,
         assignedEngineerId: tickets.assignedEngineerId,
         assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
         feedbackRating: sql<number>`(SELECT rating FROM feedback WHERE ticket_id = ${tickets.id})`,
         feedbackComments: sql<string>`(SELECT comments FROM feedback WHERE ticket_id = ${tickets.id})`,
         feedbackSatisfied: sql<boolean>`(SELECT satisfied FROM feedback WHERE ticket_id = ${tickets.id})`,
         feedbackSubmittedAt: sql<string>`(SELECT submitted_at FROM feedback WHERE ticket_id = ${tickets.id})::text`,
+        workStatus: sql<string>`(SELECT work_status FROM feedback WHERE ticket_id = ${tickets.id})`,
+        workDescription: sql<string>`(SELECT work_description FROM feedback WHERE ticket_id = ${tickets.id})`,
+        clientContactPerson: sql<string>`(SELECT client_contact_person FROM feedback WHERE ticket_id = ${tickets.id})`,
+        clientContactPhone: sql<string>`(SELECT client_contact_phone FROM feedback WHERE ticket_id = ${tickets.id})`,
+        completedAt: sql<string>`(SELECT completed_at FROM feedback WHERE ticket_id = ${tickets.id})::text`,
       })
         .from(tickets)
         .where(and(...conditions))
