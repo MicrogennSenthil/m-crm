@@ -384,7 +384,8 @@ export default function Sales() {
 
       {/* Kanban Board - Original horizontal layout */}
       {layout === "kanban" && (
-        <div className="grid grid-cols-6 gap-2 sm:gap-3 pb-4 overflow-x-auto">
+        <div className="overflow-x-auto pb-2">
+        <div className="grid grid-cols-7 gap-2 sm:gap-3 pb-4 min-w-[1000px]">
           {/* Today's Followups Column */}
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-1.5">
@@ -554,6 +555,7 @@ export default function Sales() {
               </div>
             );
           })}
+        </div>
         </div>
       )}
 
