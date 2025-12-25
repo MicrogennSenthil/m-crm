@@ -1734,10 +1734,19 @@ export default function HRFeedback() {
           
           <div className="space-y-6 py-4">
             {/* Customer Info Summary */}
-            <div className="bg-muted/50 p-3 rounded-md">
+            <div className="bg-muted/50 p-3 rounded-md space-y-2">
               <p className="font-medium">{selectedTicket?.customerName}</p>
               <p className="text-sm text-muted-foreground">{selectedTicket?.customerPhone || selectedTicket?.customerEmail}</p>
-              <p className="text-sm mt-1">{selectedTicket?.issueSummary}</p>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground mb-1">Issue Summary</p>
+                <p className="text-sm font-medium">{selectedTicket?.issueSummary}</p>
+              </div>
+              {selectedTicket?.issueDescription && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Issue Description</p>
+                  <p className="text-sm bg-background/50 p-2 rounded">{selectedTicket.issueDescription}</p>
+                </div>
+              )}
             </div>
 
             {/* Call History Timeline Toggle */}
