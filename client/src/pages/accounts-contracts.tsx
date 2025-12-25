@@ -1081,10 +1081,27 @@ function ContractForm({
     mod => !modules.some(m => m.moduleName.toLowerCase() === mod.toLowerCase())
   );
 
-  // When customer changes, clear modules and reset selection
+  // When customer changes, auto-populate all modules from customer's purchased modules
   const handleCustomerChange = (customerId: string) => {
     setFormData({ ...formData, customerId });
-    setModules([]); // Clear modules when customer changes
+    
+    // Find the selected customer and auto-add all their purchased modules
+    const selectedCustomer = customers.find(c => c.id === customerId);
+    const customerModules = selectedCustomer?.selectedModules || [];
+    
+    if (customerModules.length > 0) {
+      // Auto-populate all modules from customer's sales with default values
+      const autoAddedModules = customerModules.map(mod => ({
+        moduleName: mod,
+        orderValue: 0,
+        amcAmount: 0,
+        contractPeriodMonths: 12,
+      }));
+      setModules(autoAddedModules);
+    } else {
+      setModules([]); // Clear modules if customer has no purchased modules
+    }
+    
     setSelectedModulesToAdd([]);
     setNewModuleName("");
     setBulkOrderValue(0);
