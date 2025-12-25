@@ -2319,6 +2319,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // END MASTER DATA ROUTES
   // =============================================
 
+  // Sales Dashboard Stats - Returns follow-ups for Today's Calls feature
+  app.get("/api/sales-dashboard/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Get access control for the user
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      // Get all follow-ups
+      const allFollowUps = await storage.getAllFollowUps();
+      
+      // Get all leads for enrichment
+      const allLeads = await storage.getLeads({});
+      
+      // Filter follow-ups based on user's access (leads they can see)
+      const accessibleLeadIds = new Set(
+        allLeads
+          .filter(lead => {
+            if (accessControl.isAdmin) return true;
+            if (accessControl.allowedUserIds) {
+              return accessControl.allowedUserIds.includes(lead.salesExecutiveId || '');
+            }
+            return lead.salesExecutiveId === currentUser.id;
+          })
+          .map(lead => lead.id)
+      );
+      
+      // Enrich follow-ups with lead data and filter by access
+      const enrichedFollowUps = allFollowUps
+        .filter(followUp => accessibleLeadIds.has(followUp.leadId))
+        .map(followUp => {
+          const lead = allLeads.find(l => l.id === followUp.leadId);
+          return {
+            ...followUp,
+            leadId: followUp.leadId,
+            companyName: lead?.companyName || 'Unknown',
+            contactPerson: lead?.contactPerson || '',
+            contactPhone: lead?.contactPhone || '',
+            stage: lead?.stage || '',
+          };
+        });
+      
+      res.json({
+        followUps: enrichedFollowUps,
+      });
+    } catch (error) {
+      console.error("Error fetching sales dashboard stats:", error);
+      res.status(500).json({ message: "Failed to fetch sales dashboard stats" });
+    }
+  });
+
   // Lead routes
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
