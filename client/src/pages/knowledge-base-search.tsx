@@ -51,6 +51,12 @@ const categories = [
   { value: "support", label: "Support" },
   { value: "product", label: "Product" },
   { value: "faq", label: "FAQ" },
+  { value: "training", label: "Training" },
+  { value: "policy", label: "Policy" },
+  { value: "accounts", label: "Accounts" },
+  { value: "development", label: "Development" },
+  { value: "hr_admin", label: "HR & Admin" },
+  { value: "digital_marketing", label: "Digital Marketing" },
 ];
 
 export default function KnowledgeBaseSearch() {

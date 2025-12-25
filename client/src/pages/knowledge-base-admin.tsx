@@ -207,6 +207,12 @@ export default function KnowledgeBaseAdmin() {
       support: "Support",
       product: "Product",
       faq: "FAQ",
+      training: "Training",
+      policy: "Policy",
+      accounts: "Accounts",
+      development: "Development",
+      hr_admin: "HR & Admin",
+      digital_marketing: "Digital Marketing",
     };
     return labels[category] || category;
   };
