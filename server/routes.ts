@@ -12331,13 +12331,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const reportData = {
         ...bodyData,
         userId: user.id,
-        reportDate: new Date(bodyData.reportDate || new Date()),
+        reportDate: new Date(), // Always use current system date
       };
       
-      // Check if a report for this date already exists
+      // Check if a report for today already exists
       const existingReport = await storage.getMarketingDailyReportByDate(
         user.id, 
-        new Date(req.body.reportDate || new Date())
+        new Date()
       );
       
       if (existingReport) {
