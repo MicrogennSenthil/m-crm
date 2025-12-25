@@ -38,7 +38,8 @@ const LEAD_SOURCES = [
 ];
 
 const STAGES = [
-  { value: "new_lead", label: "New Lead" },
+  { value: "seed", label: "Seed" },
+  { value: "lead", label: "Lead" },
   { value: "demo_scheduled", label: "Demo Scheduled" },
   { value: "quote_sent", label: "Quote Sent" },
   { value: "negotiation", label: "Negotiation" },
@@ -89,7 +90,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       contactEmail: "",
       contactPhone: "",
       leadSource: "website",
-      stage: "new_lead",
+      stage: "seed",
       currency: "INR",
       estimatedValue: undefined,
       salesExecutiveId: undefined,

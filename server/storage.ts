@@ -1663,7 +1663,8 @@ export class DatabaseStorage implements IStorage {
       .groupBy(leads.stage);
 
     const stageNames: Record<string, string> = {
-      new_lead: "New Leads",
+      seed: "Seeds",
+      lead: "Leads",
       demo_scheduled: "Demo",
       quote_sent: "Quote",
       negotiation: "Negotiation",

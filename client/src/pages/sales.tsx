@@ -47,7 +47,8 @@ interface ProcessedFollowUp {
 }
 
 const STAGES = [
-  { id: "new_lead", title: "New Leads", color: "bg-blue-600" },
+  { id: "seed", title: "Seeds", color: "bg-blue-600" },
+  { id: "lead", title: "Leads", color: "bg-cyan-600" },
   { id: "demo_scheduled", title: "Demo Scheduled", color: "bg-purple-600" },
   { id: "quote_sent", title: "Quote Sent", color: "bg-yellow-600" },
   { id: "negotiation", title: "Negotiation", color: "bg-orange-600" },

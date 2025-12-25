@@ -37,7 +37,8 @@ const LEAD_SOURCES = [
 ];
 
 const STAGES = [
-  { value: "new_lead", label: "New Lead" },
+  { value: "seed", label: "Seed" },
+  { value: "lead", label: "Lead" },
   { value: "demo_scheduled", label: "Demo Scheduled" },
   { value: "quote_sent", label: "Quote Sent" },
   { value: "negotiation", label: "Negotiation" },
@@ -774,7 +775,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   </div>
                 )}
                 
-                {/* Schedule Demo Form - Only show if lead is in new_lead or to reschedule */}
+                {/* Schedule Demo Form - Only show if lead is in seed/lead stage or to reschedule */}
                 <div className="p-4 border rounded-md space-y-3">
                   <p className="text-sm text-muted-foreground">
                     {lead.demoDate 
@@ -868,7 +869,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 )}
                 
                 {/* Send Quote Form */}
-                {(lead.stage === "demo_scheduled" || lead.stage === "new_lead" || !lead.quoteSentDate) && (
+                {(lead.stage === "demo_scheduled" || lead.stage === "seed" || lead.stage === "lead" || !lead.quoteSentDate) && (
                   <div className="p-4 border rounded-md space-y-3">
                     <p className="text-sm text-muted-foreground">
                       {lead.quoteSentDate ? "Update quote details:" : "Send quote to move lead to Quote Sent stage:"}
@@ -1206,7 +1207,8 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       <div className="space-y-2">
                         {stageHistory.map((item, index) => {
                           const stageLabels: Record<string, string> = {
-                            new_lead: "New Lead",
+                            seed: "Seed",
+                            lead: "Lead",
                             demo_scheduled: "Demo Scheduled",
                             quote_sent: "Quote Sent",
                             negotiation: "Negotiation",

@@ -114,7 +114,8 @@ type PeriodType = 'today' | 'month' | 'year';
 type ViewMode = 'grid' | 'tabs';
 
 const STAGE_CONFIG: Record<string, { color: string; label: string }> = {
-  new_lead: { color: "bg-blue-500 text-white", label: "New Lead" },
+  seed: { color: "bg-blue-500 text-white", label: "Seed" },
+  lead: { color: "bg-cyan-500 text-white", label: "Lead" },
   demo_scheduled: { color: "bg-purple-500 text-white", label: "Demo Scheduled" },
   quote_sent: { color: "bg-orange-500 text-white", label: "Quote Sent" },
   negotiation: { color: "bg-yellow-500 text-white", label: "Negotiation" },
@@ -295,7 +296,7 @@ function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSel
         </TableHeader>
         <TableBody>
           {leads.map((lead) => {
-            const stageConfig = STAGE_CONFIG[lead.stage || 'new_lead'];
+            const stageConfig = STAGE_CONFIG[lead.stage || 'seed'];
             return (
               <TableRow 
                 key={lead.id} 
@@ -794,8 +795,8 @@ export default function SalesDashboard() {
                   <div>
                     <Label className="text-xs text-muted-foreground">Stage</Label>
                     <div>
-                      <Badge className={STAGE_CONFIG[leadHistory.lead.stage || 'new_lead'].color}>
-                        {STAGE_CONFIG[leadHistory.lead.stage || 'new_lead'].label}
+                      <Badge className={STAGE_CONFIG[leadHistory.lead.stage || 'seed'].color}>
+                        {STAGE_CONFIG[leadHistory.lead.stage || 'seed'].label}
                       </Badge>
                     </div>
                   </div>

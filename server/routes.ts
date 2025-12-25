@@ -2467,8 +2467,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let activityAction = "updated";
       let activityDescription = "";
       
-      // Auto-transition to demo_scheduled when demo date is set and lead is in new_lead stage
-      if (updateData.demoDate && currentLead && currentLead.stage === "new_lead") {
+      // Auto-transition to demo_scheduled when demo date is set and lead is in seed/lead stage
+      if (updateData.demoDate && currentLead && (currentLead.stage === "seed" || currentLead.stage === "lead")) {
         updateData.stage = "demo_scheduled";
         activityAction = "demo_scheduled";
         activityDescription = `Demo scheduled for ${currentLead.companyName} on ${new Date(updateData.demoDate).toLocaleString()}`;
@@ -2486,7 +2486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Auto-transition to quote_sent when quote is sent
       if (updateData.quoteSentDate && currentLead && 
-          (currentLead.stage === "demo_scheduled" || currentLead.stage === "new_lead")) {
+          (currentLead.stage === "demo_scheduled" || currentLead.stage === "seed" || currentLead.stage === "lead")) {
         updateData.stage = "quote_sent";
         activityAction = "quote_sent";
         const modulesList = updateData.selectedModules?.join(", ") || "No modules";
@@ -2514,7 +2514,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Track stage changes in history
       if (updateData.stage && currentLead && updateData.stage !== currentLead.stage) {
         const stageLabels: Record<string, string> = {
-          new_lead: "New Lead",
+          seed: "Seed",
+          lead: "Lead",
           demo_scheduled: "Demo Scheduled",
           quote_sent: "Quote Sent",
           negotiation: "Negotiation",
@@ -2684,7 +2685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             contactEmail: leadRow.contactEmail || leadRow.contact_email || leadRow["Email"] || "",
             contactPhone: leadRow.contactPhone || leadRow.contact_phone || leadRow["Phone"] || "",
             leadSource: leadRow.leadSource || leadRow.lead_source || leadRow["Source"] || "website",
-            stage: "new_lead",
+            stage: "seed",
             estimatedValue: parseFloat(leadRow.estimatedValue || leadRow.estimated_value || leadRow["Value"]) || 0,
             notes: leadRow.notes || leadRow["Notes"] || "",
           });
@@ -2880,7 +2881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             contactEmail: lead.email || "",
             contactPhone: lead.phone || "",
             leadSource: lead.source || "google_sheet",
-            stage: "new_lead",
+            stage: "seed",
             estimatedValue: 0,
             notes: lead.notes || `Imported from Google Sheet: ${sheetName}`,
           });
@@ -2934,7 +2935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: fieldMap.get("email") || "",
         contactPhone: fieldMap.get("phone_number") || fieldMap.get("phone") || "",
         leadSource: "facebook",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Facebook Lead Ad - Form ID: ${form_id || "N/A"}, Ad ID: ${ad_id || "N/A"}`,
       };
@@ -2984,7 +2985,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: lead?.email || "",
         contactPhone: lead?.phone || "",
         leadSource: "linkedin",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `LinkedIn Lead Gen Form - Campaign: ${campaign?.name || "N/A"}, Form: ${form?.name || "N/A"}`,
       };
@@ -3041,7 +3042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: fieldMap.get("email") || "",
         contactPhone: fieldMap.get("phone_number") || fieldMap.get("phone") || "",
         leadSource: "instagram",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Instagram Lead Ad - Form ID: ${form_id || "N/A"}, Instagram User: ${instagram_user_id || "N/A"}`,
       };
@@ -3075,7 +3076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: user_data?.email || card_data?.email || "",
         contactPhone: user_data?.phone || card_data?.phone_number || "",
         leadSource: "twitter",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Twitter/X Lead Card`,
       };
@@ -3122,7 +3123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: fieldMap.get("EMAIL") || "",
         contactPhone: fieldMap.get("PHONE_NUMBER") || "",
         leadSource: "google_ads",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Google Ads Lead Form - Campaign ID: ${campaign_id || "N/A"}, Form ID: ${form_id || "N/A"}, Lead ID: ${lead_id || "N/A"}`,
       };
@@ -3163,7 +3164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: fieldMap.get("EMAIL") || "",
         contactPhone: fieldMap.get("PHONE_NUMBER") || "",
         leadSource: "youtube",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `YouTube Lead Form - Video ID: ${video_id || "N/A"}, Campaign: ${campaign_id || "N/A"}`,
       };
@@ -3197,7 +3198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: lead_info?.email || "",
         contactPhone: lead_info?.phone_number || lead_info?.phone || "",
         leadSource: "tiktok",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `TikTok Lead Ad - Page: ${page_info?.page_name || "N/A"}, Ad: ${ad_info?.ad_name || "N/A"}`,
       };
@@ -3231,7 +3232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: lead_data?.email || "",
         contactPhone: lead_data?.phone || "",
         leadSource: "pinterest",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Pinterest Lead Ad - Pin: ${pin_info?.pin_id || "N/A"}, Campaign: ${campaign_info?.name || "N/A"}`,
       };
@@ -3265,7 +3266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: lead?.email || "",
         contactPhone: lead?.phone_number || lead?.phone || "",
         leadSource: "snapchat",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Snapchat Lead Ad - Campaign: ${campaign?.name || "N/A"}, Ad Squad: ${ad_squad?.name || "N/A"}`,
       };
@@ -3307,7 +3308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: "",
         contactPhone: contact?.wa_id || message?.from || "",
         leadSource: "whatsapp",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `WhatsApp Lead - Message: ${message?.text?.body || "Click-to-WhatsApp inquiry"}`,
       };
@@ -3364,7 +3365,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: fieldMap.get("email") || "",
         contactPhone: fieldMap.get("phone") || fieldMap.get("phonenumber") || "",
         leadSource: "microsoft_ads",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: 0,
         notes: `Microsoft/Bing Ads Lead Form - Campaign ID: ${campaignId || "N/A"}, Lead Form ID: ${leadFormId || "N/A"}`,
       };
@@ -3398,7 +3399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactEmail: email || req.body.contactEmail || "",
         contactPhone: phone || req.body.contactPhone || "",
         leadSource: source || "website",
-        stage: "new_lead" as const,
+        stage: "seed" as const,
         estimatedValue: parseFloat(req.body.value) || 0,
         notes: notes || req.body.notes || "Submitted via website form",
       };
@@ -4386,8 +4387,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Helper function to calculate lead value
       const getLeadValue = (lead: any) => lead.confirmedOrderValue || lead.estimatedValue || 0;
       
-      // ============= NEW LEAD STATS =============
-      const newLeadStageLeads = allLeads.filter(l => l.stage === 'new_lead');
+      // ============= SEED/LEAD STATS =============
+      const seedStageLeads = allLeads.filter(l => l.stage === 'seed' || l.stage === 'lead');
       
       // Today's new leads (created today)
       const todayNewLeads = allLeads.filter(l => 
