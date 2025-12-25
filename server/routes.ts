@@ -12358,10 +12358,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create task entries if provided
       if (taskEntries && Array.isArray(taskEntries)) {
         for (const entry of taskEntries) {
-          await storage.createMarketingTaskEntry({
-            ...entry,
+          // Transform frontend fields to match database schema
+          const transformedEntry = {
             reportId: report.id,
-          });
+            timeSlot: entry.startTime && entry.endTime ? `${entry.startTime}–${entry.endTime}` : entry.timeSlot,
+            taskActivity: entry.taskDescription || entry.taskActivity,
+            platformTool: entry.platform && entry.toolUsed 
+              ? `${entry.platform}${entry.toolUsed ? ' / ' + entry.toolUsed : ''}`.trim()
+              : entry.platformTool || '',
+            status: entry.status || 'completed',
+            remarks: entry.remarks || '',
+            sortOrder: entry.sortOrder || 0,
+          };
+          await storage.createMarketingTaskEntry(transformedEntry);
         }
       }
       
@@ -12404,10 +12413,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Delete existing entries and recreate
         await storage.deleteMarketingTaskEntriesByReport(id);
         for (const entry of taskEntries) {
-          await storage.createMarketingTaskEntry({
-            ...entry,
+          // Transform frontend fields to match database schema
+          const transformedEntry = {
             reportId: id,
-          });
+            timeSlot: entry.startTime && entry.endTime ? `${entry.startTime}–${entry.endTime}` : entry.timeSlot,
+            taskActivity: entry.taskDescription || entry.taskActivity,
+            platformTool: entry.platform && entry.toolUsed 
+              ? `${entry.platform}${entry.toolUsed ? ' / ' + entry.toolUsed : ''}`.trim()
+              : entry.platformTool || '',
+            status: entry.status || 'completed',
+            remarks: entry.remarks || '',
+            sortOrder: entry.sortOrder || 0,
+          };
+          await storage.createMarketingTaskEntry(transformedEntry);
         }
       }
       
