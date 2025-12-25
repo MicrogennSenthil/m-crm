@@ -2341,10 +2341,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           f.follow_up_date as "followUpDate",
           f.completed,
           f.created_at as "createdAt",
-          l.company_name as "companyName",
-          l.contact_person as "contactPerson",
-          l.contact_phone as "contactPhone",
-          l.stage,
+          l.company_name as "leadCompanyName",
+          l.contact_person as "leadContactPerson",
+          l.contact_phone as "leadContactPhone",
+          l.stage as "leadStage",
           l.sales_executive_id as "salesExecutiveId"
         FROM follow_ups f
         LEFT JOIN leads l ON f.lead_id = l.id
