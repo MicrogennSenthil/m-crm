@@ -265,16 +265,16 @@ export default function Sales() {
           </Button>
           <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-lead" className="min-h-[44px]">
+              <Button data-testid="button-add-seed" className="min-h-[44px]">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Lead
+                Add Seed
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Lead</DialogTitle>
+                <DialogTitle>Add New Seed</DialogTitle>
                 <DialogDescription>
-                  Create a new lead in your sales pipeline
+                  Create a new seed in your sales pipeline
                 </DialogDescription>
               </DialogHeader>
               <LeadForm onSuccess={() => setNewLeadOpen(false)} />
