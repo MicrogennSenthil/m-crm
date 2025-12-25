@@ -187,11 +187,7 @@ export default function MarketingDailyReport() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/marketing-reports", {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: { "Content-Type": "application/json" },
-      });
+      return apiRequest("POST", "/api/marketing-reports", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
@@ -206,11 +202,7 @@ export default function MarketingDailyReport() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return apiRequest(`/api/marketing-reports/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-        headers: { "Content-Type": "application/json" },
-      });
+      return apiRequest("PATCH", `/api/marketing-reports/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
@@ -225,9 +217,7 @@ export default function MarketingDailyReport() {
 
   const submitMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/marketing-reports/${id}/submit`, {
-        method: "POST",
-      });
+      return apiRequest("POST", `/api/marketing-reports/${id}/submit`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
@@ -241,11 +231,7 @@ export default function MarketingDailyReport() {
 
   const reviewMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string; action: 'approve' | 'reject' }) => {
-      return apiRequest(`/api/marketing-reports/${id}/review`, {
-        method: "POST",
-        body: JSON.stringify({ action }),
-        headers: { "Content-Type": "application/json" },
-      });
+      return apiRequest("POST", `/api/marketing-reports/${id}/review`, { action });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
