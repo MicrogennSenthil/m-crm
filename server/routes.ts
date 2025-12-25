@@ -2333,6 +2333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Get all follow-ups with lead info using a direct SQL query for better performance
+      // Exclude closed deals (closed_won, closed_lost) as they don't need follow-up calls
       const followUpsWithLeads = await db.execute(sql`
         SELECT 
           f.id,
@@ -2348,6 +2349,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           l.sales_executive_id as "salesExecutiveId"
         FROM follow_ups f
         LEFT JOIN leads l ON f.lead_id = l.id
+        WHERE l.stage NOT IN ('closed_won', 'closed_lost')
+           OR l.stage IS NULL
         ORDER BY f.follow_up_date DESC
       `);
       
