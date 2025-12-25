@@ -609,6 +609,13 @@ export default function HRFeedback() {
   const openFeedbackDialog = (ticket: PendingTicket) => {
     setSelectedTicket(ticket);
     resetFeedbackForm();
+    // Pre-populate completion date with ticket's closed date
+    if (ticket.closedAt) {
+      const closedDate = new Date(ticket.closedAt);
+      setCompletedAt(format(closedDate, "yyyy-MM-dd"));
+    }
+    // Pre-populate work status as completed (default)
+    setWorkStatus("completed");
     setShowFeedbackDialog(true);
   };
 
