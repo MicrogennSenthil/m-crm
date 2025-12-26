@@ -10,6 +10,7 @@ import express, {
 import { registerRoutes } from "./routes";
 import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
 import { startModuleContractReminderScheduler } from "./moduleContractReminderScheduler";
+import { storage } from "./storage";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -93,8 +94,20 @@ export default async function runApp(
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async () => {
     log(`serving on port ${port}`);
+    
+    // Sync system modules from manifest on startup (automatic module registration)
+    try {
+      const syncResult = await storage.syncSystemModulesFromManifest();
+      if (syncResult.created > 0 || syncResult.updated > 0) {
+        log(`[ModuleSync] Created ${syncResult.created} new modules, updated ${syncResult.updated} existing modules`, "scheduler");
+      } else {
+        log(`[ModuleSync] All system modules are up to date`, "scheduler");
+      }
+    } catch (error) {
+      log(`[ModuleSync] Error syncing system modules: ${error}`, "scheduler");
+    }
     
     // Start the auto-assignment scheduler for support tickets
     startAutoAssignmentScheduler();

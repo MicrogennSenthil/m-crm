@@ -186,10 +186,10 @@ export default function UserRightsAllocation() {
             variant="outline" 
             onClick={() => seedModulesMutation.mutate()}
             disabled={seedModulesMutation.isPending}
-            data-testid="button-seed-modules"
+            data-testid="button-sync-modules"
           >
             {seedModulesMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {systemModules.length === 0 ? "Seed Default Modules" : "Add New Modules"}
+            Sync Modules
           </Button>
           <Button 
             onClick={handleSave}
@@ -242,7 +242,7 @@ export default function UserRightsAllocation() {
             </div>
           ) : systemModules.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p>No system modules found. Click "Seed Default Modules" to create them.</p>
+              <p>No system modules found. Click "Sync Modules" to load them from the system manifest.</p>
             </div>
           ) : !selectedRoleId ? (
             <div className="text-center py-8 text-muted-foreground">

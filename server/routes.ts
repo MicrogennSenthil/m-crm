@@ -1566,6 +1566,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newRole = await storage.createUserRole(validatedData);
       
+      // Automatically create rights entries for all system modules
+      // This ensures the new role appears in User Rights with all modules listed
+      const rightsCreated = await storage.ensureRoleHasAllModuleRights(newRole.id);
+      console.log(`[RoleCreate] Created ${rightsCreated} module rights entries for new role: ${newRole.displayName}`);
+      
       await storage.logActivity({
         entityType: "user_role",
         entityId: newRole.id,
@@ -1962,112 +1967,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Seed default system modules (admin only)
+  // Seed/Sync system modules from manifest (admin only)
+  // This now uses the same sync function as server startup for consistency
   app.post("/api/system-modules/seed", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const defaultModules = [
-        // Main Dashboard
-        { name: "dashboard", displayName: "Dashboard", description: "Main dashboard and analytics", icon: "LayoutDashboard", sortOrder: 1 },
-        
-        // Sales Module
-        { name: "leads", displayName: "Sales / Leads", description: "Lead management and sales pipeline", icon: "Target", sortOrder: 2 },
-        { name: "sales_dashboard", displayName: "Sales Dashboard", description: "Sales analytics and performance dashboard", icon: "TrendingUp", sortOrder: 3 },
-        { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 4 },
-        
-        // Implementation Module
-        { name: "projects", displayName: "Implementation", description: "Project implementation tracking", icon: "FolderKanban", sortOrder: 5 },
-        { name: "work_tracking", displayName: "Work Tracking", description: "Daily work log and tracking", icon: "Clock", sortOrder: 6 },
-        
-        // Support Module
-        { name: "tickets", displayName: "Support Tickets", description: "Customer support ticket management", icon: "Ticket", sortOrder: 7 },
-        { name: "support_dashboard", displayName: "Support Dashboard", description: "Support analytics and metrics", icon: "Headphones", sortOrder: 8 },
-        
-        // Development Module
-        { name: "development_dashboard", displayName: "Development Dashboard", description: "Development team analytics", icon: "Code2", sortOrder: 9 },
-        { name: "development_tasks", displayName: "Development Tasks", description: "Developer work assignments", icon: "GitBranch", sortOrder: 10 },
-        
-        // Accounts Module
-        { name: "contracts", displayName: "Contracts", description: "Customer contract management", icon: "FileText", sortOrder: 11 },
-        
-        // HR Module
-        { name: "hr_feedback", displayName: "HR Feedback", description: "Customer feedback and satisfaction", icon: "MessageSquareHeart", sortOrder: 12 },
-        
-        // Digital Marketing Module
-        { name: "digital_marketing", displayName: "Digital Marketing", description: "Digital marketing management", icon: "Megaphone", sortOrder: 13 },
-        { name: "marketing_dashboard", displayName: "Marketing Dashboard", description: "Marketing analytics and metrics", icon: "BarChart3", sortOrder: 14 },
-        { name: "marketing_daily_report", displayName: "Daily Activity Report (DAR)", description: "Daily marketing activity tracking", icon: "ClipboardList", sortOrder: 15 },
-        { name: "marketing_planning", displayName: "Marketing Planning", description: "Campaign and content planning", icon: "CalendarDays", sortOrder: 16 },
-        { name: "marketing_reports", displayName: "Marketing Reports", description: "Marketing performance reports", icon: "FileBarChart", sortOrder: 17 },
-        
-        // Knowledge Base
-        { name: "knowledge_base", displayName: "Knowledge Base", description: "Documentation and knowledge articles", icon: "BookOpen", sortOrder: 18 },
-        { name: "knowledge_base_admin", displayName: "Knowledge Base Admin", description: "Manage knowledge base documents", icon: "FileEdit", sortOrder: 19 },
-        
-        // Tasks Module
-        { name: "tasks", displayName: "All Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 20 },
-        { name: "today_tasks", displayName: "Today's Tasks", description: "Daily task list and reminders", icon: "CalendarCheck", sortOrder: 21 },
-        
-        // Customers
-        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 22 },
-        
-        // Reports
-        { name: "reports", displayName: "Reports", description: "Reports and analytics overview", icon: "BarChart3", sortOrder: 23 },
-        { name: "sales_reports", displayName: "Sales Reports", description: "Sales performance reports", icon: "PieChart", sortOrder: 24 },
-        { name: "implementation_reports", displayName: "Implementation Reports", description: "Project implementation reports", icon: "ClipboardList", sortOrder: 25 },
-        { name: "support_reports", displayName: "Support Reports", description: "Support ticket reports", icon: "FileBarChart", sortOrder: 26 },
-        { name: "development_reports", displayName: "Development Reports", description: "Development team performance reports", icon: "FileCode", sortOrder: 27 },
-        
-        // User Management
-        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 28 },
-        { name: "user_master", displayName: "User Master", description: "Create and manage users", icon: "UserPlus", sortOrder: 29 },
-        { name: "user_roles", displayName: "User Roles", description: "Define and manage user roles", icon: "Shield", sortOrder: 30 },
-        { name: "user_rights", displayName: "User Rights Allocation", description: "Configure module permissions per role", icon: "Key", sortOrder: 31 },
-        { name: "user_approval", displayName: "User Approval", description: "Approve or reject new user registrations", icon: "UserCheck", sortOrder: 32 },
-        
-        // System Settings
-        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 33 },
-        { name: "smtp_config", displayName: "SMTP Configuration", description: "Email server settings", icon: "Mail", sortOrder: 34 },
-        { name: "point_categories", displayName: "Point Categories", description: "Configure gamification points", icon: "Award", sortOrder: 35 },
-        { name: "assignment_settings", displayName: "Assignment Settings", description: "Configure assignment methods", icon: "GitBranch", sortOrder: 36 },
-        { name: "database_control", displayName: "Database Control", description: "Database management tools", icon: "Database", sortOrder: 37 },
-        
-        // Admin Dashboard
-        { name: "admin_dashboard", displayName: "Admin Dashboard", description: "Administration overview", icon: "Gauge", sortOrder: 38 },
-        
-        // Masters
-        { name: "masters", displayName: "Masters", description: "Master data management", icon: "Table", sortOrder: 39 },
-        { name: "customer_master", displayName: "Customer Master", description: "Customer data management", icon: "Building2", sortOrder: 40 },
-        { name: "departments", displayName: "Departments", description: "Department management", icon: "Layers", sortOrder: 41 },
-      ];
+      const syncResult = await storage.syncSystemModulesFromManifest();
       
-      const existingModules = await storage.getSystemModules();
-      const existingNames = existingModules.map(m => m.name);
-      
-      const createdModules = [];
-      for (const mod of defaultModules) {
-        if (!existingNames.includes(mod.name)) {
-          const created = await storage.createSystemModule(mod);
-          createdModules.push(created);
-        }
-      }
-      
-      if (createdModules.length > 0) {
+      if (syncResult.created > 0 || syncResult.updated > 0) {
         await storage.logActivity({
           entityType: "system_module",
-          entityId: "seed",
-          action: "seeded",
-          description: `${createdModules.length} default system modules created`,
+          entityId: "sync",
+          action: "synced",
+          description: `System modules synced: ${syncResult.created} created, ${syncResult.updated} updated`,
           userId: req.user.claims.sub,
         });
       }
       
       res.json({ 
-        message: `Created ${createdModules.length} new modules`,
-        created: createdModules 
+        message: `Created ${syncResult.created} new modules, updated ${syncResult.updated} existing modules`,
+        created: syncResult.created,
+        updated: syncResult.updated
       });
     } catch (error) {
-      console.error("Error seeding system modules:", error);
-      res.status(500).json({ message: "Failed to seed system modules" });
+      console.error("Error syncing system modules:", error);
+      res.status(500).json({ message: "Failed to sync system modules" });
     }
   });
 

@@ -544,6 +544,11 @@ export interface IStorage {
   updateMarketingTaskEntry(id: string, data: Partial<InsertMarketingTaskEntry>): Promise<MarketingTaskEntry>;
   deleteMarketingTaskEntry(id: string): Promise<void>;
   deleteMarketingTaskEntriesByReport(reportId: string): Promise<void>;
+
+  // System Module Sync operations (for automatic module registration)
+  syncSystemModulesFromManifest(): Promise<{ created: number; updated: number }>;
+  ensureRoleHasAllModuleRights(roleId: string): Promise<number>;
+  ensureAllRolesHaveAllModuleRights(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3670,6 +3675,162 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMarketingTaskEntriesByReport(reportId: string): Promise<void> {
     await db.delete(marketingTaskEntries).where(eq(marketingTaskEntries.reportId, reportId));
+  }
+
+  // =============================================
+  // SYSTEM MODULE SYNC OPERATIONS
+  // These ensure modules are automatically registered on server startup
+  // =============================================
+
+  async syncSystemModulesFromManifest(): Promise<{ created: number; updated: number }> {
+    // Import the manifest dynamically to avoid circular dependencies
+    const { SYSTEM_MODULES_MANIFEST } = await import("@shared/system-modules-manifest");
+    
+    let created = 0;
+    let updated = 0;
+    
+    // Step 1: Sync all modules from manifest
+    const existingModules = await this.getSystemModules();
+    const existingByName = new Map(existingModules.map(m => [m.name, m]));
+    
+    for (const moduleDef of SYSTEM_MODULES_MANIFEST) {
+      const existing = existingByName.get(moduleDef.name);
+      
+      if (!existing) {
+        // Create new module
+        await db.insert(systemModules).values({
+          name: moduleDef.name,
+          displayName: moduleDef.displayName,
+          description: moduleDef.description,
+          icon: moduleDef.icon,
+          sortOrder: moduleDef.sortOrder,
+        });
+        created++;
+      } else {
+        // Update existing module if metadata changed
+        if (
+          existing.displayName !== moduleDef.displayName ||
+          existing.description !== moduleDef.description ||
+          existing.icon !== moduleDef.icon ||
+          existing.sortOrder !== moduleDef.sortOrder
+        ) {
+          await db.update(systemModules)
+            .set({
+              displayName: moduleDef.displayName,
+              description: moduleDef.description,
+              icon: moduleDef.icon,
+              sortOrder: moduleDef.sortOrder,
+            })
+            .where(eq(systemModules.id, existing.id));
+          updated++;
+        }
+      }
+    }
+    
+    // Step 2: After syncing modules, ensure all roles have rights for all modules
+    // Use optimized bulk approach to avoid N+1 queries
+    await this.ensureAllRolesHaveAllModuleRightsBulk();
+    
+    return { created, updated };
+  }
+
+  async ensureRoleHasAllModuleRights(roleId: string): Promise<number> {
+    // Get all system modules
+    const allModules = await this.getSystemModules();
+    
+    // Get existing rights for this role
+    const existingRights = await db.select()
+      .from(userRoleRights)
+      .where(eq(userRoleRights.roleId, roleId));
+    
+    const existingModuleIds = new Set(existingRights.map(r => r.module));
+    
+    // Collect modules that need rights entries
+    const missingRights: { roleId: string; module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }[] = [];
+    
+    for (const mod of allModules) {
+      if (!existingModuleIds.has(mod.id)) {
+        missingRights.push({
+          roleId,
+          module: mod.id,
+          canView: false,
+          canCreate: false,
+          canEdit: false,
+          canDelete: false,
+        });
+      }
+    }
+    
+    // Bulk insert missing rights
+    if (missingRights.length > 0) {
+      await db.insert(userRoleRights).values(missingRights);
+    }
+    
+    return missingRights.length;
+  }
+
+  async ensureAllRolesHaveAllModuleRights(): Promise<number> {
+    // Get all roles
+    const allRoles = await this.getUserRoles();
+    
+    let totalCreated = 0;
+    
+    for (const role of allRoles) {
+      const created = await this.ensureRoleHasAllModuleRights(role.id);
+      totalCreated += created;
+    }
+    
+    return totalCreated;
+  }
+
+  // Optimized bulk version that loads modules once and processes all roles
+  async ensureAllRolesHaveAllModuleRightsBulk(): Promise<number> {
+    // Get all system modules once
+    const allModules = await this.getSystemModules();
+    if (allModules.length === 0) return 0;
+    
+    // Get all roles
+    const allRoles = await this.getUserRoles();
+    if (allRoles.length === 0) return 0;
+    
+    // Get all existing rights in one query
+    const existingRights = await db.select().from(userRoleRights);
+    
+    // Build a set of existing role+module combinations
+    const existingCombos = new Set(
+      existingRights.map(r => `${r.roleId}:${r.module}`)
+    );
+    
+    // Collect all missing rights
+    const missingRights: { roleId: string; module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }[] = [];
+    
+    for (const role of allRoles) {
+      for (const mod of allModules) {
+        const combo = `${role.id}:${mod.id}`;
+        if (!existingCombos.has(combo)) {
+          missingRights.push({
+            roleId: role.id,
+            module: mod.id,
+            canView: false,
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+          });
+        }
+      }
+    }
+    
+    // Bulk insert all missing rights at once
+    if (missingRights.length > 0) {
+      // Insert in batches of 100 to avoid query size limits
+      const batchSize = 100;
+      for (let i = 0; i < missingRights.length; i += batchSize) {
+        const batch = missingRights.slice(i, i + batchSize);
+        await db.insert(userRoleRights).values(batch);
+      }
+    }
+    
+    return missingRights.length;
   }
 }
 
