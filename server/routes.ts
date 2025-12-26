@@ -2332,26 +2332,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get access control for the user
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
-      // Get all follow-ups with lead info using a direct SQL query for better performance
+      // Get only the most recent follow-up per lead using a window function
       // Exclude closed deals (closed_won, closed_lost) as they don't need follow-up calls
       const followUpsWithLeads = await db.execute(sql`
-        SELECT 
-          f.id,
-          f.lead_id as "leadId",
-          f.notes,
-          f.follow_up_date as "followUpDate",
-          f.completed,
-          f.created_at as "createdAt",
-          l.company_name as "leadCompanyName",
-          l.contact_person as "leadContactPerson",
-          l.contact_phone as "leadContactPhone",
-          l.stage as "leadStage",
-          l.sales_executive_id as "salesExecutiveId"
-        FROM follow_ups f
-        LEFT JOIN leads l ON f.lead_id = l.id
-        WHERE l.stage NOT IN ('closed_won', 'closed_lost')
-           OR l.stage IS NULL
-        ORDER BY f.follow_up_date DESC
+        WITH ranked_followups AS (
+          SELECT 
+            f.id,
+            f.lead_id as "leadId",
+            f.notes,
+            f.follow_up_date as "followUpDate",
+            f.completed,
+            f.created_at as "createdAt",
+            l.company_name as "leadCompanyName",
+            l.contact_person as "leadContactPerson",
+            l.contact_phone as "leadContactPhone",
+            l.stage as "leadStage",
+            l.sales_executive_id as "salesExecutiveId",
+            ROW_NUMBER() OVER (PARTITION BY f.lead_id ORDER BY f.follow_up_date DESC) as rn
+          FROM follow_ups f
+          LEFT JOIN leads l ON f.lead_id = l.id
+          WHERE (l.stage NOT IN ('closed_won', 'closed_lost') OR l.stage IS NULL)
+        )
+        SELECT id, "leadId", notes, "followUpDate", completed, "createdAt",
+               "leadCompanyName", "leadContactPerson", "leadContactPhone", "leadStage", "salesExecutiveId"
+        FROM ranked_followups
+        WHERE rn = 1
+        ORDER BY "followUpDate" DESC
       `);
       
       // Filter by access control
