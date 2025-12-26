@@ -1992,45 +1992,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // HR Module
         { name: "hr_feedback", displayName: "HR Feedback", description: "Customer feedback and satisfaction", icon: "MessageSquareHeart", sortOrder: 12 },
         
+        // Digital Marketing Module
+        { name: "digital_marketing", displayName: "Digital Marketing", description: "Digital marketing management", icon: "Megaphone", sortOrder: 13 },
+        { name: "marketing_dashboard", displayName: "Marketing Dashboard", description: "Marketing analytics and metrics", icon: "BarChart3", sortOrder: 14 },
+        { name: "marketing_daily_report", displayName: "Daily Activity Report (DAR)", description: "Daily marketing activity tracking", icon: "ClipboardList", sortOrder: 15 },
+        { name: "marketing_planning", displayName: "Marketing Planning", description: "Campaign and content planning", icon: "CalendarDays", sortOrder: 16 },
+        { name: "marketing_reports", displayName: "Marketing Reports", description: "Marketing performance reports", icon: "FileBarChart", sortOrder: 17 },
+        
         // Knowledge Base
-        { name: "knowledge_base", displayName: "Knowledge Base", description: "Documentation and knowledge articles", icon: "BookOpen", sortOrder: 13 },
-        { name: "knowledge_base_admin", displayName: "Knowledge Base Admin", description: "Manage knowledge base documents", icon: "FileEdit", sortOrder: 14 },
+        { name: "knowledge_base", displayName: "Knowledge Base", description: "Documentation and knowledge articles", icon: "BookOpen", sortOrder: 18 },
+        { name: "knowledge_base_admin", displayName: "Knowledge Base Admin", description: "Manage knowledge base documents", icon: "FileEdit", sortOrder: 19 },
         
         // Tasks Module
-        { name: "tasks", displayName: "All Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 15 },
-        { name: "today_tasks", displayName: "Today's Tasks", description: "Daily task list and reminders", icon: "CalendarCheck", sortOrder: 16 },
+        { name: "tasks", displayName: "All Tasks", description: "Task and follow-up management", icon: "CheckSquare", sortOrder: 20 },
+        { name: "today_tasks", displayName: "Today's Tasks", description: "Daily task list and reminders", icon: "CalendarCheck", sortOrder: 21 },
         
         // Customers
-        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 17 },
+        { name: "customers", displayName: "Customers", description: "Customer master data", icon: "Users", sortOrder: 22 },
         
         // Reports
-        { name: "reports", displayName: "Reports", description: "Reports and analytics overview", icon: "BarChart3", sortOrder: 18 },
-        { name: "sales_reports", displayName: "Sales Reports", description: "Sales performance reports", icon: "PieChart", sortOrder: 19 },
-        { name: "implementation_reports", displayName: "Implementation Reports", description: "Project implementation reports", icon: "ClipboardList", sortOrder: 20 },
-        { name: "support_reports", displayName: "Support Reports", description: "Support ticket reports", icon: "FileBarChart", sortOrder: 21 },
-        { name: "development_reports", displayName: "Development Reports", description: "Development team performance reports", icon: "FileCode", sortOrder: 22 },
+        { name: "reports", displayName: "Reports", description: "Reports and analytics overview", icon: "BarChart3", sortOrder: 23 },
+        { name: "sales_reports", displayName: "Sales Reports", description: "Sales performance reports", icon: "PieChart", sortOrder: 24 },
+        { name: "implementation_reports", displayName: "Implementation Reports", description: "Project implementation reports", icon: "ClipboardList", sortOrder: 25 },
+        { name: "support_reports", displayName: "Support Reports", description: "Support ticket reports", icon: "FileBarChart", sortOrder: 26 },
+        { name: "development_reports", displayName: "Development Reports", description: "Development team performance reports", icon: "FileCode", sortOrder: 27 },
         
         // User Management
-        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 23 },
-        { name: "user_master", displayName: "User Master", description: "Create and manage users", icon: "UserPlus", sortOrder: 24 },
-        { name: "user_roles", displayName: "User Roles", description: "Define and manage user roles", icon: "Shield", sortOrder: 25 },
-        { name: "user_rights", displayName: "User Rights Allocation", description: "Configure module permissions per role", icon: "Key", sortOrder: 26 },
-        { name: "user_approval", displayName: "User Approval", description: "Approve or reject new user registrations", icon: "UserCheck", sortOrder: 27 },
+        { name: "user_management", displayName: "User Management", description: "User, role, and permission management", icon: "ShieldCheck", sortOrder: 28 },
+        { name: "user_master", displayName: "User Master", description: "Create and manage users", icon: "UserPlus", sortOrder: 29 },
+        { name: "user_roles", displayName: "User Roles", description: "Define and manage user roles", icon: "Shield", sortOrder: 30 },
+        { name: "user_rights", displayName: "User Rights Allocation", description: "Configure module permissions per role", icon: "Key", sortOrder: 31 },
+        { name: "user_approval", displayName: "User Approval", description: "Approve or reject new user registrations", icon: "UserCheck", sortOrder: 32 },
         
         // System Settings
-        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 28 },
-        { name: "smtp_config", displayName: "SMTP Configuration", description: "Email server settings", icon: "Mail", sortOrder: 29 },
-        { name: "point_categories", displayName: "Point Categories", description: "Configure gamification points", icon: "Award", sortOrder: 30 },
-        { name: "assignment_settings", displayName: "Assignment Settings", description: "Configure assignment methods", icon: "GitBranch", sortOrder: 31 },
-        { name: "database_control", displayName: "Database Control", description: "Database management tools", icon: "Database", sortOrder: 32 },
+        { name: "settings", displayName: "Settings", description: "System settings and configuration", icon: "Settings", sortOrder: 33 },
+        { name: "smtp_config", displayName: "SMTP Configuration", description: "Email server settings", icon: "Mail", sortOrder: 34 },
+        { name: "point_categories", displayName: "Point Categories", description: "Configure gamification points", icon: "Award", sortOrder: 35 },
+        { name: "assignment_settings", displayName: "Assignment Settings", description: "Configure assignment methods", icon: "GitBranch", sortOrder: 36 },
+        { name: "database_control", displayName: "Database Control", description: "Database management tools", icon: "Database", sortOrder: 37 },
         
         // Admin Dashboard
-        { name: "admin_dashboard", displayName: "Admin Dashboard", description: "Administration overview", icon: "Gauge", sortOrder: 33 },
+        { name: "admin_dashboard", displayName: "Admin Dashboard", description: "Administration overview", icon: "Gauge", sortOrder: 38 },
         
         // Masters
-        { name: "masters", displayName: "Masters", description: "Master data management", icon: "Table", sortOrder: 34 },
-        { name: "customer_master", displayName: "Customer Master", description: "Customer data management", icon: "Building2", sortOrder: 35 },
-        { name: "departments", displayName: "Departments", description: "Department management", icon: "Layers", sortOrder: 36 },
+        { name: "masters", displayName: "Masters", description: "Master data management", icon: "Table", sortOrder: 39 },
+        { name: "customer_master", displayName: "Customer Master", description: "Customer data management", icon: "Building2", sortOrder: 40 },
+        { name: "departments", displayName: "Departments", description: "Department management", icon: "Layers", sortOrder: 41 },
       ];
       
       const existingModules = await storage.getSystemModules();
