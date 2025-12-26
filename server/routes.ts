@@ -12182,19 +12182,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =====================
 
   // Marketing Dashboard - Get summary metrics
-  app.get("/api/marketing/dashboard", isAuthenticated, async (req, res) => {
+  app.get("/api/marketing/dashboard", isAuthenticated, requirePermission("marketing_dashboard", "view"), async (req, res) => {
     try {
-      const user = req.user as any;
-      
-      // Access control - admin, super_admin, or dept head
-      if (user.role !== 'admin' && user.role !== 'super_admin') {
-        const departments = await storage.getDepartments();
-        const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-        if (marketingDept?.managerId !== user.id) {
-          return res.status(403).json({ message: "Access denied" });
-        }
-      }
-      
       // Get all reports for metrics calculation
       const allReports = await storage.getMarketingDailyReports({});
       
@@ -12286,11 +12275,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { userId: filterUserId, status, startDate, endDate } = req.query;
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
-      // Digital Marketing users can only see their own reports unless admin
+      // Digital Marketing users can only see their own reports unless admin or super admin
       const filters: any = {};
-      if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+      const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
+      
+      if (!isAdminOrSuperAdmin) {
         // Check if user is a department head for Digital Marketing
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
@@ -12324,6 +12316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
       const report = await storage.getMarketingDailyReport(id);
@@ -12331,8 +12324,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Report not found" });
       }
       
-      // Access control: own report, admin, or dept head
-      if (report.userId !== currentUserId && user?.role !== 'admin' && user?.role !== 'super_admin') {
+      // Access control: own report, admin, super admin, or dept head
+      const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
+      if (report.userId !== currentUserId && !isAdminOrSuperAdmin) {
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
         if (marketingDept?.managerId !== currentUserId) {
@@ -12422,6 +12416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
       const existingReport = await storage.getMarketingDailyReport(id);
@@ -12429,8 +12424,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Report not found" });
       }
       
-      // Only the creator can update, unless admin
-      if (existingReport.userId !== currentUserId && user?.role !== 'admin' && user?.role !== 'super_admin') {
+      // Only the creator can update, unless admin or super admin
+      const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
+      if (existingReport.userId !== currentUserId && !isAdminOrSuperAdmin) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -12477,6 +12473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
       const existingReport = await storage.getMarketingDailyReport(id);
@@ -12484,8 +12481,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Report not found" });
       }
       
-      // Only admin can delete
-      if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+      // Only admin or super admin can delete
+      const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
+      if (!isAdminOrSuperAdmin) {
         return res.status(403).json({ message: "Only admins can delete reports" });
       }
       
@@ -12537,14 +12535,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { action } = req.body;
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
-      // Must be admin or department head
+      // Must be admin, super admin, or department head
       const departments = await storage.getDepartments();
       const marketingDept = departments.find(d => d.name === 'Digital Marketing');
       const isDeptHead = marketingDept?.managerId === currentUserId;
+      const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
       
-      if (user?.role !== 'admin' && user?.role !== 'super_admin' && !isDeptHead) {
+      if (!isAdminOrSuperAdmin && !isDeptHead) {
         return res.status(403).json({ message: "Only department heads or admins can review reports" });
       }
       
