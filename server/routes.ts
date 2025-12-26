@@ -5391,6 +5391,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get linked development tasks for a ticket
+  app.get("/api/tickets/:id/development-tasks", isAuthenticated, async (req, res) => {
+    try {
+      const developmentTasksList = await storage.getDevelopmentTasks({
+        sourceType: "support",
+        sourceId: req.params.id,
+      });
+      res.json(developmentTasksList);
+    } catch (error) {
+      console.error("Error fetching linked development tasks:", error);
+      res.status(500).json({ message: "Failed to fetch development tasks" });
+    }
+  });
+
   app.post("/api/tickets/:id/escalate", isAuthenticated, async (req: any, res) => {
     try {
       const ticket = await storage.getTicket(req.params.id);
