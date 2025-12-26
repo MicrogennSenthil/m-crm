@@ -444,6 +444,27 @@ export default function Sales() {
                             </Badge>
                           )}
                         </div>
+                        {/* Stage indicator */}
+                        {followup.leadStage && (
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] px-1.5 h-4 ${
+                              followup.leadStage === 'seed' ? 'border-blue-400 text-blue-600 bg-blue-50 dark:bg-blue-900/20' :
+                              followup.leadStage === 'lead' ? 'border-cyan-400 text-cyan-600 bg-cyan-50 dark:bg-cyan-900/20' :
+                              followup.leadStage === 'demo_scheduled' ? 'border-purple-400 text-purple-600 bg-purple-50 dark:bg-purple-900/20' :
+                              followup.leadStage === 'quote_sent' ? 'border-yellow-400 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' :
+                              followup.leadStage === 'negotiation' ? 'border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-900/20' :
+                              'border-gray-400 text-gray-600'
+                            }`}
+                          >
+                            {followup.leadStage === 'seed' ? 'Seed' :
+                             followup.leadStage === 'lead' ? 'Lead' :
+                             followup.leadStage === 'demo_scheduled' ? 'Demo' :
+                             followup.leadStage === 'quote_sent' ? 'Quote' :
+                             followup.leadStage === 'negotiation' ? 'Negotiation' :
+                             followup.leadStage}
+                          </Badge>
+                        )}
                         {followup.notes && (
                           <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
                         )}
