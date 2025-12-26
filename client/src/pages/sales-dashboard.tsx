@@ -113,6 +113,17 @@ type CategoryType = 'newLead' | 'followup' | 'deal' | 'negotiation';
 type PeriodType = 'today' | 'month' | 'year';
 type ViewMode = 'grid' | 'tabs';
 
+// Fallback data to prevent crashes when API returns incomplete data
+const FALLBACK_PERIOD_STATS: PeriodStats = { qty: 0, amount: 0 };
+const FALLBACK_FOLLOWUP_STATS: FollowupPeriodStats = { qty: 0, pending: 0, completed: 0, overdue: 0 };
+
+const FALLBACK_GROUPED: GroupedStats = {
+  newLead: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
+  followup: { today: FALLBACK_FOLLOWUP_STATS, month: FALLBACK_FOLLOWUP_STATS, year: FALLBACK_FOLLOWUP_STATS },
+  deal: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
+  negotiation: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
+};
+
 const STAGE_CONFIG: Record<string, { color: string; label: string }> = {
   seed: { color: "bg-blue-500 text-white", label: "Seed" },
   lead: { color: "bg-cyan-500 text-white", label: "Lead" },
@@ -235,7 +246,11 @@ function GroupedStatCard({
         {/* Period rows */}
         <div className="space-y-1">
           {periods.map((period) => {
-            const periodStats = stats[period];
+            // Add null-check with fallback to prevent crashes
+            const rawStats = stats?.[period];
+            const periodStats = isFollowup 
+              ? (rawStats || FALLBACK_FOLLOWUP_STATS) as FollowupPeriodStats
+              : (rawStats || FALLBACK_PERIOD_STATS) as PeriodStats;
             return (
               <div 
                 key={period}
@@ -246,21 +261,21 @@ function GroupedStatCard({
                   <span className="text-xs font-medium">{PERIOD_LABELS[period]}</span>
                 </div>
                 <div className="flex items-center justify-center">
-                  <span className="text-base font-bold">{periodStats.qty}</span>
+                  <span className="text-base font-bold">{periodStats.qty ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-center">
                   {isFollowup ? (
                     <div className="flex gap-1">
                       <Badge variant="outline" className="text-[10px] px-1 h-5 text-yellow-600 border-yellow-300">
-                        {(periodStats as FollowupPeriodStats).pending}
+                        {(periodStats as FollowupPeriodStats).pending ?? 0}
                       </Badge>
                       <Badge variant="outline" className="text-[10px] px-1 h-5 text-green-600 border-green-300">
-                        {(periodStats as FollowupPeriodStats).completed}
+                        {(periodStats as FollowupPeriodStats).completed ?? 0}
                       </Badge>
                     </div>
                   ) : (
                     <span className="text-xs font-semibold text-muted-foreground">
-                      {formatCurrency((periodStats as PeriodStats).amount)}
+                      {formatCurrency((periodStats as PeriodStats).amount ?? 0)}
                     </span>
                   )}
                 </div>
@@ -560,7 +575,8 @@ export default function SalesDashboard() {
   }
 
   const stats = dashboardData?.stats;
-  const grouped = dashboardData?.grouped;
+  // Use fallback grouped data to prevent crashes when API returns incomplete data
+  const grouped = dashboardData?.grouped ?? FALLBACK_GROUPED;
   const allLeads = dashboardData?.leads || [];
   const allFollowUps = dashboardData?.followUps || [];
 
@@ -668,35 +684,33 @@ export default function SalesDashboard() {
         </div>
       </div>
 
-      {/* Grouped Stats Cards */}
-      {grouped && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <GroupedStatCard
-            category="newLead"
-            stats={grouped.newLead}
-            isActive={activeCategory === 'newLead'}
-            onClick={() => setActiveCategory(activeCategory === 'newLead' ? null : 'newLead')}
-          />
-          <GroupedStatCard
-            category="followup"
-            stats={grouped.followup}
-            isActive={activeCategory === 'followup'}
-            onClick={() => setActiveCategory(activeCategory === 'followup' ? null : 'followup')}
-          />
-          <GroupedStatCard
-            category="deal"
-            stats={grouped.deal}
-            isActive={activeCategory === 'deal'}
-            onClick={() => setActiveCategory(activeCategory === 'deal' ? null : 'deal')}
-          />
-          <GroupedStatCard
-            category="negotiation"
-            stats={grouped.negotiation}
-            isActive={activeCategory === 'negotiation'}
-            onClick={() => setActiveCategory(activeCategory === 'negotiation' ? null : 'negotiation')}
-          />
-        </div>
-      )}
+      {/* Grouped Stats Cards - always render with fallback data */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <GroupedStatCard
+          category="newLead"
+          stats={grouped.newLead || FALLBACK_GROUPED.newLead}
+          isActive={activeCategory === 'newLead'}
+          onClick={() => setActiveCategory(activeCategory === 'newLead' ? null : 'newLead')}
+        />
+        <GroupedStatCard
+          category="followup"
+          stats={grouped.followup || FALLBACK_GROUPED.followup}
+          isActive={activeCategory === 'followup'}
+          onClick={() => setActiveCategory(activeCategory === 'followup' ? null : 'followup')}
+        />
+        <GroupedStatCard
+          category="deal"
+          stats={grouped.deal || FALLBACK_GROUPED.deal}
+          isActive={activeCategory === 'deal'}
+          onClick={() => setActiveCategory(activeCategory === 'deal' ? null : 'deal')}
+        />
+        <GroupedStatCard
+          category="negotiation"
+          stats={grouped.negotiation || FALLBACK_GROUPED.negotiation}
+          isActive={activeCategory === 'negotiation'}
+          onClick={() => setActiveCategory(activeCategory === 'negotiation' ? null : 'negotiation')}
+        />
+      </div>
 
       {/* Summary Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
