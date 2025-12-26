@@ -468,7 +468,7 @@ function hasAccess(user: any): boolean {
 }
 
 export default function SalesDashboard() {
-  const { user } = useAuth();
+  const { user, isLoading: userLoading } = useAuth();
   const { toast } = useToast();
   const [activeCategory, setActiveCategory] = useState<CategoryType | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -480,22 +480,22 @@ export default function SalesDashboard() {
   // All hooks must be called before any conditional returns (React rules of hooks)
   const { data: dashboardData, isLoading } = useQuery<SalesDashboardData>({
     queryKey: ["/api/dashboard/sales"],
-    enabled: hasAccess(user),
+    enabled: !userLoading && hasAccess(user),
   });
 
   const { data: leadHistory, isLoading: historyLoading } = useQuery<LeadHistoryData>({
     queryKey: ["/api/leads", selectedLead?.id, "history"],
-    enabled: !!selectedLead && hasAccess(user),
+    enabled: !!selectedLead && !userLoading && hasAccess(user),
   });
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users/all"],
-    enabled: hasAccess(user),
+    enabled: !userLoading && hasAccess(user),
   });
 
   const { data: departments = [] } = useQuery<any[]>({
     queryKey: ["/api/departments"],
-    enabled: hasAccess(user),
+    enabled: !userLoading && hasAccess(user),
   });
 
   const addCommentMutation = useMutation({
@@ -516,7 +516,17 @@ export default function SalesDashboard() {
     },
   });
 
-  // Access check after all hooks are called
+  // Show loading state while user is being loaded
+  if (userLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Access check after all hooks are called and user is loaded
   if (!hasAccess(user)) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
