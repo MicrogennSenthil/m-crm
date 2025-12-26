@@ -485,7 +485,7 @@ export default function Sales() {
                     )}
                   </div>
                 </div>
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-2 sm:space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
                   {isLoading ? (
                     Array(3)
                       .fill(0)
