@@ -478,7 +478,7 @@ export default function SalesDashboard() {
   const [activeTab, setActiveTab] = useState<'leads' | 'followups'>('leads');
 
   // All hooks must be called before any conditional returns (React rules of hooks)
-  const { data: dashboardData, isLoading } = useQuery<SalesDashboardData>({
+  const { data: dashboardData, isLoading, error } = useQuery<SalesDashboardData>({
     queryKey: ["/api/dashboard/sales"],
     enabled: !userLoading && hasAccess(user),
   });
@@ -538,6 +538,22 @@ export default function SalesDashboard() {
         </p>
         <Button variant="outline" onClick={() => window.history.back()}>
           Go Back
+        </Button>
+      </div>
+    );
+  }
+
+  // Handle error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <AlertTriangle className="h-16 w-16 text-red-500" />
+        <h2 className="text-xl font-semibold">Error Loading Dashboard</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          {(error as any)?.message || "Failed to load sales dashboard data. Please try again."}
+        </p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Retry
         </Button>
       </div>
     );
@@ -622,7 +638,7 @@ export default function SalesDashboard() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold mb-1">Sales Dashboard</h1>
