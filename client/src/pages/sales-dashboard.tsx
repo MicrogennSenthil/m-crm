@@ -61,7 +61,12 @@ interface FollowupPeriodStats {
 }
 
 interface GroupedStats {
-  newLead: {
+  seed: {
+    today: PeriodStats;
+    month: PeriodStats;
+    year: PeriodStats;
+  };
+  lead: {
     today: PeriodStats;
     month: PeriodStats;
     year: PeriodStats;
@@ -109,7 +114,7 @@ interface LeadHistoryData {
   tasks: Task[];
 }
 
-type CategoryType = 'newLead' | 'followup' | 'deal' | 'negotiation';
+type CategoryType = 'seed' | 'lead' | 'followup' | 'deal' | 'negotiation';
 type PeriodType = 'today' | 'month' | 'year';
 type ViewMode = 'grid' | 'tabs';
 
@@ -118,7 +123,8 @@ const FALLBACK_PERIOD_STATS: PeriodStats = { qty: 0, amount: 0 };
 const FALLBACK_FOLLOWUP_STATS: FollowupPeriodStats = { qty: 0, pending: 0, completed: 0, overdue: 0 };
 
 const FALLBACK_GROUPED: GroupedStats = {
-  newLead: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
+  seed: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
+  lead: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
   followup: { today: FALLBACK_FOLLOWUP_STATS, month: FALLBACK_FOLLOWUP_STATS, year: FALLBACK_FOLLOWUP_STATS },
   deal: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
   negotiation: { today: FALLBACK_PERIOD_STATS, month: FALLBACK_PERIOD_STATS, year: FALLBACK_PERIOD_STATS },
@@ -161,12 +167,19 @@ const CATEGORY_CONFIG: Record<CategoryType, {
   bgColor: string;
   borderColor: string;
 }> = {
-  newLead: { 
-    label: "New Leads", 
+  seed: { 
+    label: "Seeds (Cold Calls)", 
     icon: UserPlus, 
     color: "text-blue-600",
     bgColor: "bg-blue-50 dark:bg-blue-950/30",
     borderColor: "border-blue-200 dark:border-blue-800"
+  },
+  lead: { 
+    label: "Leads (Hot)", 
+    icon: Target, 
+    color: "text-cyan-600",
+    bgColor: "bg-cyan-50 dark:bg-cyan-950/30",
+    borderColor: "border-cyan-200 dark:border-cyan-800"
   },
   followup: { 
     label: "Follow-ups", 
@@ -593,9 +606,12 @@ export default function SalesDashboard() {
     if (!activeCategory) return allLeads;
     
     switch (activeCategory) {
-      case 'newLead':
-        // Show all leads (new leads are all leads in the system)
-        return allLeads;
+      case 'seed':
+        // Seeds are cold calls - stage = 'seed'
+        return allLeads.filter(l => l.stage === 'seed');
+      case 'lead':
+        // Leads are hot - converted from seeds when appointment/followup is set
+        return allLeads.filter(l => l.stage === 'lead');
       case 'deal':
         return allLeads.filter(l => l.stage === 'closed_won');
       case 'negotiation':
@@ -688,13 +704,19 @@ export default function SalesDashboard() {
         </div>
       </div>
 
-      {/* Grouped Stats Cards - always render with fallback data */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Grouped Stats Cards - Seeds, Leads, Follow-ups, Deal, Negotiation */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <GroupedStatCard
-          category="newLead"
-          stats={grouped.newLead || FALLBACK_GROUPED.newLead}
-          isActive={activeCategory === 'newLead'}
-          onClick={() => setActiveCategory(activeCategory === 'newLead' ? null : 'newLead')}
+          category="seed"
+          stats={grouped.seed || FALLBACK_GROUPED.seed}
+          isActive={activeCategory === 'seed'}
+          onClick={() => setActiveCategory(activeCategory === 'seed' ? null : 'seed')}
+        />
+        <GroupedStatCard
+          category="lead"
+          stats={grouped.lead || FALLBACK_GROUPED.lead}
+          isActive={activeCategory === 'lead'}
+          onClick={() => setActiveCategory(activeCategory === 'lead' ? null : 'lead')}
         />
         <GroupedStatCard
           category="followup"

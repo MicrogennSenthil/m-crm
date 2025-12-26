@@ -4446,34 +4446,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Helper function to calculate lead value
       const getLeadValue = (lead: any) => lead.confirmedOrderValue || lead.estimatedValue || 0;
       
-      // ============= SEED/LEAD STATS =============
-      const seedStageLeads = allLeads.filter(l => l.stage === 'seed' || l.stage === 'lead');
+      // ============= SEED STATS (Cold Calls) =============
+      const seedStageLeads = allLeads.filter(l => l.stage === 'seed');
       
-      // Today's new leads (created today)
-      const todayNewLeads = allLeads.filter(l => 
+      // Today's seeds (created today with stage = seed)
+      const todaySeeds = seedStageLeads.filter(l => 
         l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow
       );
-      const newLeadToday = {
-        qty: todayNewLeads.length,
-        amount: todayNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      const seedToday = {
+        qty: todaySeeds.length,
+        amount: todaySeeds.reduce((sum, l) => sum + getLeadValue(l), 0),
       };
       
-      // This month new leads
-      const thisMonthNewLeads = allLeads.filter(l => 
+      // This month seeds
+      const thisMonthSeeds = seedStageLeads.filter(l => 
         l.createdAt && new Date(l.createdAt) >= thisMonthStart && new Date(l.createdAt) <= thisMonthEnd
       );
-      const newLeadMonth = {
-        qty: thisMonthNewLeads.length,
-        amount: thisMonthNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      const seedMonth = {
+        qty: thisMonthSeeds.length,
+        amount: thisMonthSeeds.reduce((sum, l) => sum + getLeadValue(l), 0),
       };
       
-      // This year new leads
-      const thisYearNewLeads = allLeads.filter(l => 
+      // This year seeds (or all current seeds)
+      const thisYearSeeds = seedStageLeads.filter(l => 
         l.createdAt && new Date(l.createdAt) >= thisYearStart && new Date(l.createdAt) <= thisYearEnd
       );
-      const newLeadYear = {
-        qty: thisYearNewLeads.length,
-        amount: thisYearNewLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      const seedYear = {
+        qty: thisYearSeeds.length,
+        amount: thisYearSeeds.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // ============= LEAD STATS (Hot - converted from seeds) =============
+      const leadStageLeads = allLeads.filter(l => l.stage === 'lead');
+      
+      // Today's leads (converted to lead stage today - check updatedAt or createdAt)
+      const todayLeads = leadStageLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= today && new Date(l.createdAt) < tomorrow
+      );
+      const leadToday = {
+        qty: todayLeads.length,
+        amount: todayLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // This month leads
+      const thisMonthLeads = leadStageLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= thisMonthStart && new Date(l.createdAt) <= thisMonthEnd
+      );
+      const leadMonth = {
+        qty: thisMonthLeads.length,
+        amount: thisMonthLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
+      };
+      
+      // This year leads (or all current leads in lead stage)
+      const thisYearLeads = leadStageLeads.filter(l => 
+        l.createdAt && new Date(l.createdAt) >= thisYearStart && new Date(l.createdAt) <= thisYearEnd
+      );
+      const leadYear = {
+        qty: thisYearLeads.length,
+        amount: thisYearLeads.reduce((sum, l) => sum + getLeadValue(l), 0),
       };
       
       // ============= FOLLOWUP STATS =============
@@ -4668,10 +4698,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           todayLossCount,
         },
         grouped: {
-          newLead: {
-            today: newLeadToday,
-            month: newLeadMonth,
-            year: newLeadYear,
+          seed: {
+            today: seedToday,
+            month: seedMonth,
+            year: seedYear,
+          },
+          lead: {
+            today: leadToday,
+            month: leadMonth,
+            year: leadYear,
           },
           followup: {
             today: followupToday,
