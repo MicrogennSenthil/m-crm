@@ -477,37 +477,25 @@ export default function SalesDashboard() {
   const [newComment, setNewComment] = useState("");
   const [activeTab, setActiveTab] = useState<'leads' | 'followups'>('leads');
 
-  if (!hasAccess(user)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <XCircle className="h-16 w-16 text-amber-500" />
-        <h2 className="text-xl font-semibold">Access Denied</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          You don't have permission to access the Sales Dashboard. 
-          This page is only available to Sales Heads, Admins, and Super Admins.
-        </p>
-        <Button variant="outline" onClick={() => window.history.back()}>
-          Go Back
-        </Button>
-      </div>
-    );
-  }
-
+  // All hooks must be called before any conditional returns (React rules of hooks)
   const { data: dashboardData, isLoading } = useQuery<SalesDashboardData>({
     queryKey: ["/api/dashboard/sales"],
+    enabled: hasAccess(user),
   });
 
   const { data: leadHistory, isLoading: historyLoading } = useQuery<LeadHistoryData>({
     queryKey: ["/api/leads", selectedLead?.id, "history"],
-    enabled: !!selectedLead,
+    enabled: !!selectedLead && hasAccess(user),
   });
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users/all"],
+    enabled: hasAccess(user),
   });
 
   const { data: departments = [] } = useQuery<any[]>({
     queryKey: ["/api/departments"],
+    enabled: hasAccess(user),
   });
 
   const addCommentMutation = useMutation({
@@ -527,6 +515,23 @@ export default function SalesDashboard() {
       toast({ title: error.message || "Failed to add comment", variant: "destructive" });
     },
   });
+
+  // Access check after all hooks are called
+  if (!hasAccess(user)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <XCircle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-xl font-semibold">Access Denied</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          You don't have permission to access the Sales Dashboard. 
+          This page is only available to Sales Heads, Admins, and Super Admins.
+        </p>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go Back
+        </Button>
+      </div>
+    );
+  }
 
   const stats = dashboardData?.stats;
   const grouped = dashboardData?.grouped;
