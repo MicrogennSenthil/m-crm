@@ -288,6 +288,9 @@ function GroupedStatCard({
   );
 }
 
+// Default stage config for unknown stages
+const DEFAULT_STAGE_CONFIG = { color: "bg-gray-500 text-white", label: "Unknown" };
+
 function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSelectLead: (lead: LeadWithSalesExec) => void }) {
   if (leads.length === 0) {
     return (
@@ -311,7 +314,8 @@ function LeadsTable({ leads, onSelectLead }: { leads: LeadWithSalesExec[]; onSel
         </TableHeader>
         <TableBody>
           {leads.map((lead) => {
-            const stageConfig = STAGE_CONFIG[lead.stage || 'seed'];
+            // Use fallback for unknown stage values
+            const stageConfig = STAGE_CONFIG[lead.stage || 'seed'] || DEFAULT_STAGE_CONFIG;
             return (
               <TableRow 
                 key={lead.id} 
@@ -840,8 +844,8 @@ export default function SalesDashboard() {
                   <div>
                     <Label className="text-xs text-muted-foreground">Stage</Label>
                     <div>
-                      <Badge className={STAGE_CONFIG[leadHistory.lead.stage || 'seed'].color}>
-                        {STAGE_CONFIG[leadHistory.lead.stage || 'seed'].label}
+                      <Badge className={(STAGE_CONFIG[leadHistory.lead.stage || 'seed'] || DEFAULT_STAGE_CONFIG).color}>
+                        {(STAGE_CONFIG[leadHistory.lead.stage || 'seed'] || DEFAULT_STAGE_CONFIG).label}
                       </Badge>
                     </div>
                   </div>
