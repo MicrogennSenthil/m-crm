@@ -477,6 +477,7 @@ export interface IStorage {
     assignedTo?: string;
     assignedToIds?: string[];
     sourceType?: string;
+    sourceId?: string;
     priority?: string;
     isOverdue?: boolean;
   }): Promise<(DevelopmentTask & { 
@@ -3288,6 +3289,7 @@ export class DatabaseStorage implements IStorage {
     assignedTo?: string;
     assignedToIds?: string[];
     sourceType?: string;
+    sourceId?: string;
     priority?: string;
     isOverdue?: boolean;
     limit?: number;
@@ -3309,6 +3311,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.sourceType) {
       conditions.push(eq(developmentTasks.sourceType, filters.sourceType));
+    }
+    if (filters?.sourceId) {
+      conditions.push(eq(developmentTasks.sourceId, filters.sourceId));
     }
     if (filters?.priority) {
       conditions.push(eq(developmentTasks.priority, filters.priority));
