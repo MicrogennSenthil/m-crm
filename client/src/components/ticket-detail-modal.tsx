@@ -8,10 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2 } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench } from "lucide-react";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
-import type { Ticket, TicketComment, User, EscalationHistory } from "@shared/schema";
+import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -250,6 +250,19 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
     enabled: open && !!ticket.reopenedFromTicketId,
   });
 
+  // Query for linked development tasks
+  const { data: linkedDevTasks } = useQuery<(DevelopmentTask & { assignee?: User })[]>({
+    queryKey: ["/api/tickets", ticket.id, "development-tasks"],
+    enabled: open,
+  });
+
+  // Determine resolution source
+  const hasDevTasks = linkedDevTasks && linkedDevTasks.length > 0;
+  const completedDevTasks = linkedDevTasks?.filter(t => t.status === 'completed') || [];
+  const resolutionSource = hasDevTasks 
+    ? (completedDevTasks.length > 0 ? 'development' : 'support_with_dev_pending')
+    : 'support';
+
   const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
 
   return (
@@ -303,6 +316,111 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
               <h3 className="font-semibold mb-2">Issue Description</h3>
               <p className="text-sm whitespace-pre-wrap">{ticket.issueDescription}</p>
             </div>
+
+            {/* Resolution Details - Shows for closed tickets, tickets with dev tasks, or tickets with closing notes (reopened tickets) */}
+            {(ticket.status === "closed" || hasDevTasks || ticket.closingNotes) && (
+              <div className="p-4 border rounded-md bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <h3 className="font-semibold text-green-800 dark:text-green-200">
+                    {ticket.status === "closed" ? "Resolution Details" : 
+                     ticket.closingNotes ? "Previous Resolution Details" : "Call Details"}
+                  </h3>
+                  {ticket.reopenedFromTicketId && ticket.status !== "closed" && (
+                    <Badge variant="outline" className="text-xs">From Previous Ticket</Badge>
+                  )}
+                </div>
+
+                {/* Resolution Source Indicator */}
+                <div className="flex items-center gap-3 mb-4 p-3 bg-white dark:bg-gray-900 rounded-md border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Resolution Source:</span>
+                    {resolutionSource === 'development' ? (
+                      <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                        <Wrench className="h-3 w-3 mr-1" />
+                        Development End
+                      </Badge>
+                    ) : resolutionSource === 'support_with_dev_pending' ? (
+                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                        <Code2 className="h-3 w-3 mr-1" />
+                        Dev Task In Progress
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        <Headphones className="h-3 w-3 mr-1" />
+                        Support End
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Closing Notes / Solution Provided */}
+                {ticket.closingNotes && (
+                  <div className="mb-4">
+                    <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">
+                      Solution Provided:
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-900 p-3 rounded-md border">
+                      {ticket.closingNotes}
+                    </p>
+                  </div>
+                )}
+
+                {/* Linked Development Tasks */}
+                {hasDevTasks && (
+                  <div>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">
+                      Development Tasks ({linkedDevTasks.length}):
+                    </p>
+                    <div className="space-y-2">
+                      {linkedDevTasks.map((devTask) => (
+                        <div 
+                          key={devTask.id} 
+                          className="text-sm bg-white dark:bg-gray-900 p-3 rounded-md border"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {devTask.taskNumber}
+                            </span>
+                            <Badge 
+                              variant={devTask.status === 'completed' ? 'default' : 'secondary'}
+                              className="text-xs"
+                            >
+                              {devTask.status === 'completed' ? 'Completed' : 
+                               devTask.status === 'in_progress' ? 'In Progress' : 
+                               devTask.status === 'pending' ? 'Pending' : devTask.status}
+                            </Badge>
+                          </div>
+                          <p className="font-medium text-sm">{devTask.title}</p>
+                          {devTask.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {devTask.description}
+                            </p>
+                          )}
+                          {devTask.assignee && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Assigned to: {devTask.assignee.firstName} {devTask.assignee.lastName}
+                            </p>
+                          )}
+                          {devTask.completedAt && (
+                            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                              Completed on: {format(new Date(devTask.completedAt), "PPP")}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Closed At timestamp */}
+                {ticket.closedAt && (
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-3">
+                    Closed on: {format(new Date(ticket.closedAt), "PPP p")}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Attachments - Prominent Position */}
             <div className="p-4 border rounded-md">
