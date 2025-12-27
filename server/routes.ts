@@ -8502,6 +8502,214 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Dashboard - Sales Stage-wise Weekly/Monthly Comparison Analytics
+  app.get("/api/admin/dashboard/sales-stage-analytics", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const allLeads = await storage.getLeads({});
+      
+      const STAGES = [
+        { id: "seed", label: "Seeds" },
+        { id: "lead", label: "Leads" },
+        { id: "demo_scheduled", label: "Demo Scheduled" },
+        { id: "quote_sent", label: "Quote Sent" },
+        { id: "negotiation", label: "Negotiation" },
+        { id: "closed_won", label: "Closed Won" },
+        { id: "closed_lost", label: "Closed Lost" },
+      ];
+      
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      
+      // Calculate week boundaries
+      const getWeekBoundaries = (weeksAgo: number) => {
+        const today = new Date(now);
+        today.setHours(0, 0, 0, 0);
+        const dayOfWeek = today.getDay();
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - dayOfWeek - (weeksAgo * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        weekEnd.setHours(23, 59, 59, 999);
+        return { start: weekStart, end: weekEnd };
+      };
+      
+      // Calculate month boundaries
+      const getMonthBoundaries = (monthsAgo: number) => {
+        const targetMonth = currentMonth - monthsAgo;
+        const targetYear = currentYear + Math.floor(targetMonth / 12);
+        const adjustedMonth = ((targetMonth % 12) + 12) % 12;
+        const start = new Date(targetYear, adjustedMonth, 1);
+        const end = new Date(targetYear, adjustedMonth + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+      };
+      
+      // Get leads in stage during a time period (either created or transitioned to that stage)
+      const getLeadsInStage = (stage: string, start: Date, end: Date) => {
+        return allLeads.filter(lead => {
+          if (lead.stage !== stage) return false;
+          const createdAt = lead.createdAt ? new Date(lead.createdAt) : null;
+          if (!createdAt) return false;
+          
+          // For closed_won/closed_lost, use closedDate
+          if ((stage === 'closed_won' || stage === 'closed_lost') && lead.closedDate) {
+            const closedDate = new Date(lead.closedDate);
+            return closedDate >= start && closedDate <= end;
+          }
+          
+          // For demo_scheduled, use demoDate
+          if (stage === 'demo_scheduled' && lead.demoDate) {
+            const demoDate = new Date(lead.demoDate);
+            return demoDate >= start && demoDate <= end;
+          }
+          
+          // For quote_sent, use quoteSentDate
+          if (stage === 'quote_sent' && lead.quoteSentDate) {
+            const quoteSentDate = new Date(lead.quoteSentDate);
+            return quoteSentDate >= start && quoteSentDate <= end;
+          }
+          
+          // For negotiation, use negotiationDate
+          if (stage === 'negotiation' && lead.negotiationDate) {
+            const negotiationDate = new Date(lead.negotiationDate);
+            return negotiationDate >= start && negotiationDate <= end;
+          }
+          
+          // For seed/lead stages, use createdAt
+          return createdAt >= start && createdAt <= end;
+        });
+      };
+      
+      // Get value for a set of leads
+      const getLeadsValue = (leads: any[]) => {
+        return leads.reduce((sum, lead) => {
+          return sum + (lead.confirmedOrderValue || lead.estimatedValue || 0);
+        }, 0);
+      };
+      
+      // Weekly comparison data (current week vs last 4 weeks)
+      const weeklyData = [];
+      for (let i = 0; i < 5; i++) {
+        const { start, end } = getWeekBoundaries(i);
+        const weekLabel = i === 0 ? 'Current Week' : 
+                          i === 1 ? 'Last Week' : 
+                          `${i} Weeks Ago`;
+        
+        const stageData: Record<string, { count: number; value: number }> = {};
+        STAGES.forEach(stage => {
+          const leads = getLeadsInStage(stage.id, start, end);
+          stageData[stage.id] = {
+            count: leads.length,
+            value: getLeadsValue(leads),
+          };
+        });
+        
+        weeklyData.push({
+          period: weekLabel,
+          weekNumber: i,
+          startDate: start.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0],
+          stages: stageData,
+          totalLeads: Object.values(stageData).reduce((s, d) => s + d.count, 0),
+          totalValue: Object.values(stageData).reduce((s, d) => s + d.value, 0),
+        });
+      }
+      
+      // Monthly comparison data (current month vs last 6 months)
+      const monthlyData = [];
+      for (let i = 0; i < 7; i++) {
+        const { start, end } = getMonthBoundaries(i);
+        const monthLabel = start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        
+        const stageData: Record<string, { count: number; value: number }> = {};
+        STAGES.forEach(stage => {
+          const leads = getLeadsInStage(stage.id, start, end);
+          stageData[stage.id] = {
+            count: leads.length,
+            value: getLeadsValue(leads),
+          };
+        });
+        
+        monthlyData.push({
+          period: monthLabel,
+          monthIndex: i,
+          startDate: start.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0],
+          stages: stageData,
+          totalLeads: Object.values(stageData).reduce((s, d) => s + d.count, 0),
+          totalValue: Object.values(stageData).reduce((s, d) => s + d.value, 0),
+        });
+      }
+      
+      // Calculate percentage changes
+      const calculateChange = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? 100 : 0;
+        return Math.round(((current - previous) / previous) * 100);
+      };
+      
+      // Weekly changes (current vs last week)
+      const weeklyChanges: Record<string, { countChange: number; valueChange: number }> = {};
+      if (weeklyData.length >= 2) {
+        STAGES.forEach(stage => {
+          const current = weeklyData[0].stages[stage.id];
+          const previous = weeklyData[1].stages[stage.id];
+          weeklyChanges[stage.id] = {
+            countChange: calculateChange(current.count, previous.count),
+            valueChange: calculateChange(current.value, previous.value),
+          };
+        });
+      }
+      
+      // Monthly changes (current vs last month)
+      const monthlyChanges: Record<string, { countChange: number; valueChange: number }> = {};
+      if (monthlyData.length >= 2) {
+        STAGES.forEach(stage => {
+          const current = monthlyData[0].stages[stage.id];
+          const previous = monthlyData[1].stages[stage.id];
+          monthlyChanges[stage.id] = {
+            countChange: calculateChange(current.count, previous.count),
+            valueChange: calculateChange(current.value, previous.value),
+          };
+        });
+      }
+      
+      // Current stage distribution
+      const currentStageDistribution = STAGES.map(stage => {
+        const leads = allLeads.filter(l => l.stage === stage.id);
+        return {
+          stage: stage.id,
+          label: stage.label,
+          count: leads.length,
+          value: getLeadsValue(leads),
+          percentage: allLeads.length > 0 ? Math.round((leads.length / allLeads.length) * 100) : 0,
+        };
+      });
+      
+      res.json({
+        stages: STAGES,
+        weekly: {
+          data: weeklyData.reverse(), // Oldest first for charts
+          changes: weeklyChanges,
+        },
+        monthly: {
+          data: monthlyData.reverse(), // Oldest first for charts
+          changes: monthlyChanges,
+        },
+        currentDistribution: currentStageDistribution,
+        summary: {
+          totalLeads: allLeads.length,
+          totalValue: getLeadsValue(allLeads),
+          conversionRate: allLeads.length > 0 
+            ? Math.round((allLeads.filter(l => l.stage === 'closed_won').length / allLeads.length) * 100) 
+            : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching sales stage analytics:", error);
+      res.status(500).json({ message: "Failed to fetch sales stage analytics" });
+    }
+  });
+
   // Admin Dashboard - Implementation Drill-down
   app.get("/api/admin/dashboard/implementation", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
