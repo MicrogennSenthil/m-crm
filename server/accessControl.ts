@@ -34,8 +34,8 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
     };
   }
   
-  const departments = await storage.getDepartments();
-  const managedDepartments = departments.filter(d => d.managerId === userId);
+  // Check if user is a department head using junction table
+  const managedDepartments = await storage.getDepartmentsByHead(userId);
   
   if (managedDepartments.length > 0) {
     const departmentUserIds: string[] = [userId];

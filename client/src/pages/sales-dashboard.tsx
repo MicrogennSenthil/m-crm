@@ -531,6 +531,12 @@ export default function SalesDashboard() {
     enabled: !userLoading && hasAccess(user),
   });
 
+  // Check if current user is a department head using the junction table API
+  const { data: deptHeadStatus } = useQuery<{ isHead: boolean; departmentIds: string[] }>({
+    queryKey: ["/api/auth/is-department-head"],
+    enabled: !userLoading && hasAccess(user),
+  });
+
   const addCommentMutation = useMutation({
     mutationFn: async ({ leadId, comment }: { leadId: string; comment: string }) => {
       const response = await apiRequest("POST", `/api/leads/${leadId}/comments`, { comment });
@@ -600,7 +606,8 @@ export default function SalesDashboard() {
 
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
-  const isDeptHead = departments.some((d: any) => d.managerId === user?.id);
+  // Check if user is a department head using the junction table API
+  const isDeptHead = deptHeadStatus?.isHead || false;
   const canComment = isSuperAdmin || isDeptHead;
 
   const filterLeadsByCategory = (): LeadWithSalesExec[] => {

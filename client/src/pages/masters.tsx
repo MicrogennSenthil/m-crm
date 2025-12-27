@@ -1166,9 +1166,10 @@ function DepartmentForm({
   });
   const [selectedHeadIds, setSelectedHeadIds] = useState<string[]>([]);
   const [isHeadDropdownOpen, setIsHeadDropdownOpen] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Load existing heads when editing a department
-  const { data: existingHeads = [] } = useQuery<{ userId: string; user?: User }[]>({
+  const { data: existingHeads, isLoading: headsLoading } = useQuery<{ userId: string; user?: User }[]>({
     queryKey: ["/api/departments", department?.id, "heads"],
     queryFn: async () => {
       if (!department?.id) return [];
@@ -1179,15 +1180,28 @@ function DepartmentForm({
     enabled: !!department?.id,
   });
 
-  // Set initial selected heads when data loads
+  // Set initial selected heads when data loads - only run once after API completes
   useEffect(() => {
-    if (existingHeads.length > 0) {
+    // For new departments (no ID), nothing to load
+    if (!department?.id) {
+      setHasInitialized(true);
+      return;
+    }
+    
+    // Wait for the query to complete loading
+    if (headsLoading || hasInitialized) return;
+    
+    // Set heads from junction table if any exist
+    if (existingHeads && existingHeads.length > 0) {
       setSelectedHeadIds(existingHeads.map(h => h.userId));
     } else if (department?.managerId) {
-      // Fallback to legacy managerId if no junction table entries
+      // Fallback to legacy managerId only if no junction table entries
       setSelectedHeadIds([department.managerId]);
     }
-  }, [existingHeads, department?.managerId]);
+    // Otherwise leave empty - this is intentional when no heads are assigned
+    
+    setHasInitialized(true);
+  }, [existingHeads, headsLoading, hasInitialized, department?.id, department?.managerId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

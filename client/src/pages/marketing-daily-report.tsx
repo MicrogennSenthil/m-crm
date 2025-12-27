@@ -178,12 +178,11 @@ export default function MarketingDailyReport() {
     queryKey: ["/api/marketing-reports"],
   });
 
-  const { data: departments = [] } = useQuery<Array<{ id: string; name: string; managerId: string | null }>>({
-    queryKey: ["/api/departments"],
+  const { data: deptHeadStatus } = useQuery<{ isHead: boolean; departmentIds: string[] }>({
+    queryKey: ["/api/auth/is-department-head"],
   });
 
-  const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-  const isDeptHead = marketingDept?.managerId === user?.id;
+  const isDeptHead = deptHeadStatus?.isHead || false;
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {

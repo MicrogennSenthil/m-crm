@@ -660,9 +660,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         isAuthorized = true;
       } else {
-        // Check if current user is a department head
-        const departments = await storage.getDepartments();
-        const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+        // Check if current user is a department head (using junction table)
+        const managedDepartments = await storage.getDepartmentsByHead(currentUserId);
         
         if (managedDepartments.length > 0) {
           // Check if target user is in one of the managed departments
@@ -733,9 +732,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(allUsers);
       }
       
-      // Get departments where current user is the head
-      const departments = await storage.getDepartments();
-      const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+      // Get departments where current user is the head (using junction table)
+      const managedDepartments = await storage.getDepartmentsByHead(currentUserId);
       
       if (managedDepartments.length === 0) {
         return res.json([]);
@@ -774,9 +772,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Check if department head
-      const departments = await storage.getDepartments();
-      const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+      // Check if department head (using junction table)
+      const managedDepartments = await storage.getDepartmentsByHead(currentUserId);
       
       if (managedDepartments.length > 0) {
         return res.json({ 
@@ -2426,8 +2423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check if lead is assigned to the user
         if (lead.salesExecutiveId !== currentUserId) {
           // Check if user is a department manager and the lead's assignee is in their department
-          const departments = await storage.getDepartments();
-          const managedDepartments = departments.filter(d => d.managerId === currentUserId);
+          const managedDepartments = await storage.getDepartmentsByHead(currentUserId);
           
           let hasAccess = false;
           if (managedDepartments.length > 0 && lead.salesExecutiveId) {
@@ -3517,9 +3513,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return true;
     }
     
-    // Check if user is a department manager and the lead's assignee is in their department
-    const departments = await storage.getDepartments();
-    const managedDepartments = departments.filter(d => d.managerId === userId);
+    // Check if user is a department manager and the lead's assignee is in their department (using junction table)
+    const managedDepartments = await storage.getDepartmentsByHead(userId);
     
     if (managedDepartments.length > 0 && lead.salesExecutiveId) {
       const leadAssignee = await storage.getUser(lead.salesExecutiveId);
@@ -4415,10 +4410,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAdmin = currentUser?.role === 'admin';
       const isSalesExec = currentUser?.role === 'sales_executive';
       
-      // Check if user is a department head and get their department
-      const departments = await storage.getDepartments();
-      const managedDepartment = departments.find(d => d.managerId === userId);
-      const isDeptHead = !!managedDepartment;
+      // Check if user is a department head and get their departments (using junction table)
+      const managedDepartments = await storage.getDepartmentsByHead(userId);
+      const isDeptHead = managedDepartments.length > 0;
       
       if (!isSuperAdmin && !isAdmin && !isSalesExec && !isDeptHead) {
         return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, or department head role." });
@@ -4434,10 +4428,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isSuperAdmin && !isAdmin && isSalesExec && !isDeptHead) {
         allLeads = allLeads.filter(l => l.salesExecutiveId === userId);
       }
-      // Department heads see leads assigned to users in their department
+      // Department heads see leads assigned to users in their departments
       else if (!isSuperAdmin && !isAdmin && isDeptHead) {
-        // Get all users in the department head's department
-        const deptUsers = allUsers.filter(u => u.departmentId === managedDepartment!.id);
+        // Get all users in the department head's departments
+        const managedDeptIds = new Set(managedDepartments.map(d => d.id));
+        const deptUsers = allUsers.filter(u => u.departmentId && managedDeptIds.has(u.departmentId));
         const deptUserIds = new Set(deptUsers.map(u => u.id));
         allLeads = allLeads.filter(l => l.salesExecutiveId && deptUserIds.has(l.salesExecutiveId));
       }
@@ -4769,17 +4764,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAdmin = currentUser?.role === 'admin';
       const isSalesExec = currentUser?.role === 'sales_executive';
       
-      const departments = await storage.getDepartments();
-      const managedDepartment = departments.find(d => d.managerId === userId);
-      const isDeptHead = !!managedDepartment;
+      const managedDepartments = await storage.getDepartmentsByHead(userId);
+      const isDeptHead = managedDepartments.length > 0;
       
       // Get users to check department membership
       const users = await storage.getUsers();
       
       if (!isSuperAdmin && !isAdmin) {
         if (isDeptHead) {
-          // Get users in department head's department
-          const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+          // Get users in department head's departments
+          const managedDeptIds = new Set(managedDepartments.map(d => d.id));
+          const deptUsers = users.filter(u => u.departmentId && managedDeptIds.has(u.departmentId));
           const deptUserIds = new Set(deptUsers.map(u => u.id));
           if (!lead.salesExecutiveId || !deptUserIds.has(lead.salesExecutiveId)) {
             return res.status(403).json({ message: "You can only view comments for leads in your department" });
@@ -4826,11 +4821,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
       const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
       
-      // Check if user is a department head
-      const departments = await storage.getDepartments();
-      const isDeptHead = departments.some(d => d.managerId === userId);
+      // Check if user is a department head (using junction table)
+      const isDeptHeadResult = await storage.isUserDepartmentHead(userId);
       
-      if (!isSuperAdmin && !isDeptHead) {
+      if (!isSuperAdmin && !isDeptHeadResult.isHead) {
         return res.status(403).json({ message: "Only super admin and department heads can add comments" });
       }
       
@@ -4892,9 +4886,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAdmin = currentUser?.role === 'admin';
       const isSalesExec = currentUser?.role === 'sales_executive';
       
-      const departments = await storage.getDepartments();
-      const managedDepartment = departments.find(d => d.managerId === userId);
-      const isDeptHead = !!managedDepartment;
+      const managedDepartments = await storage.getDepartmentsByHead(userId);
+      const isDeptHead = managedDepartments.length > 0;
       
       // Get users to check department membership
       const users = await storage.getUsers();
@@ -4905,8 +4898,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // - Sales executives can only view their own leads
       if (!isSuperAdmin && !isAdmin) {
         if (isDeptHead) {
-          // Get users in department head's department
-          const deptUsers = users.filter(u => u.departmentId === managedDepartment!.id);
+          // Get users in department head's departments
+          const managedDeptIds = new Set(managedDepartments.map(d => d.id));
+          const deptUsers = users.filter(u => u.departmentId && managedDeptIds.has(u.departmentId));
           const deptUserIds = new Set(deptUsers.map(u => u.id));
           // Check if lead's sales exec is in department
           if (!lead.salesExecutiveId || !deptUserIds.has(lead.salesExecutiveId)) {
@@ -5784,12 +5778,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (departmentId) {
         department = await storage.getDepartment(departmentId);
-        isDepartmentHead = department?.managerId === userId;
+        // Check if user is a department head using junction table
+        const headResult = await storage.isUserDepartmentHead(userId);
+        isDepartmentHead = headResult.isHead;
         
-        // If department head, get all department members
+        // If department head, get all department members for their managed departments
         if (isDepartmentHead) {
           const allUsers = await storage.getUsers();
-          departmentMembers = allUsers.filter(u => u.departmentId === departmentId && u.id !== userId);
+          const managedDepts = await storage.getDepartmentsByHead(userId);
+          const managedDeptIds = new Set(managedDepts.map(d => d.id));
+          departmentMembers = allUsers.filter(u => u.departmentId && managedDeptIds.has(u.departmentId) && u.id !== userId);
         }
       }
 
@@ -12828,10 +12826,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
       
       if (!isAdminOrSuperAdmin) {
-        // Check if user is a department head for Digital Marketing
+        // Check if user is a department head for Digital Marketing (using junction table)
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-        const isDeptHead = marketingDept?.managerId === currentUserId;
+        let isDeptHead = false;
+        if (marketingDept) {
+          const deptHeads = await storage.getDepartmentHeads(marketingDept.id);
+          isDeptHead = deptHeads.some(h => h.userId === currentUserId);
+        }
         
         if (!isDeptHead) {
           // Regular marketing staff can only see their own reports
@@ -12874,7 +12876,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (report.userId !== currentUserId && !isAdminOrSuperAdmin) {
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-        if (marketingDept?.managerId !== currentUserId) {
+        let isDeptHead = false;
+        if (marketingDept) {
+          const deptHeads = await storage.getDepartmentHeads(marketingDept.id);
+          isDeptHead = deptHeads.some(h => h.userId === currentUserId);
+        }
+        if (!isDeptHead) {
           return res.status(403).json({ message: "Access denied" });
         }
       }
@@ -13083,10 +13090,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userEmail = userClaims.claims?.email;
       const user = await storage.getUser(currentUserId);
       
-      // Must be admin, super admin, or department head
+      // Must be admin, super admin, or department head (using junction table)
       const departments = await storage.getDepartments();
       const marketingDept = departments.find(d => d.name === 'Digital Marketing');
-      const isDeptHead = marketingDept?.managerId === currentUserId;
+      let isDeptHead = false;
+      if (marketingDept) {
+        const deptHeads = await storage.getDepartmentHeads(marketingDept.id);
+        isDeptHead = deptHeads.some(h => h.userId === currentUserId);
+      }
       const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
       
       if (!isAdminOrSuperAdmin && !isDeptHead) {
