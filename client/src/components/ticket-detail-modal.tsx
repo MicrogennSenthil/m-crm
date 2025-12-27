@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench } from "lucide-react";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
-import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask } from "@shared/schema";
+import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask, DevelopmentSupportMessage } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -256,6 +256,12 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
     enabled: open,
   });
 
+  // Query for development-support messages
+  const { data: devSupportMessages } = useQuery<(DevelopmentSupportMessage & { sender?: User })[]>({
+    queryKey: ["/api/tickets", ticket.id, "dev-messages"],
+    enabled: open,
+  });
+
   // Determine resolution source
   const hasDevTasks = linkedDevTasks && linkedDevTasks.length > 0;
   const completedDevTasks = linkedDevTasks?.filter(t => t.status === 'completed') || [];
@@ -407,6 +413,51 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                               Completed on: {format(new Date(devTask.completedAt), "PPP")}
                             </p>
                           )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Development Team Guidance */}
+                {devSupportMessages && devSupportMessages.length > 0 && (
+                  <div className="mt-4 pt-4 border-t" data-testid="dev-guidance-section">
+                    <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2 flex items-center gap-2">
+                      <Code2 className="h-4 w-4" />
+                      Development Team Guidance ({devSupportMessages.length}):
+                    </p>
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {devSupportMessages.map((msg) => (
+                        <div 
+                          key={msg.id} 
+                          className={cn(
+                            "text-sm p-3 rounded-md border",
+                            msg.senderType === 'development' 
+                              ? "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800" 
+                              : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700"
+                          )}
+                          data-testid={`dev-message-${msg.id}`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-5 w-5">
+                                <AvatarFallback className="text-xs">
+                                  {msg.sender?.firstName?.[0] || (msg.senderType === 'development' ? 'D' : 'S')}
+                                  {msg.sender?.lastName?.[0] || ''}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-xs font-medium">
+                                {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : (msg.senderType === 'development' ? 'Development Team' : 'Support Team')}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                {msg.senderType === 'development' ? 'Dev Team' : 'Support'}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {msg.createdAt ? format(new Date(msg.createdAt), "MMM d, HH:mm") : ''}
+                            </span>
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
                         </div>
                       ))}
                     </div>

@@ -9831,7 +9831,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get development-support messages for a task
   app.get("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const messages = await storage.getDevelopmentSupportMessagesByTask(req.params.id);
+      const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      const userRole = req.user?.role;
+      const { id } = req.params;
+      
+      // Verify task exists
+      const task = await storage.getDevelopmentTask(id);
+      if (!task) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Authorization: Allow if user is assigned, is admin, or has super admin email
+      const isSuperAdmin = userEmail === "senthil@microgenn.com";
+      const isAssigned = task.assignedTo === userId || task.assignedBy === userId;
+      const isAdminRole = userRole === "admin";
+      
+      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to view messages for this task" });
+      }
+      
+      const messages = await storage.getDevelopmentSupportMessagesByTask(id);
       res.json(messages);
     } catch (error) {
       console.error("Error fetching development-support messages:", error);
@@ -9843,6 +9863,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      const userRole = req.user?.role;
       const { id } = req.params;
       const { message } = req.body;
       
@@ -9854,6 +9876,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.getDevelopmentTask(id);
       if (!task) {
         return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Authorization: Allow if user is assigned, is admin, or has super admin email
+      const isSuperAdmin = userEmail === "senthil@microgenn.com";
+      const isAssigned = task.assignedTo === userId || task.assignedBy === userId;
+      const isAdminRole = userRole === "admin";
+      
+      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to send messages for this task" });
       }
       
       // Ensure task is linked to a support ticket
@@ -9888,7 +9919,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get development-support messages for a ticket
   app.get("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const messages = await storage.getDevelopmentSupportMessagesByTicket(req.params.id);
+      const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      const userRole = req.user?.role;
+      const { id } = req.params;
+      
+      // Verify ticket exists
+      const ticket = await storage.getTicket(id);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Authorization: Allow if user is assigned, created the ticket, is admin, or has super admin email
+      const isSuperAdmin = userEmail === "senthil@microgenn.com";
+      const isAssigned = ticket.assignedTo === userId || ticket.createdBy === userId;
+      const isAdminRole = userRole === "admin";
+      
+      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to view messages for this ticket" });
+      }
+      
+      const messages = await storage.getDevelopmentSupportMessagesByTicket(id);
       res.json(messages);
     } catch (error) {
       console.error("Error fetching ticket dev messages:", error);
@@ -9900,6 +9951,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      const userRole = req.user?.role;
       const { id: ticketId } = req.params;
       const { message, developmentTaskId } = req.body;
       
@@ -9915,6 +9968,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ticket = await storage.getTicket(ticketId);
       if (!ticket) {
         return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Authorization: Allow if user is assigned, created the ticket, is admin, or has super admin email
+      const isSuperAdmin = userEmail === "senthil@microgenn.com";
+      const isAssigned = ticket.assignedTo === userId || ticket.createdBy === userId;
+      const isAdminRole = userRole === "admin";
+      
+      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to send messages for this ticket" });
       }
       
       // Verify development task exists and is linked to this ticket
