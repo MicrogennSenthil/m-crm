@@ -136,10 +136,13 @@ import {
   type InsertAssignmentSetting,
   developmentTasks,
   developmentTaskComments,
+  developmentSupportMessages,
   type DevelopmentTask,
   type InsertDevelopmentTask,
   type DevelopmentTaskComment,
   type InsertDevelopmentTaskComment,
+  type DevelopmentSupportMessage,
+  type InsertDevelopmentSupportMessage,
   marketingDailyReports,
   marketingTaskEntries,
   type MarketingDailyReport,
@@ -506,6 +509,11 @@ export interface IStorage {
   // Development Task Comment operations
   getDevelopmentTaskComments(developmentTaskId: string): Promise<(DevelopmentTaskComment & { user?: User })[]>;
   createDevelopmentTaskComment(comment: InsertDevelopmentTaskComment): Promise<DevelopmentTaskComment>;
+
+  // Development-Support Message operations (bidirectional communication)
+  getDevelopmentSupportMessagesByTask(developmentTaskId: string): Promise<(DevelopmentSupportMessage & { sender?: User })[]>;
+  getDevelopmentSupportMessagesByTicket(ticketId: string): Promise<(DevelopmentSupportMessage & { sender?: User })[]>;
+  createDevelopmentSupportMessage(message: InsertDevelopmentSupportMessage): Promise<DevelopmentSupportMessage>;
 
   // Development Dashboard metrics
   getDevelopmentDashboardMetrics(assignedTo?: string, assignedToIds?: string[]): Promise<{
@@ -3475,6 +3483,53 @@ export class DatabaseStorage implements IStorage {
       .values(comment)
       .returning();
     return newComment;
+  }
+
+  // Development-Support Message operations (bidirectional communication)
+  async getDevelopmentSupportMessagesByTask(developmentTaskId: string): Promise<(DevelopmentSupportMessage & { sender?: User })[]> {
+    const messages = await db
+      .select()
+      .from(developmentSupportMessages)
+      .where(eq(developmentSupportMessages.developmentTaskId, developmentTaskId))
+      .orderBy(desc(developmentSupportMessages.createdAt));
+
+    const enrichedMessages = await Promise.all(
+      messages.map(async (message) => {
+        const [sender] = message.senderId 
+          ? await db.select().from(users).where(eq(users.id, message.senderId))
+          : [undefined];
+        return { ...message, sender };
+      })
+    );
+
+    return enrichedMessages;
+  }
+
+  async getDevelopmentSupportMessagesByTicket(ticketId: string): Promise<(DevelopmentSupportMessage & { sender?: User })[]> {
+    const messages = await db
+      .select()
+      .from(developmentSupportMessages)
+      .where(eq(developmentSupportMessages.ticketId, ticketId))
+      .orderBy(desc(developmentSupportMessages.createdAt));
+
+    const enrichedMessages = await Promise.all(
+      messages.map(async (message) => {
+        const [sender] = message.senderId 
+          ? await db.select().from(users).where(eq(users.id, message.senderId))
+          : [undefined];
+        return { ...message, sender };
+      })
+    );
+
+    return enrichedMessages;
+  }
+
+  async createDevelopmentSupportMessage(message: InsertDevelopmentSupportMessage): Promise<DevelopmentSupportMessage> {
+    const [newMessage] = await db
+      .insert(developmentSupportMessages)
+      .values(message)
+      .returning();
+    return newMessage;
   }
 
   // Development Dashboard metrics
