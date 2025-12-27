@@ -199,7 +199,11 @@ export interface IStorage {
   // Lead operations
   getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
   getLead(id: string): Promise<Lead | undefined>;
-  createLead(lead: InsertLead): Promise<Lead>;
+  createLead(lead: InsertLead, options?: { 
+    skipStageHistory?: boolean;
+    changedById?: string | null;
+    changeReason?: string;
+  }): Promise<Lead>;
   updateLead(id: string, data: Partial<InsertLead>): Promise<Lead>;
   deleteLead(id: string): Promise<void>;
 
@@ -219,6 +223,8 @@ export interface IStorage {
   getDemoDateHistory(leadId: string): Promise<DemoDateHistory[]>;
   createDemoDateHistory(history: InsertDemoDateHistory): Promise<DemoDateHistory>;
   getLeadStageHistory(leadId: string): Promise<LeadStageHistory[]>;
+  getAllLeadStageHistory(): Promise<LeadStageHistory[]>;
+  getLeadStageHistoryByDateRange(start: Date, end: Date): Promise<LeadStageHistory[]>;
   createLeadStageHistory(history: InsertLeadStageHistory): Promise<LeadStageHistory>;
 
   // Negotiation Date History operations
@@ -1005,8 +1011,30 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
-  async createLead(lead: InsertLead): Promise<Lead> {
+  async createLead(lead: InsertLead, options?: { 
+    skipStageHistory?: boolean;
+    changedById?: string | null;
+    changeReason?: string;
+  }): Promise<Lead> {
     const [newLead] = await db.insert(leads).values(lead).returning();
+    
+    // Automatically record initial stage in history for analytics tracking
+    // Can be skipped if the caller will handle it separately
+    if (!options?.skipStageHistory) {
+      try {
+        await db.insert(leadStageHistory).values({
+          leadId: newLead.id,
+          fromStage: null, // null indicates lead creation
+          toStage: newLead.stage || 'seed',
+          changedById: options?.changedById || null, // user ID or null for system actions
+          changeReason: options?.changeReason || 'Lead created',
+        });
+      } catch (err) {
+        // Log but don't fail lead creation if history recording fails
+        console.error("Failed to record initial lead stage history:", err);
+      }
+    }
+    
     return newLead;
   }
 
@@ -1100,6 +1128,24 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(leadStageHistory)
       .where(eq(leadStageHistory.leadId, leadId))
+      .orderBy(desc(leadStageHistory.createdAt));
+  }
+
+  async getAllLeadStageHistory(): Promise<LeadStageHistory[]> {
+    return await db
+      .select()
+      .from(leadStageHistory)
+      .orderBy(desc(leadStageHistory.createdAt));
+  }
+
+  async getLeadStageHistoryByDateRange(start: Date, end: Date): Promise<LeadStageHistory[]> {
+    return await db
+      .select()
+      .from(leadStageHistory)
+      .where(and(
+        gte(leadStageHistory.createdAt, start),
+        lte(leadStageHistory.createdAt, end)
+      ))
       .orderBy(desc(leadStageHistory.createdAt));
   }
 

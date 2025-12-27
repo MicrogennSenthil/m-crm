@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Lead, FollowUp, LeadComment, Task, User } from "@shared/schema";
+import { SalesStageAnalytics } from "@/components/sales-stage-analytics";
 
 interface LeadWithSalesExec extends Lead {
   salesExecutiveName: string | null;
@@ -765,6 +766,11 @@ export default function SalesDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sales Stage Analytics - Superadmin Only */}
+      {isSuperAdmin && (
+        <SalesStageAnalytics />
+      )}
 
       {/* Content Area */}
       <Card>

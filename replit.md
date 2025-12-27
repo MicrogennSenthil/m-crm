@@ -22,7 +22,7 @@ The CRM includes:
 -   **Support Ticket System**: Priority-based ticket creation, assignment, multi-level escalation, conversation threading, and status management. Includes ticket assignment history tracking for all engineers who worked on a ticket.
 -   **HR Feedback Management**: Enhanced feedback collection with work completion details, call history timeline showing all engineers who worked on the ticket, client contact tracking, and Level 2 reopen capability for unsatisfied customers.
 -   **Task/Followup Management**: Comprehensive task management with multimedia attachments, reminders, due dates, team mentions, and commenting.
--   **Dashboard & Analytics**: Metric cards, activity feed, quick access panels, and trend indicators.
+-   **Dashboard & Analytics**: Metric cards, activity feed, quick access panels, and trend indicators. Includes Sales Stage Analytics with weekly/monthly stage-wise comparison using bar charts, line charts, pie charts, and statistical tables with trend indicators.
 -   **Reports & Analytics**: Sales, Implementation, and Support reports with filtering, export (CSV/Excel), and email functionality (Resend).
 -   **Settings & Customization**: User profiles and light/dark mode toggle.
 -   **Master Data Management (Admin Only)**: CRUD for customer records and implementation modules.

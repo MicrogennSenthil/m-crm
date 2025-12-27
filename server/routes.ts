@@ -2414,7 +2414,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changedById: req.user.claims.sub,
+        changeReason: 'Lead created by user',
+      });
       
       // Log activity
       await storage.logActivity({
@@ -2679,7 +2682,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             notes: leadRow.notes || leadRow["Notes"] || "",
           });
           
-          const newLead = await storage.createLead(validatedData);
+          const newLead = await storage.createLead(validatedData, {
+            changedById: req.user.claims.sub,
+            changeReason: 'Lead imported via bulk import',
+          });
           createdLeads.push(newLead);
           
           // Log activity
@@ -2875,7 +2881,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             notes: lead.notes || `Imported from Google Sheet: ${sheetName}`,
           });
           
-          const newLead = await storage.createLead(validatedData);
+          const newLead = await storage.createLead(validatedData, {
+            changedById: req.user.claims.sub,
+            changeReason: 'Lead imported from Google Sheets',
+          });
           createdLeads.push(newLead);
           
           await storage.logActivity({
@@ -2930,7 +2939,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Facebook Lead Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -2980,7 +2991,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via LinkedIn Lead Gen webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3037,7 +3050,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Instagram Lead Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3071,7 +3086,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Twitter/X Lead Cards webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3118,7 +3135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Google Ads Lead Form webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3159,7 +3178,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via YouTube Lead Form webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3193,7 +3214,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via TikTok Lead Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3227,7 +3250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Pinterest Lead Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3261,7 +3286,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Snapchat Lead Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3303,7 +3330,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via WhatsApp webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3360,7 +3389,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via Microsoft/Bing Ads webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -3394,7 +3425,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const validatedData = insertLeadSchema.parse(leadData);
-      const newLead = await storage.createLead(validatedData);
+      const newLead = await storage.createLead(validatedData, {
+        changeReason: 'Lead captured via website form webhook',
+      });
       
       await storage.logActivity({
         entityType: "lead",
@@ -8505,7 +8538,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Dashboard - Sales Stage-wise Weekly/Monthly Comparison Analytics
   app.get("/api/admin/dashboard/sales-stage-analytics", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const allLeads = await storage.getLeads({});
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      
+      // Calculate date range for queries (cover both weekly and monthly periods)
+      // Weeks: 5 weeks back from current week start
+      // Months: 7 months back from current month start
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      const dayOfWeek = today.getDay();
+      const currentWeekStart = new Date(today);
+      currentWeekStart.setDate(today.getDate() - dayOfWeek);
+      const earliestWeekStart = new Date(currentWeekStart);
+      earliestWeekStart.setDate(currentWeekStart.getDate() - (4 * 7));
+      
+      // Earliest month start (7 months ago)
+      const earliestMonthStart = new Date(currentYear, currentMonth - 6, 1);
+      
+      // Use the earlier of the two dates as the query start
+      const queryStart = earliestMonthStart < earliestWeekStart ? earliestMonthStart : earliestWeekStart;
+      const queryEnd = new Date(now);
+      queryEnd.setHours(23, 59, 59, 999);
+      
+      // Fetch data using date-range query for efficiency
+      const [allLeads, stageHistory] = await Promise.all([
+        storage.getLeads({}),
+        storage.getLeadStageHistoryByDateRange(queryStart, queryEnd),
+      ]);
+      
+      // Build a map of leadId -> lead for quick lookup
+      const leadMap = new Map(allLeads.map(l => [l.id, l]));
       
       const STAGES = [
         { id: "seed", label: "Seeds" },
@@ -8516,10 +8579,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { id: "closed_won", label: "Closed Won" },
         { id: "closed_lost", label: "Closed Lost" },
       ];
-      
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth();
       
       // Calculate week boundaries
       const getWeekBoundaries = (weeksAgo: number) => {
@@ -8544,46 +8603,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return { start, end };
       };
       
-      // Get leads in stage during a time period (either created or transitioned to that stage)
-      const getLeadsInStage = (stage: string, start: Date, end: Date) => {
-        return allLeads.filter(lead => {
-          if (lead.stage !== stage) return false;
-          const createdAt = lead.createdAt ? new Date(lead.createdAt) : null;
-          if (!createdAt) return false;
-          
-          // For closed_won/closed_lost, use closedDate
-          if ((stage === 'closed_won' || stage === 'closed_lost') && lead.closedDate) {
-            const closedDate = new Date(lead.closedDate);
-            return closedDate >= start && closedDate <= end;
+      // Get stage entries that occurred during a time period
+      // Relies primarily on leadStageHistory which now tracks all lead creations and stage transitions
+      // Also checks stage-specific timestamps as fallback for legacy data
+      const getStageEntriesInPeriod = (stage: string, start: Date, end: Date) => {
+        const leadIds = new Set<string>();
+        
+        // 1. Primary source: Find entries TO this stage from history
+        stageHistory.forEach(h => {
+          if (h.toStage !== stage) return;
+          const transitionDate = h.createdAt ? new Date(h.createdAt) : null;
+          if (!transitionDate) return;
+          if (transitionDate >= start && transitionDate <= end) {
+            leadIds.add(h.leadId);
           }
-          
-          // For demo_scheduled, use demoDate
-          if (stage === 'demo_scheduled' && lead.demoDate) {
-            const demoDate = new Date(lead.demoDate);
-            return demoDate >= start && demoDate <= end;
-          }
-          
-          // For quote_sent, use quoteSentDate
-          if (stage === 'quote_sent' && lead.quoteSentDate) {
-            const quoteSentDate = new Date(lead.quoteSentDate);
-            return quoteSentDate >= start && quoteSentDate <= end;
-          }
-          
-          // For negotiation, use negotiationDate
-          if (stage === 'negotiation' && lead.negotiationDate) {
-            const negotiationDate = new Date(lead.negotiationDate);
-            return negotiationDate >= start && negotiationDate <= end;
-          }
-          
-          // For seed/lead stages, use createdAt
-          return createdAt >= start && createdAt <= end;
         });
+        
+        // 2. Fallback for legacy data: Use stage-specific timestamps
+        allLeads.forEach(lead => {
+          if (leadIds.has(lead.id)) return;
+          
+          // Check if this lead has history entries at all
+          const hasHistory = stageHistory.some(h => h.leadId === lead.id);
+          if (hasHistory) return; // Already covered by history
+          
+          let stageDate: Date | null = null;
+          
+          switch (stage) {
+            case 'demo_scheduled':
+              stageDate = lead.demoDate ? new Date(lead.demoDate) : null;
+              break;
+            case 'quote_sent':
+              stageDate = lead.quoteSentDate ? new Date(lead.quoteSentDate) : null;
+              break;
+            case 'negotiation':
+              stageDate = lead.negotiationDate ? new Date(lead.negotiationDate) : null;
+              break;
+            case 'closed_won':
+            case 'closed_lost':
+              if (lead.stage === stage) {
+                stageDate = lead.closedDate ? new Date(lead.closedDate) : null;
+              }
+              break;
+            case 'seed':
+            case 'lead':
+              // For early stages without history, use createdAt
+              if (lead.stage === stage) {
+                stageDate = lead.createdAt ? new Date(lead.createdAt) : null;
+              }
+              break;
+          }
+          
+          if (stageDate && stageDate >= start && stageDate <= end) {
+            leadIds.add(lead.id);
+          }
+        });
+        
+        return Array.from(leadIds).map(id => leadMap.get(id)).filter(Boolean);
       };
       
       // Get value for a set of leads
       const getLeadsValue = (leads: any[]) => {
         return leads.reduce((sum, lead) => {
-          return sum + (lead.confirmedOrderValue || lead.estimatedValue || 0);
+          return sum + (lead?.confirmedOrderValue || lead?.estimatedValue || 0);
         }, 0);
       };
       
@@ -8597,7 +8679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const stageData: Record<string, { count: number; value: number }> = {};
         STAGES.forEach(stage => {
-          const leads = getLeadsInStage(stage.id, start, end);
+          const leads = getStageEntriesInPeriod(stage.id, start, end);
           stageData[stage.id] = {
             count: leads.length,
             value: getLeadsValue(leads),
@@ -8623,7 +8705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const stageData: Record<string, { count: number; value: number }> = {};
         STAGES.forEach(stage => {
-          const leads = getLeadsInStage(stage.id, start, end);
+          const leads = getStageEntriesInPeriod(stage.id, start, end);
           stageData[stage.id] = {
             count: leads.length,
             value: getLeadsValue(leads),
@@ -8647,12 +8729,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return Math.round(((current - previous) / previous) * 100);
       };
       
-      // Weekly changes (current vs last week)
+      // Reverse arrays first (oldest first for charts), then calculate changes
+      // Current week is now at the END of the array after reverse
+      const weeklyDataReversed = weeklyData.reverse();
+      const monthlyDataReversed = monthlyData.reverse();
+      
+      // Weekly changes (current week vs previous week)
+      // After reverse: index 0 = oldest, last index = current week
       const weeklyChanges: Record<string, { countChange: number; valueChange: number }> = {};
-      if (weeklyData.length >= 2) {
+      if (weeklyDataReversed.length >= 2) {
+        const currentIdx = weeklyDataReversed.length - 1;
+        const previousIdx = weeklyDataReversed.length - 2;
         STAGES.forEach(stage => {
-          const current = weeklyData[0].stages[stage.id];
-          const previous = weeklyData[1].stages[stage.id];
+          const current = weeklyDataReversed[currentIdx].stages[stage.id];
+          const previous = weeklyDataReversed[previousIdx].stages[stage.id];
           weeklyChanges[stage.id] = {
             countChange: calculateChange(current.count, previous.count),
             valueChange: calculateChange(current.value, previous.value),
@@ -8660,12 +8750,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Monthly changes (current vs last month)
+      // Monthly changes (current month vs previous month)
       const monthlyChanges: Record<string, { countChange: number; valueChange: number }> = {};
-      if (monthlyData.length >= 2) {
+      if (monthlyDataReversed.length >= 2) {
+        const currentIdx = monthlyDataReversed.length - 1;
+        const previousIdx = monthlyDataReversed.length - 2;
         STAGES.forEach(stage => {
-          const current = monthlyData[0].stages[stage.id];
-          const previous = monthlyData[1].stages[stage.id];
+          const current = monthlyDataReversed[currentIdx].stages[stage.id];
+          const previous = monthlyDataReversed[previousIdx].stages[stage.id];
           monthlyChanges[stage.id] = {
             countChange: calculateChange(current.count, previous.count),
             valueChange: calculateChange(current.value, previous.value),
@@ -8673,7 +8765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Current stage distribution
+      // Current stage distribution (based on current lead.stage)
       const currentStageDistribution = STAGES.map(stage => {
         const leads = allLeads.filter(l => l.stage === stage.id);
         return {
@@ -8688,11 +8780,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         stages: STAGES,
         weekly: {
-          data: weeklyData.reverse(), // Oldest first for charts
+          data: weeklyDataReversed,
           changes: weeklyChanges,
         },
         monthly: {
-          data: monthlyData.reverse(), // Oldest first for charts
+          data: monthlyDataReversed,
           changes: monthlyChanges,
         },
         currentDistribution: currentStageDistribution,
