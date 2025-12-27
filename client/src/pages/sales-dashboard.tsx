@@ -767,8 +767,8 @@ export default function SalesDashboard() {
         </Card>
       </div>
 
-      {/* Sales Stage Analytics - Superadmin Only */}
-      {isSuperAdmin && (
+      {/* Sales Stage Analytics - Superadmin and Department Heads */}
+      {(isSuperAdmin || isDeptHead) && (
         <SalesStageAnalytics />
       )}
 
