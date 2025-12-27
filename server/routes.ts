@@ -9828,6 +9828,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get development-support messages for a task
+  app.get("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const messages = await storage.getDevelopmentSupportMessagesByTask(req.params.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching development-support messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  // Send message from development to support
+  app.post("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      const { message } = req.body;
+      
+      if (!message?.trim()) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+      
+      // Get the task to find the linked ticket
+      const task = await storage.getDevelopmentTask(id);
+      if (!task) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Ensure task is linked to a support ticket
+      if (task.sourceType !== 'support' || !task.sourceId) {
+        return res.status(400).json({ message: "Task is not linked to a support ticket" });
+      }
+      
+      const newMessage = await storage.createDevelopmentSupportMessage({
+        developmentTaskId: id,
+        ticketId: task.sourceId,
+        senderType: 'development',
+        senderId: userId,
+        message: message.trim(),
+      });
+      
+      // Log activity
+      await storage.logActivity({
+        userId,
+        entityType: 'development_task',
+        entityId: id,
+        action: 'message_sent',
+        description: `Sent guidance message to support team`,
+      });
+      
+      res.status(201).json(newMessage);
+    } catch (error) {
+      console.error("Error sending development-support message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Get development-support messages for a ticket
+  app.get("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const messages = await storage.getDevelopmentSupportMessagesByTicket(req.params.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching ticket dev messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  // Send message from support to development (from ticket context)
+  app.post("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const { id: ticketId } = req.params;
+      const { message, developmentTaskId } = req.body;
+      
+      if (!message?.trim()) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+      
+      if (!developmentTaskId) {
+        return res.status(400).json({ message: "Development task ID is required" });
+      }
+      
+      // Verify ticket exists
+      const ticket = await storage.getTicket(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+      
+      // Verify development task exists and is linked to this ticket
+      const task = await storage.getDevelopmentTask(developmentTaskId);
+      if (!task) {
+        return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      if (task.sourceType !== 'support' || task.sourceId !== ticketId) {
+        return res.status(400).json({ message: "Development task is not linked to this ticket" });
+      }
+      
+      const newMessage = await storage.createDevelopmentSupportMessage({
+        developmentTaskId,
+        ticketId,
+        senderType: 'support',
+        senderId: userId,
+        message: message.trim(),
+      });
+      
+      res.status(201).json(newMessage);
+    } catch (error) {
+      console.error("Error sending support-development message:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
   // Check and apply overdue penalties (can be called by admin or scheduled job)
   app.post("/api/development/check-overdue", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
