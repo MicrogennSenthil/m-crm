@@ -606,9 +606,12 @@ export default function SalesDashboard() {
 
   const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = user?.role === 'admin';
   // Check if user is a department head using the junction table API
   const isDeptHead = deptHeadStatus?.isHead || false;
-  const canComment = isSuperAdmin || isDeptHead;
+  const canComment = isSuperAdmin || isDeptHead || isAdmin;
+  // Sales Stage Analytics visible to superadmin, admin, and department heads
+  const canViewAnalytics = isSuperAdmin || isAdmin || isDeptHead;
 
   const filterLeadsByCategory = (): LeadWithSalesExec[] => {
     if (!activeCategory) return allLeads;
@@ -774,8 +777,8 @@ export default function SalesDashboard() {
         </Card>
       </div>
 
-      {/* Sales Stage Analytics - Superadmin and Department Heads */}
-      {(isSuperAdmin || isDeptHead) && (
+      {/* Sales Stage Analytics - Superadmin, Admins, and Department Heads */}
+      {canViewAnalytics && (
         <SalesStageAnalytics />
       )}
 
