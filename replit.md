@@ -39,6 +39,7 @@ The database schema comprises 14 tables. Core business logic includes round-robi
 -   **Dual Role System Support**: Seamless integration for both new users (via `user_role_assignments`) and legacy users (via `users.role`).
 -   **Super Admin**: `senthil@microgenn.com` has full system access.
 -   **Frontend Permission Hook**: `usePermissions` hook provides UI permission gating.
+-   **Multiple Department Heads**: Departments can have multiple heads via `departmentHeads` junction table with many-to-many relationship. Authorization checks use `/api/auth/is-department-head` API and `storage.getDepartmentsByHead()` method. Legacy `managerId` field retained as fallback for data migration.
 
 ## External Dependencies
 -   **Authentication**: Replit Auth (OpenID Connect)
