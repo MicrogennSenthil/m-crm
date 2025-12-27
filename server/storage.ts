@@ -27,6 +27,7 @@ import {
   taskFollowups,
   otpVerifications,
   departments,
+  departmentHeads,
   systemModules,
   userRoleAssignments,
   roleChangeHistory,
@@ -100,6 +101,8 @@ import {
   type CustomerWithLifecycle,
   type Department,
   type InsertDepartment,
+  type DepartmentHead,
+  type InsertDepartmentHead,
   type SystemModule,
   type InsertSystemModule,
   type UserRoleAssignment,
@@ -376,6 +379,12 @@ export interface IStorage {
   createDepartment(dept: InsertDepartment): Promise<Department>;
   updateDepartment(id: string, data: Partial<InsertDepartment>): Promise<Department>;
   deleteDepartment(id: string): Promise<void>;
+  
+  // Department Heads operations (multiple heads per department)
+  getDepartmentHeads(departmentId: string): Promise<(DepartmentHead & { user?: User })[]>;
+  setDepartmentHeads(departmentId: string, userIds: string[], primaryUserId?: string): Promise<void>;
+  isUserDepartmentHead(userId: string): Promise<{ isDeptHead: boolean; departments: Department[] }>;
+  getDepartmentsByHead(userId: string): Promise<Department[]>;
 
   // System Module operations (for permissions)
   getSystemModules(): Promise<SystemModule[]>;
@@ -2593,6 +2602,63 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDepartment(id: string): Promise<void> {
     await db.delete(departments).where(eq(departments.id, id));
+  }
+
+  // Department Heads operations (multiple heads per department)
+  async getDepartmentHeads(departmentId: string): Promise<(DepartmentHead & { user?: User })[]> {
+    const heads = await db.select().from(departmentHeads).where(eq(departmentHeads.departmentId, departmentId));
+    const enriched = await Promise.all(
+      heads.map(async (head) => {
+        const [user] = await db.select().from(users).where(eq(users.id, head.userId));
+        return { ...head, user };
+      })
+    );
+    return enriched;
+  }
+
+  async setDepartmentHeads(departmentId: string, userIds: string[], primaryUserId?: string): Promise<void> {
+    // Delete existing heads for this department
+    await db.delete(departmentHeads).where(eq(departmentHeads.departmentId, departmentId));
+    
+    // Insert new heads
+    if (userIds.length > 0) {
+      const values = userIds.map((userId) => ({
+        departmentId,
+        userId,
+        isPrimary: userId === primaryUserId,
+      }));
+      await db.insert(departmentHeads).values(values);
+    }
+    
+    // Also update legacy managerId field with primary head for backward compatibility
+    const primaryHead = primaryUserId || userIds[0] || null;
+    await db.update(departments)
+      .set({ managerId: primaryHead, updatedAt: new Date() })
+      .where(eq(departments.id, departmentId));
+  }
+
+  async isUserDepartmentHead(userId: string): Promise<{ isDeptHead: boolean; departments: Department[] }> {
+    // Check both new junction table and legacy managerId field
+    const headAssignments = await db.select().from(departmentHeads).where(eq(departmentHeads.userId, userId));
+    const legacyDepts = await db.select().from(departments).where(eq(departments.managerId, userId));
+    
+    // Combine unique department IDs from both sources
+    const deptIds = new Set([
+      ...headAssignments.map(h => h.departmentId),
+      ...legacyDepts.map(d => d.id)
+    ]);
+    
+    if (deptIds.size === 0) {
+      return { isDeptHead: false, departments: [] };
+    }
+    
+    const deptList = await db.select().from(departments).where(inArray(departments.id, Array.from(deptIds)));
+    return { isDeptHead: true, departments: deptList };
+  }
+
+  async getDepartmentsByHead(userId: string): Promise<Department[]> {
+    const result = await this.isUserDepartmentHead(userId);
+    return result.departments;
   }
 
   // System Module operations

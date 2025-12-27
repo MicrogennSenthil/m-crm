@@ -844,6 +844,23 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 export type Department = typeof departments.$inferSelect;
 
+// Department Heads junction table - Allow multiple heads per department
+export const departmentHeads = pgTable("department_heads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isPrimary: boolean("is_primary").default(false), // Mark primary head for display purposes
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDepartmentHeadSchema = createInsertSchema(departmentHeads).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDepartmentHead = z.infer<typeof insertDepartmentHeadSchema>;
+export type DepartmentHead = typeof departmentHeads.$inferSelect;
+
 // System Modules catalog - Available modules/forms in the system for permissions
 export const systemModules = pgTable("system_modules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
