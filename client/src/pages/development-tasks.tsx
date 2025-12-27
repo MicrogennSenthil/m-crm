@@ -42,6 +42,8 @@ import {
   Columns3,
   LayoutGrid,
   List,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,8 +53,14 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   type DevelopmentTask as DevelopmentTaskBase, 
   type User as UserType,
+  type Ticket,
+  type DevelopmentSupportMessage,
   insertDevelopmentTaskSchema
 } from "@shared/schema";
+
+interface SupportMessageWithSender extends DevelopmentSupportMessage {
+  sender?: UserType;
+}
 
 interface DevelopmentTaskWithDetails extends DevelopmentTaskBase {
   assignee?: UserType;
@@ -152,6 +160,7 @@ export default function DevelopmentTasks() {
   const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
   const [reassignToUserId, setReassignToUserId] = useState("");
   const [reassignNotes, setReassignNotes] = useState("");
+  const [supportMessage, setSupportMessage] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   useEffect(() => {
@@ -277,6 +286,39 @@ export default function DevelopmentTasks() {
       toast({ title: "Error", description: error?.message || "Failed to reassign task", variant: "destructive" });
     },
   });
+
+  // Fetch source ticket details when task is from support
+  const sourceTicketId = selectedTask?.sourceType === "support" ? selectedTask.sourceId : null;
+  const { data: sourceTicket } = useQuery<Ticket>({
+    queryKey: ["/api/tickets", sourceTicketId],
+    enabled: !!sourceTicketId,
+  });
+
+  // Fetch support-development messages for the selected task
+  const { data: supportMessages } = useQuery<SupportMessageWithSender[]>({
+    queryKey: ["/api/development/tasks", selectedTask?.id, "support-messages"],
+    enabled: !!selectedTask?.id && selectedTask?.sourceType === "support",
+  });
+
+  // Mutation to send message to support
+  const sendSupportMessageMutation = useMutation({
+    mutationFn: async ({ taskId, message }: { taskId: string; message: string }) => {
+      return await apiRequest("POST", `/api/development/tasks/${taskId}/support-messages`, { message });
+    },
+    onSuccess: () => {
+      toast({ title: "Message Sent", description: "Your guidance has been sent to the support team" });
+      queryClient.invalidateQueries({ queryKey: ["/api/development/tasks", selectedTask?.id, "support-messages"] });
+      setSupportMessage("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error?.message || "Failed to send message", variant: "destructive" });
+    },
+  });
+
+  const handleSendSupportMessage = () => {
+    if (!selectedTask || !supportMessage.trim()) return;
+    sendSupportMessageMutation.mutate({ taskId: selectedTask.id, message: supportMessage.trim() });
+  };
 
   const handleReassignTask = () => {
     if (!selectedTask || !reassignToUserId) {
@@ -1257,6 +1299,103 @@ export default function DevelopmentTasks() {
                           </a>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Support Ticket Communication Section */}
+                {selectedTask.sourceType === "support" && selectedTask.sourceId && (
+                  <div className="space-y-4 pt-4 border-t" data-testid="support-communication-section">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5 text-blue-600" />
+                      <Label className="text-sm font-medium">Support Ticket Communication</Label>
+                    </div>
+
+                    {/* Source Ticket Details */}
+                    {sourceTicket && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800" data-testid="source-ticket-details">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">Ticket #{sourceTicket.ticketNumber}</span>
+                            <Badge variant="outline" className="text-xs">{sourceTicket.status}</Badge>
+                          </div>
+                          <p className="text-sm font-medium">{sourceTicket.subject}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-3">{sourceTicket.description}</p>
+                          {sourceTicket.contactPerson && (
+                            <p className="text-xs text-muted-foreground">Contact: {sourceTicket.contactPerson}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message History */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Communication History</Label>
+                      {supportMessages && supportMessages.length > 0 ? (
+                        <div className="max-h-[200px] overflow-y-auto space-y-2" data-testid="support-messages-list">
+                          {supportMessages.map((msg) => (
+                            <div 
+                              key={msg.id} 
+                              className={`rounded-lg p-3 ${
+                                msg.senderType === 'development' 
+                                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 ml-4' 
+                                  : 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 mr-4'
+                              }`}
+                              data-testid={`support-message-${msg.id}`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-5 w-5">
+                                    <AvatarFallback className="text-xs">
+                                      {msg.sender?.firstName?.[0] || (msg.senderType === 'development' ? 'D' : 'S')}
+                                      {msg.sender?.lastName?.[0] || ''}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-xs font-medium">
+                                    {msg.sender ? `${msg.sender.firstName} ${msg.sender.lastName}` : (msg.senderType === 'development' ? 'Development' : 'Support')}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {msg.senderType === 'development' ? 'Dev Team' : 'Support'}
+                                  </Badge>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {msg.createdAt ? format(new Date(msg.createdAt), "MMM d, HH:mm") : ''}
+                                </span>
+                              </div>
+                              <p className="text-sm">{msg.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground text-sm" data-testid="no-support-messages">
+                          No messages yet. Send guidance to the support team below.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Send Message Input */}
+                    <div className="flex gap-2">
+                      <Textarea
+                        value={supportMessage}
+                        onChange={(e) => setSupportMessage(e.target.value)}
+                        placeholder="Type your guidance or message for the support team..."
+                        rows={2}
+                        className="flex-1"
+                        data-testid="input-support-message"
+                      />
+                      <Button
+                        onClick={handleSendSupportMessage}
+                        disabled={!supportMessage.trim() || sendSupportMessageMutation.isPending}
+                        size="icon"
+                        className="h-auto"
+                        data-testid="button-send-support-message"
+                      >
+                        {sendSupportMessageMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 )}
