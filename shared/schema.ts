@@ -1329,6 +1329,25 @@ export const insertDevelopmentTaskCommentSchema = createInsertSchema(development
 export type InsertDevelopmentTaskComment = z.infer<typeof insertDevelopmentTaskCommentSchema>;
 export type DevelopmentTaskComment = typeof developmentTaskComments.$inferSelect;
 
+// Development-Support Messages - Bidirectional communication between Dev and Support teams
+export const developmentSupportMessages = pgTable("development_support_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  developmentTaskId: varchar("development_task_id").notNull().references(() => developmentTasks.id, { onDelete: "cascade" }),
+  ticketId: varchar("ticket_id").notNull().references(() => tickets.id, { onDelete: "cascade" }),
+  senderType: text("sender_type").notNull(), // 'support' | 'development'
+  senderId: varchar("sender_id").references(() => users.id), // nullable for system messages
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDevelopmentSupportMessageSchema = createInsertSchema(developmentSupportMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDevelopmentSupportMessage = z.infer<typeof insertDevelopmentSupportMessageSchema>;
+export type DevelopmentSupportMessage = typeof developmentSupportMessages.$inferSelect;
+
 // Contract Types Master - Different types of customer contracts
 export const contractTypes = pgTable("contract_types", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
