@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,7 +45,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText, Eye, Calendar, IndianRupee } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText, Eye, Calendar, IndianRupee, ChevronDown, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule, ContractType, CustomerContract } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -893,13 +895,24 @@ function DepartmentsTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: Partial<Department>) => {
-      const response = await apiRequest("POST", "/api/departments", data);
+    mutationFn: async (data: Partial<Department> & { headUserIds?: string[] }) => {
+      const { headUserIds, ...deptData } = data;
+      const response = await apiRequest("POST", "/api/departments", deptData);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to create department");
       }
-      return response.json();
+      const newDept = await response.json();
+      
+      // Set department heads if provided
+      if (headUserIds && headUserIds.length > 0) {
+        await apiRequest("PUT", `/api/departments/${newDept.id}/heads`, {
+          userIds: headUserIds,
+          primaryUserId: headUserIds[0],
+        });
+      }
+      
+      return newDept;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
@@ -912,11 +925,25 @@ function DepartmentsTab() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Department> }) => {
-      return await apiRequest("PATCH", `/api/departments/${id}`, data);
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Department> & { headUserIds?: string[] } }) => {
+      const { headUserIds, ...deptData } = data;
+      
+      // Update department basic info
+      const response = await apiRequest("PATCH", `/api/departments/${id}`, deptData);
+      
+      // Update department heads
+      if (headUserIds !== undefined) {
+        await apiRequest("PUT", `/api/departments/${id}/heads`, {
+          userIds: headUserIds,
+          primaryUserId: headUserIds[0] || null,
+        });
+      }
+      
+      return response;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/departments", variables.id, "heads"] });
       setEditingDepartment(null);
       toast({ title: "Department updated successfully" });
     },
@@ -945,10 +972,36 @@ function DepartmentsTab() {
       dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getHeadName = (managerId: string | null) => {
+  const getHeadName = (managerId: string | null, deptId?: string) => {
+    // This is for backward compatibility - still show legacy manager if no department heads exist
     if (!managerId) return "-";
     const head = users.find(u => u.id === managerId);
     return head ? `${head.firstName || ""} ${head.lastName || ""}`.trim() || head.email : "-";
+  };
+
+  // Function to display multiple heads for a department
+  const DepartmentHeadsDisplay = ({ departmentId }: { departmentId: string }) => {
+    const { data: heads = [] } = useQuery<{ user?: User }[]>({
+      queryKey: ["/api/departments", departmentId, "heads"],
+      queryFn: async () => {
+        const res = await fetch(`/api/departments/${departmentId}/heads`, { credentials: "include" });
+        if (!res.ok) return [];
+        return res.json();
+      },
+    });
+
+    if (heads.length === 0) return <span>-</span>;
+    
+    const headNames = heads
+      .filter(h => h.user)
+      .map(h => `${h.user?.firstName || ""} ${h.user?.lastName || ""}`.trim() || h.user?.email)
+      .join(", ");
+    
+    return (
+      <span title={headNames} className="max-w-[200px] truncate block">
+        {headNames || "-"}
+      </span>
+    );
   };
 
   return (
@@ -1021,7 +1074,7 @@ function DepartmentsTab() {
                       {dept.description || "-"}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {getHeadName(dept.managerId)}
+                      <DepartmentHeadsDisplay departmentId={dept.id} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={dept.isActive ? "default" : "secondary"}>
@@ -1102,23 +1155,68 @@ function DepartmentForm({
 }: {
   department?: Department;
   users: User[];
-  onSubmit: (data: Partial<Department>) => void;
+  onSubmit: (data: Partial<Department> & { headUserIds?: string[] }) => void;
   isPending: boolean;
   onCancel: () => void;
 }) {
   const [formData, setFormData] = useState({
     name: department?.name || "",
     description: department?.description || "",
-    managerId: department?.managerId || "",
     isActive: department?.isActive ?? true,
   });
+  const [selectedHeadIds, setSelectedHeadIds] = useState<string[]>([]);
+  const [isHeadDropdownOpen, setIsHeadDropdownOpen] = useState(false);
+
+  // Load existing heads when editing a department
+  const { data: existingHeads = [] } = useQuery<{ userId: string; user?: User }[]>({
+    queryKey: ["/api/departments", department?.id, "heads"],
+    queryFn: async () => {
+      if (!department?.id) return [];
+      const res = await fetch(`/api/departments/${department.id}/heads`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!department?.id,
+  });
+
+  // Set initial selected heads when data loads
+  useEffect(() => {
+    if (existingHeads.length > 0) {
+      setSelectedHeadIds(existingHeads.map(h => h.userId));
+    } else if (department?.managerId) {
+      // Fallback to legacy managerId if no junction table entries
+      setSelectedHeadIds([department.managerId]);
+    }
+  }, [existingHeads, department?.managerId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       ...formData,
-      managerId: formData.managerId || null,
+      headUserIds: selectedHeadIds,
     });
+  };
+
+  const toggleHead = (userId: string) => {
+    setSelectedHeadIds(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const activeUsers = users.filter(u => u.isActive);
+  
+  const getSelectedHeadNames = () => {
+    if (selectedHeadIds.length === 0) return "Select department heads...";
+    const names = selectedHeadIds
+      .map(id => {
+        const user = users.find(u => u.id === id);
+        return user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : "";
+      })
+      .filter(Boolean);
+    if (names.length <= 2) return names.join(", ");
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
   };
 
   return (
@@ -1155,23 +1253,78 @@ function DepartmentForm({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="managerId">Department Head</Label>
-          <Select
-            value={formData.managerId || "_none"}
-            onValueChange={(value) => setFormData({ ...formData, managerId: value === "_none" ? "" : value })}
-          >
-            <SelectTrigger data-testid="select-department-head">
-              <SelectValue placeholder="Select department head" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_none">No Head Assigned</SelectItem>
-              {users.filter(u => u.isActive).map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.firstName} {user.lastName} ({user.email})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>Department Heads</Label>
+          <Popover open={isHeadDropdownOpen} onOpenChange={setIsHeadDropdownOpen}>
+            <PopoverTrigger asChild>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full justify-between text-left font-normal"
+                data-testid="select-department-heads"
+              >
+                <span className="truncate">{getSelectedHeadNames()}</span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0" align="start">
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  {activeUsers.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-2">No active users available</div>
+                  ) : (
+                    activeUsers.map((user) => (
+                      <div 
+                        key={user.id}
+                        className="flex items-center gap-2 p-2 rounded-md hover:bg-accent cursor-pointer"
+                        onClick={() => toggleHead(user.id)}
+                      >
+                        <Checkbox 
+                          checked={selectedHeadIds.includes(user.id)}
+                          onCheckedChange={() => toggleHead(user.id)}
+                        />
+                        <span className="text-sm">
+                          {user.firstName} {user.lastName} ({user.email})
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+              {selectedHeadIds.length > 0 && (
+                <div className="border-t p-2">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => setSelectedHeadIds([])}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+          {selectedHeadIds.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {selectedHeadIds.map(id => {
+                const user = users.find(u => u.id === id);
+                if (!user) return null;
+                return (
+                  <Badge key={id} variant="secondary" className="text-xs">
+                    {user.firstName || user.email}
+                    <button
+                      type="button"
+                      className="ml-1 hover:text-destructive"
+                      onClick={() => toggleHead(id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
