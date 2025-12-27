@@ -1878,6 +1878,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // =============================================
+  // DEPARTMENT HEADS ROUTES (multiple heads per department)
+  // =============================================
+
+  // Get all heads for a department
+  app.get("/api/departments/:id/heads", isAuthenticated, async (req, res) => {
+    try {
+      const heads = await storage.getDepartmentHeads(req.params.id);
+      res.json(heads);
+    } catch (error) {
+      console.error("Error fetching department heads:", error);
+      res.status(500).json({ message: "Failed to fetch department heads" });
+    }
+  });
+
+  // Set heads for a department (admin only)
+  app.put("/api/departments/:id/heads", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { userIds, primaryUserId } = req.body;
+      
+      if (!Array.isArray(userIds)) {
+        return res.status(400).json({ message: "userIds must be an array" });
+      }
+      
+      await storage.setDepartmentHeads(req.params.id, userIds, primaryUserId);
+      
+      const dept = await storage.getDepartment(req.params.id);
+      
+      await storage.logActivity({
+        entityType: "department",
+        entityId: req.params.id,
+        action: "heads_updated",
+        description: `Department heads updated for: ${dept?.name}. Head count: ${userIds.length}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json({ message: "Department heads updated successfully" });
+    } catch (error) {
+      console.error("Error updating department heads:", error);
+      res.status(500).json({ message: "Failed to update department heads" });
+    }
+  });
+
+  // Check if current user is a department head
+  app.get("/api/auth/is-department-head", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await storage.isUserDepartmentHead(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error checking department head status:", error);
+      res.status(500).json({ message: "Failed to check department head status" });
+    }
+  });
+
+  // =============================================
   // SYSTEM MODULE ROUTES (admin only for write operations)
   // =============================================
 
