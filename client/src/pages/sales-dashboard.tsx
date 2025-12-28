@@ -532,7 +532,7 @@ export default function SalesDashboard() {
   });
 
   // Check if current user is a department head using the junction table API
-  const { data: deptHeadStatus } = useQuery<{ isHead: boolean; departmentIds: string[] }>({
+  const { data: deptHeadStatus } = useQuery<{ isDeptHead: boolean; departments: any[] }>({
     queryKey: ["/api/auth/is-department-head"],
     enabled: !userLoading && hasAccess(user),
   });
@@ -608,7 +608,7 @@ export default function SalesDashboard() {
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
   const isAdmin = user?.role === 'admin';
   // Check if user is a department head using the junction table API
-  const isDeptHead = deptHeadStatus?.isHead || false;
+  const isDeptHead = deptHeadStatus?.isDeptHead || false;
   const canComment = isSuperAdmin || isDeptHead || isAdmin;
   // Sales Stage Analytics visible to superadmin, admin, and department heads
   const canViewAnalytics = isSuperAdmin || isAdmin || isDeptHead;
