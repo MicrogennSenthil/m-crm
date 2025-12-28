@@ -8589,8 +8589,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Dashboard - Sales Stage-wise Weekly/Monthly Comparison Analytics
-  app.get("/api/admin/dashboard/sales-stage-analytics", isAuthenticated, isAdmin, async (req: any, res) => {
+  // Accessible by admins, super admin, and department heads
+  app.get("/api/admin/dashboard/sales-stage-analytics", isAuthenticated, async (req: any, res) => {
     try {
+      const user = req.user as any;
+      const email = user?.claims?.email;
+      const userId = user?.claims?.sub;
+      const legacyRole = user?.claims?.metadata?.role;
+      
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = email === SUPER_ADMIN_EMAIL;
+      const isAdminRole = legacyRole === 'admin';
+      
+      // Check if user is department head
+      let isDeptHead = false;
+      if (userId) {
+        const departments = await storage.getDepartmentsByHead(userId);
+        isDeptHead = departments.length > 0;
+      }
+      
+      // Allow access if super admin, admin role, or department head
+      if (!isSuperAdmin && !isAdminRole && !isDeptHead) {
+        return res.status(403).json({ message: "Access denied. Admin or department head privileges required." });
+      }
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth();
