@@ -140,36 +140,38 @@ function StageComparisonTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="sticky left-0 bg-background z-10">Stage</TableHead>
-            {data.map((period, idx) => (
-              <TableHead key={period.period} className="text-center min-w-[100px]">
+            <TableHead className="sticky left-0 bg-background z-10">Period</TableHead>
+            {stages.map((stage) => (
+              <TableHead key={stage.id} className="text-center min-w-[100px]">
                 <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: STAGE_COLORS[stage.id] }}
+                    />
+                    <span className="font-medium">{stage.label}</span>
+                  </div>
+                </div>
+              </TableHead>
+            ))}
+            <TableHead className="text-center font-semibold">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((period) => (
+            <TableRow key={period.period}>
+              <TableCell className="sticky left-0 bg-background z-10">
+                <div className="flex flex-col">
                   <span className="font-medium">{period.period}</span>
                   <span className="text-xs text-muted-foreground">
                     {period.startDate.split('-').slice(1).join('/')} - {period.endDate.split('-').slice(1).join('/')}
                   </span>
                 </div>
-              </TableHead>
-            ))}
-            <TableHead className="text-center">Change</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {stages.map((stage) => (
-            <TableRow key={stage.id}>
-              <TableCell className="sticky left-0 bg-background z-10">
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: STAGE_COLORS[stage.id] }}
-                  />
-                  <span className="font-medium">{stage.label}</span>
-                </div>
               </TableCell>
-              {data.map((period) => {
+              {stages.map((stage) => {
                 const stageData = period.stages[stage.id] || { count: 0, value: 0 };
                 return (
-                  <TableCell key={period.period} className="text-center">
+                  <TableCell key={stage.id} className="text-center">
                     <div className="flex flex-col items-center gap-1">
                       <span className="font-semibold text-lg">{stageData.count}</span>
                       <span className="text-xs text-muted-foreground">
@@ -180,6 +182,19 @@ function StageComparisonTable({
                 );
               })}
               <TableCell className="text-center">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="font-bold text-lg">{period.totalLeads}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatCurrency(period.totalValue)}
+                  </span>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+          <TableRow className="font-semibold bg-muted/50">
+            <TableCell className="sticky left-0 bg-muted/50 z-10">Change</TableCell>
+            {stages.map((stage) => (
+              <TableCell key={stage.id} className="text-center">
                 {changes[stage.id] ? (
                   <div className="flex flex-col items-center gap-1">
                     <TrendIndicator value={changes[stage.id].countChange} />
@@ -190,19 +205,6 @@ function StageComparisonTable({
                 ) : (
                   <span className="text-muted-foreground">-</span>
                 )}
-              </TableCell>
-            </TableRow>
-          ))}
-          <TableRow className="font-semibold bg-muted/50">
-            <TableCell className="sticky left-0 bg-muted/50 z-10">Total</TableCell>
-            {data.map((period) => (
-              <TableCell key={period.period} className="text-center">
-                <div className="flex flex-col items-center gap-1">
-                  <span className="font-bold text-lg">{period.totalLeads}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatCurrency(period.totalValue)}
-                  </span>
-                </div>
               </TableCell>
             ))}
             <TableCell></TableCell>
