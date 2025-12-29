@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -528,6 +528,12 @@ export default function Sales() {
                           <div className="text-xs text-muted-foreground truncate">
                             {lead.contactPerson}
                           </div>
+                          {(lead.city || lead.area) && (
+                            <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                              <MapPin className="h-3 w-3 flex-shrink-0" />
+                              {[lead.area, lead.city].filter(Boolean).join(", ")}
+                            </div>
+                          )}
                         </CardHeader>
                         <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
                           {lead.estimatedValue && (
@@ -662,6 +668,12 @@ export default function Sales() {
                       <CardHeader className="p-4 pb-2">
                         <CardTitle className="text-sm font-semibold">{lead.companyName}</CardTitle>
                         <div className="text-sm text-muted-foreground">{lead.contactPerson}</div>
+                        {(lead.city || lead.area) && (
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3 flex-shrink-0" />
+                            {[lead.area, lead.city].filter(Boolean).join(", ")}
+                          </div>
+                        )}
                       </CardHeader>
                       <CardContent className="p-4 pt-0 space-y-2">
                         {lead.estimatedValue && (
@@ -765,6 +777,12 @@ export default function Sales() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold">{lead.companyName}</p>
                         <p className="text-sm text-muted-foreground">{lead.contactPerson}</p>
+                        {(lead.city || lead.area) && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3 flex-shrink-0" />
+                            {[lead.area, lead.city].filter(Boolean).join(", ")}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0 flex-wrap justify-end">
                         {lead.estimatedValue && (
