@@ -24,8 +24,9 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Package, MapPin, Loader2 } from "lucide-react";
+import { Building2, Plus, Package, MapPin, Loader2, Camera, X } from "lucide-react";
 import { useState } from "react";
+import { CameraCapture } from "@/components/camera-capture";
 
 const LEAD_SOURCES = [
   { value: "facebook", label: "Facebook" },
@@ -69,6 +70,9 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { toast } = useToast();
   const [isNewCompany, setIsNewCompany] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(defaultValues?.photoUrl || null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Fetch both sales executives and sales heads for the dropdown
   const { data: allUsers } = useQuery<User[]>({
@@ -159,6 +163,54 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  };
+
+  const handlePhotoCapture = async (photoDataUrl: string) => {
+    try {
+      setIsUploadingPhoto(true);
+      
+      // Get upload URL from server
+      const uploadUrlResponse = await apiRequest("POST", "/api/leads/photo-upload", { leadId: null });
+      const { uploadURL, photoUrl } = await uploadUrlResponse.json();
+      
+      // Convert base64 data URL to blob
+      const response = await fetch(photoDataUrl);
+      const blob = await response.blob();
+      
+      // Upload to object storage
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: blob,
+        headers: {
+          "Content-Type": "image/jpeg",
+        },
+      });
+      
+      // Store the photo URL
+      setCapturedPhoto(photoUrl);
+      form.setValue("photoUrl", photoUrl);
+      form.setValue("photoCapturedAt", new Date());
+      
+      toast({
+        title: "Photo captured",
+        description: "Photo has been saved successfully.",
+      });
+    } catch (error) {
+      console.error("Error uploading photo:", error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload the photo. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setCapturedPhoto(null);
+    form.setValue("photoUrl", undefined);
+    form.setValue("photoCapturedAt", undefined);
   };
 
   const handleCompanySelect = (customerId: string) => {
@@ -526,6 +578,72 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
               </div>
             )}
           </div>
+
+          {/* Photo Capture Section */}
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-primary" />
+                <span className="font-medium text-sm">Photo Capture</span>
+              </div>
+              {!capturedPhoto && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsCameraOpen(true)}
+                  disabled={isUploadingPhoto}
+                  data-testid="button-open-camera"
+                >
+                  {isUploadingPhoto ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4 mr-2" />
+                      Take Photo
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            <FormDescription className="mb-3">
+              Capture a photo using front or back camera
+            </FormDescription>
+            
+            {capturedPhoto ? (
+              <div className="relative inline-block">
+                <img
+                  src={capturedPhoto}
+                  alt="Captured photo"
+                  className="w-32 h-32 object-cover rounded-lg border"
+                  data-testid="img-captured-lead-photo"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                  onClick={handleRemovePhoto}
+                  data-testid="button-remove-photo"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center w-32 h-32 border-2 border-dashed rounded-lg bg-muted/50">
+                <Camera className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+
+          <CameraCapture
+            isOpen={isCameraOpen}
+            onClose={() => setIsCameraOpen(false)}
+            onCapture={handlePhotoCapture}
+          />
 
           {/* Selected Modules - Modules the customer is interested in purchasing */}
           <div className="p-4 border rounded-lg bg-muted/30">
