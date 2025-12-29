@@ -199,6 +199,43 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     },
   });
 
+  // Convert Seed to Lead mutation
+  const convertToLeadMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/leads/${lead.id}`, { stage: "lead" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
+      toast({
+        title: "Seed Converted",
+        description: "Seed has been successfully converted to Lead",
+      });
+      onClose();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to convert seed to lead",
+        variant: "destructive",
+      });
+    },
+  });
+
   const addFollowUpMutation = useMutation({
     mutationFn: async () => {
       if (!followUpNote || !followUpDate) return;
@@ -535,6 +572,18 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <Pencil className="h-4 w-4 mr-1" />
                     Edit
                   </Button>
+                  {lead.stage === "seed" && (
+                    <Button
+                      size="sm"
+                      onClick={() => convertToLeadMutation.mutate()}
+                      disabled={convertToLeadMutation.isPending}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      data-testid="button-convert-to-lead"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      {convertToLeadMutation.isPending ? "Converting..." : "Convert to Lead"}
+                    </Button>
+                  )}
                   <Badge variant="secondary" className="capitalize">
                     {lead.stage.replace(/_/g, " ")}
                   </Badge>
