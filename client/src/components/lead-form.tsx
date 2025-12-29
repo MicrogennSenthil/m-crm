@@ -69,9 +69,15 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { toast } = useToast();
   const [isNewCompany, setIsNewCompany] = useState(false);
 
-  const { data: salesExecutives } = useQuery<User[]>({
-    queryKey: ["/api/users?role=sales_executive"],
+  // Fetch both sales executives and sales heads for the dropdown
+  const { data: allUsers } = useQuery<User[]>({
+    queryKey: ["/api/users/all"],
   });
+  
+  // Filter to include both sales_executive and sales_head roles
+  const salesExecutives = allUsers?.filter(
+    user => user.role === 'sales_executive' || user.role === 'sales_head'
+  );
 
   const { data: companies } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],

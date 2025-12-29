@@ -117,10 +117,15 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     enabled: open,
   });
 
-  const { data: salesExecutives } = useQuery<User[]>({
-    queryKey: ["/api/users?role=sales_executive"],
+  // Fetch all users and filter for both sales_executive and sales_head roles
+  const { data: allUsers } = useQuery<User[]>({
+    queryKey: ["/api/users/all"],
     enabled: open,
   });
+  
+  const salesExecutives = allUsers?.filter(
+    user => user.role === 'sales_executive' || user.role === 'sales_head'
+  );
 
   const { data: demoHistory } = useQuery<Array<{
     id: string;
