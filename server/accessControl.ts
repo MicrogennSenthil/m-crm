@@ -23,7 +23,13 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
   
   const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
   const isAdmin = user.role === "admin";
-  const hasFullAccess = isSuperAdmin || isAdmin;
+  
+  // Check if user is a department head using junction table
+  const managedDepartments = await storage.getDepartmentsByHead(userId);
+  const isDepartmentHead = managedDepartments.length > 0;
+  
+  // Department heads, admins, and super admins get full access to all leads
+  const hasFullAccess = isSuperAdmin || isAdmin || isDepartmentHead;
   
   if (hasFullAccess) {
     return {
@@ -31,24 +37,6 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
       isAdmin,
       hasFullAccess: true,
       allowedUserIds: undefined,
-    };
-  }
-  
-  // Check if user is a department head using junction table
-  const managedDepartments = await storage.getDepartmentsByHead(userId);
-  
-  if (managedDepartments.length > 0) {
-    const departmentUserIds: string[] = [userId];
-    for (const dept of managedDepartments) {
-      const deptUsers = await storage.getUsersByDepartment(dept.id);
-      departmentUserIds.push(...deptUsers.map(u => u.id));
-    }
-    const uniqueIds = Array.from(new Set(departmentUserIds));
-    return {
-      isSuperAdmin,
-      isAdmin,
-      hasFullAccess: false,
-      allowedUserIds: uniqueIds,
     };
   }
   
