@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2 } from "lucide-react";
 import { format, startOfDay, isToday } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead, Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -83,6 +83,9 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [editForm, setEditForm] = useState<Partial<InsertLead>>({});
   const { toast } = useToast();
 
+  // Location state
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+
   useEffect(() => {
     if (open) {
       setEditForm({
@@ -94,9 +97,68 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         stage: lead.stage,
         estimatedValue: lead.estimatedValue || undefined,
         salesExecutiveId: lead.salesExecutiveId || undefined,
+        city: lead.city || "",
+        area: lead.area || "",
+        latitude: lead.latitude || undefined,
+        longitude: lead.longitude || undefined,
       });
     }
   }, [lead, open]);
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support geolocation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const newEditForm = {
+          ...editForm,
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+        };
+        
+        // Try to get city/area using reverse geocoding
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          if (data.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.county || "";
+            const area = data.address.suburb || data.address.neighbourhood || data.address.road || "";
+            newEditForm.city = city;
+            newEditForm.area = area;
+          }
+        } catch (error) {
+          console.error("Reverse geocoding failed:", error);
+        }
+        
+        setEditForm(newEditForm);
+        setIsGettingLocation(false);
+        toast({
+          title: "Location captured",
+          description: "Your current location has been added.",
+        });
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        toast({
+          title: "Location error",
+          description: error.message || "Failed to get your location.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const { data: followUps } = useQuery<FollowUp[]>({
     queryKey: ["/api/leads", lead.id, "follow-ups"],
@@ -708,6 +770,64 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  {/* Location Section */}
+                  <div className="col-span-2 p-3 border rounded-md bg-muted/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <Label className="font-medium">Location</Label>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGetLocation}
+                        disabled={isGettingLocation}
+                        data-testid="button-edit-get-location"
+                      >
+                        {isGettingLocation ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Getting...
+                          </>
+                        ) : (
+                          <>
+                            <MapPin className="h-3 w-3 mr-1" />
+                            Use GPS
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="city" className="text-xs">City</Label>
+                        <Input
+                          id="city"
+                          value={editForm.city || ""}
+                          onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                          placeholder="City"
+                          data-testid="input-edit-city"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="area" className="text-xs">Area / Locality</Label>
+                        <Input
+                          id="area"
+                          value={editForm.area || ""}
+                          onChange={(e) => setEditForm({ ...editForm, area: e.target.value })}
+                          placeholder="Area"
+                          data-testid="input-edit-area"
+                        />
+                      </div>
+                    </div>
+                    {(editForm.latitude || editForm.longitude) && (
+                      <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        GPS: {editForm.latitude}, {editForm.longitude}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2 text-sm">
@@ -736,6 +856,25 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         : "Unassigned"}
                     </span>
                   </div>
+                  {(lead.city || lead.area) && (
+                    <div className="flex justify-between items-start">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Location:
+                      </span>
+                      <span className="font-medium text-right">
+                        {[lead.area, lead.city].filter(Boolean).join(", ")}
+                      </span>
+                    </div>
+                  )}
+                  {lead.latitude && lead.longitude && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">GPS:</span>
+                      <span className="text-xs text-muted-foreground">
+                        {lead.latitude}, {lead.longitude}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

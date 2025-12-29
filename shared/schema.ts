@@ -193,6 +193,11 @@ export const leads = pgTable("leads", {
   closedReason: text("closed_reason"), // Reason for lost deals
   lostAmount: integer("lost_amount"), // Value of the lost deal for tracking
   daysInStage: integer("days_in_stage").default(0),
+  // Location fields
+  city: text("city"), // City name
+  area: text("area"), // Area/locality name
+  latitude: text("latitude"), // Latitude from geolocation
+  longitude: text("longitude"), // Longitude from geolocation
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

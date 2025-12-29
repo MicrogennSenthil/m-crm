@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Package } from "lucide-react";
+import { Building2, Plus, Package, MapPin, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 const LEAD_SOURCES = [
@@ -68,6 +68,7 @@ interface LeadFormProps {
 export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { toast } = useToast();
   const [isNewCompany, setIsNewCompany] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   // Fetch both sales executives and sales heads for the dropdown
   const { data: allUsers } = useQuery<User[]>({
@@ -101,8 +102,63 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       estimatedValue: undefined,
       salesExecutiveId: undefined,
       selectedModules: [],
+      city: "",
+      area: "",
+      latitude: undefined,
+      longitude: undefined,
     },
   });
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support geolocation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        form.setValue("latitude", latitude.toString());
+        form.setValue("longitude", longitude.toString());
+        
+        // Try to get city/area using reverse geocoding
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await response.json();
+          if (data.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.county || "";
+            const area = data.address.suburb || data.address.neighbourhood || data.address.road || "";
+            form.setValue("city", city);
+            form.setValue("area", area);
+          }
+        } catch (error) {
+          console.error("Reverse geocoding failed:", error);
+        }
+        
+        setIsGettingLocation(false);
+        toast({
+          title: "Location captured",
+          description: "Your current location has been added.",
+        });
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        toast({
+          title: "Location error",
+          description: error.message || "Failed to get your location.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleCompanySelect = (customerId: string) => {
     if (customerId === "new") {
@@ -389,6 +445,85 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
                 </FormItem>
               )}
             />
+          </div>
+
+          {/* Location Section */}
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" />
+                <span className="font-medium text-sm">Location</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGetLocation}
+                disabled={isGettingLocation}
+                data-testid="button-get-location"
+              >
+                {isGettingLocation ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Getting Location...
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="h-4 w-4 mr-2" />
+                    Use Current Location
+                  </>
+                )}
+              </Button>
+            </div>
+            <FormDescription className="mb-3">
+              Capture location using GPS or enter city and area manually
+            </FormDescription>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>City</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter city name"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-city"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="area"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Area / Locality</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter area or locality"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-area"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            {(form.watch("latitude") || form.watch("longitude")) && (
+              <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
+                <MapPin className="h-3 w-3" />
+                <span>
+                  GPS: {form.watch("latitude")}, {form.watch("longitude")}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Selected Modules - Modules the customer is interested in purchasing */}
