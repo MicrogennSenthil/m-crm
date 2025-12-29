@@ -2707,6 +2707,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Upload photo for lead (seeds page camera feature)
+  app.post("/api/leads/photo-upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { leadId } = req.body;
+      
+      // Generate a unique file name for the photo
+      const timestamp = Date.now();
+      const fileName = `lead_photo_${userId}_${leadId || 'new'}_${timestamp}.jpg`;
+      
+      // Get upload URL using the object storage service
+      const { uploadURL, objectPath } = await objectStorageService.getObjectEntityUploadURL(fileName);
+      
+      res.json({ 
+        uploadURL, 
+        objectPath,
+        photoUrl: `/objects/${objectPath}`,
+      });
+    } catch (error) {
+      console.error("Error getting lead photo upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
   // Bulk import leads (authenticated)
   app.post("/api/leads/bulk-import", isAuthenticated, async (req: any, res) => {
     try {
