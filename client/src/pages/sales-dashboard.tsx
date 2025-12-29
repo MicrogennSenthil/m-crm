@@ -582,18 +582,40 @@ export default function SalesDashboard() {
     );
   }
 
-  // Handle error state
+  // Handle error state - show friendly alert for access issues
   if (error) {
+    const errorMessage = (error as any)?.message || "";
+    const isAccessDenied = errorMessage.toLowerCase().includes("access denied");
+    
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-        <AlertTriangle className="h-16 w-16 text-red-500" />
-        <h2 className="text-xl font-semibold">Error Loading Dashboard</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          {(error as any)?.message || "Failed to load sales dashboard data. Please try again."}
-        </p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
-          Retry
-        </Button>
+        <div className={`p-6 rounded-lg border ${isAccessDenied ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'}`}>
+          <div className="flex items-center gap-3 mb-3">
+            {isAccessDenied ? (
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+            ) : (
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+            )}
+            <h2 className={`text-lg font-semibold ${isAccessDenied ? 'text-amber-800 dark:text-amber-200' : 'text-red-800 dark:text-red-200'}`}>
+              {isAccessDenied ? "Access Restricted" : "Unable to Load Dashboard"}
+            </h2>
+          </div>
+          <p className={`text-sm mb-4 ${isAccessDenied ? 'text-amber-700 dark:text-amber-300' : 'text-red-700 dark:text-red-300'}`}>
+            {isAccessDenied 
+              ? "You don't have permission to access this dashboard. Please contact your administrator if you believe this is an error."
+              : "There was a problem loading the dashboard. Please try again."}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => window.history.back()}>
+              Go Back
+            </Button>
+            {!isAccessDenied && (
+              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
