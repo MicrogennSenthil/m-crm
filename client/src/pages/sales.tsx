@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -522,11 +522,27 @@ export default function Sales() {
                         data-testid={`card-lead-${lead.id}`}
                       >
                         <CardHeader className="p-2 sm:p-3 space-y-0.5">
-                          <CardTitle className="text-xs sm:text-sm font-semibold leading-tight truncate">
-                            {lead.companyName}
-                          </CardTitle>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {lead.contactPerson}
+                          <div className="flex items-start gap-2">
+                            {lead.photoUrl ? (
+                              <img
+                                src={lead.photoUrl}
+                                alt={lead.companyName}
+                                className="w-10 h-10 rounded-md object-cover flex-shrink-0 border"
+                                data-testid={`img-lead-photo-${lead.id}`}
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center flex-shrink-0 border">
+                                <Camera className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <CardTitle className="text-xs sm:text-sm font-semibold leading-tight truncate">
+                                {lead.companyName}
+                              </CardTitle>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {lead.contactPerson}
+                              </div>
+                            </div>
                           </div>
                           {(lead.city || lead.area) && (
                             <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
@@ -671,19 +687,35 @@ export default function Sales() {
                       data-testid={`card-lead-compact-${lead.id}`}
                     >
                       <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-sm font-semibold">{lead.companyName}</CardTitle>
-                        <div className="text-sm text-muted-foreground">{lead.contactPerson}</div>
-                        {(lead.city || lead.area) && (
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3 flex-shrink-0" />
-                            {[lead.area, lead.city].filter(Boolean).join(", ")}
-                            {lead.locationCapturedAt && (
-                              <span className="text-xs opacity-75">
-                                ({format(new Date(lead.locationCapturedAt), "MMM d, h:mm a")})
-                              </span>
+                        <div className="flex items-start gap-3">
+                          {lead.photoUrl ? (
+                            <img
+                              src={lead.photoUrl}
+                              alt={lead.companyName}
+                              className="w-12 h-12 rounded-md object-cover flex-shrink-0 border"
+                              data-testid={`img-lead-photo-compact-${lead.id}`}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0 border">
+                              <Camera className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <CardTitle className="text-sm font-semibold">{lead.companyName}</CardTitle>
+                            <div className="text-sm text-muted-foreground">{lead.contactPerson}</div>
+                            {(lead.city || lead.area) && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                <MapPin className="h-3 w-3 flex-shrink-0" />
+                                {[lead.area, lead.city].filter(Boolean).join(", ")}
+                                {lead.locationCapturedAt && (
+                                  <span className="text-xs opacity-75">
+                                    ({format(new Date(lead.locationCapturedAt), "MMM d, h:mm a")})
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                        </div>
                       </CardHeader>
                       <CardContent className="p-4 pt-0 space-y-2">
                         {lead.estimatedValue && (
@@ -784,6 +816,18 @@ export default function Sales() {
                       onClick={() => setSelectedLead(lead)}
                       data-testid={`row-lead-${lead.id}`}
                     >
+                      {lead.photoUrl ? (
+                        <img
+                          src={lead.photoUrl}
+                          alt={lead.companyName}
+                          className="w-12 h-12 rounded-md object-cover flex-shrink-0 border"
+                          data-testid={`img-lead-photo-list-${lead.id}`}
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0 border">
+                          <Camera className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold">{lead.companyName}</p>
                         <p className="text-sm text-muted-foreground">{lead.contactPerson}</p>

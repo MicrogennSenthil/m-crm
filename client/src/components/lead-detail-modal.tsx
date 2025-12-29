@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2 } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2, Camera } from "lucide-react";
 import { format, startOfDay, isToday } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead, Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -570,6 +570,19 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
+            {/* Photo Display */}
+            {lead.photoUrl ? (
+              <img
+                src={lead.photoUrl}
+                alt={lead.companyName}
+                className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border"
+                data-testid="img-lead-detail-photo"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 border">
+                <Camera className="h-6 w-6 text-muted-foreground" />
+              </div>
+            )}
             <div className="flex-1">
               {isEditing ? (
                 <div className="space-y-3">
