@@ -155,6 +155,9 @@ import {
   extractedPlaces,
   type ExtractedPlace,
   type InsertExtractedPlace,
+  extractorOptions,
+  type ExtractorOption,
+  type InsertExtractorOption,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
@@ -598,6 +601,12 @@ export interface IStorage {
     city?: string; 
     area?: string; 
   }): Promise<Lead | null>;
+
+  // Extractor Options operations (custom industries and segments)
+  getExtractorOptions(type?: 'industry' | 'segment'): Promise<ExtractorOption[]>;
+  getExtractorOption(id: string): Promise<ExtractorOption | undefined>;
+  createExtractorOption(option: InsertExtractorOption): Promise<ExtractorOption>;
+  deleteExtractorOption(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4137,6 +4146,28 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return existingLead || null;
+  }
+
+  // Extractor Options operations
+  async getExtractorOptions(type?: 'industry' | 'segment'): Promise<ExtractorOption[]> {
+    if (type) {
+      return await db.select().from(extractorOptions).where(eq(extractorOptions.type, type)).orderBy(extractorOptions.label);
+    }
+    return await db.select().from(extractorOptions).orderBy(extractorOptions.type, extractorOptions.label);
+  }
+
+  async getExtractorOption(id: string): Promise<ExtractorOption | undefined> {
+    const [option] = await db.select().from(extractorOptions).where(eq(extractorOptions.id, id));
+    return option;
+  }
+
+  async createExtractorOption(option: InsertExtractorOption): Promise<ExtractorOption> {
+    const [newOption] = await db.insert(extractorOptions).values(option).returning();
+    return newOption;
+  }
+
+  async deleteExtractorOption(id: string): Promise<void> {
+    await db.delete(extractorOptions).where(eq(extractorOptions.id, id));
   }
 }
 

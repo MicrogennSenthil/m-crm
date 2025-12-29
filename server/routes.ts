@@ -13444,6 +13444,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Extractor Options routes (custom industries and segments)
+  app.get("/api/extractor/options", isAuthenticated, async (req: any, res) => {
+    try {
+      const type = req.query.type as 'industry' | 'segment' | undefined;
+      const options = await storage.getExtractorOptions(type);
+      res.json(options);
+    } catch (error) {
+      console.error("Error getting extractor options:", error);
+      res.status(500).json({ message: "Failed to get extractor options" });
+    }
+  });
+
+  app.post("/api/extractor/options", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
+    try {
+      const userClaims = req.user as any;
+      const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const { type, value, label } = req.body;
+
+      if (!type || !value || !label) {
+        return res.status(400).json({ message: "Type, value, and label are required" });
+      }
+
+      if (type !== 'industry' && type !== 'segment') {
+        return res.status(400).json({ message: "Type must be 'industry' or 'segment'" });
+      }
+
+      const option = await storage.createExtractorOption({
+        type,
+        value,
+        label,
+        createdById: currentUserId
+      });
+
+      res.json(option);
+    } catch (error) {
+      console.error("Error creating extractor option:", error);
+      res.status(500).json({ message: "Failed to create extractor option" });
+    }
+  });
+
+  app.delete("/api/extractor/options/:id", isAuthenticated, requirePermission('leads', 'delete'), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if option exists and is not a default
+      const option = await storage.getExtractorOption(id);
+      if (!option) {
+        return res.status(404).json({ message: "Option not found" });
+      }
+      if (option.isDefault) {
+        return res.status(400).json({ message: "Cannot delete default options" });
+      }
+
+      await storage.deleteExtractorOption(id);
+      res.json({ message: "Option deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting extractor option:", error);
+      res.status(500).json({ message: "Failed to delete extractor option" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

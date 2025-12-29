@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2 } from "lucide-react";
+import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2, Plus, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ExtractedPlace } from "@shared/schema";
+import type { ExtractedPlace, ExtractorOption } from "@shared/schema";
 
-const INDUSTRY_OPTIONS = [
+const DEFAULT_INDUSTRY_OPTIONS = [
   "Hospitals",
   "Clinics",
   "Dental Clinics",
@@ -30,7 +31,7 @@ const INDUSTRY_OPTIONS = [
   "Other"
 ];
 
-const SEGMENT_OPTIONS = [
+const DEFAULT_SEGMENT_OPTIONS = [
   "Enterprise",
   "Mid-Market",
   "Small Business",
@@ -67,11 +68,89 @@ export default function ExtractorPage() {
   const [searchResults, setSearchResults] = useState<ExtractedPlaceResult[]>([]);
   const [selectedPlaces, setSelectedPlaces] = useState<Set<string>>(new Set());
   const [hasSearched, setHasSearched] = useState(false);
+  const [newIndustry, setNewIndustry] = useState("");
+  const [newSegment, setNewSegment] = useState("");
+  const [isAddingIndustry, setIsAddingIndustry] = useState(false);
+  const [isAddingSegment, setIsAddingSegment] = useState(false);
+
+  // Fetch custom extractor options
+  const { data: customOptions = [] } = useQuery<ExtractorOption[]>({
+    queryKey: ["/api/extractor/options"],
+  });
+
+  // Combine default and custom options
+  const customIndustries = customOptions.filter(o => o.type === 'industry').map(o => o.label);
+  const customSegments = customOptions.filter(o => o.type === 'segment').map(o => o.label);
+  const allIndustries = [...DEFAULT_INDUSTRY_OPTIONS, ...customIndustries.filter(i => !DEFAULT_INDUSTRY_OPTIONS.includes(i))];
+  const allSegments = [...DEFAULT_SEGMENT_OPTIONS, ...customSegments.filter(s => !DEFAULT_SEGMENT_OPTIONS.includes(s))];
 
   // Fetch saved extracted places
   const { data: savedPlaces = [], isLoading: isLoadingSaved } = useQuery<ExtractedPlace[]>({
     queryKey: ["/api/extractor/places", { isImported: "false" }],
   });
+
+  // Add new option mutation
+  const addOptionMutation = useMutation({
+    mutationFn: async ({ type, value, label }: { type: 'industry' | 'segment'; value: string; label: string }) => {
+      const response = await apiRequest("POST", "/api/extractor/options", { type, value, label });
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/extractor/options"] });
+      toast({
+        title: "Added Successfully",
+        description: `New ${variables.type} "${variables.label}" has been added`,
+      });
+      if (variables.type === 'industry') {
+        setNewIndustry("");
+        setIsAddingIndustry(false);
+        setIndustry(variables.label);
+      } else {
+        setNewSegment("");
+        setIsAddingSegment(false);
+        setSegment(variables.label);
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Add",
+        description: error.message || "Failed to add new option",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Delete option mutation
+  const deleteOptionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/extractor/options/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/extractor/options"] });
+      toast({
+        title: "Deleted",
+        description: "Option removed successfully",
+      });
+    }
+  });
+
+  const handleAddIndustry = () => {
+    if (!newIndustry.trim()) return;
+    addOptionMutation.mutate({ 
+      type: 'industry', 
+      value: newIndustry.toLowerCase().replace(/\s+/g, '_'), 
+      label: newIndustry.trim() 
+    });
+  };
+
+  const handleAddSegment = () => {
+    if (!newSegment.trim()) return;
+    addOptionMutation.mutate({ 
+      type: 'segment', 
+      value: newSegment.toLowerCase().replace(/\s+/g, '_'), 
+      label: newSegment.trim() 
+    });
+  };
 
   // Search mutation
   const searchMutation = useMutation({
@@ -292,32 +371,110 @@ export default function ExtractorPage() {
 
             <div className="space-y-2">
               <Label htmlFor="industry">Industry</Label>
-              <Select value={industry} onValueChange={setIndustry}>
-                <SelectTrigger id="industry" data-testid="select-industry">
-                  <SelectValue placeholder="Select industry" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Industries</SelectItem>
-                  {INDUSTRY_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={industry} onValueChange={setIndustry}>
+                  <SelectTrigger id="industry" data-testid="select-industry" className="flex-1">
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Industries</SelectItem>
+                    {allIndustries.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Dialog open={isAddingIndustry} onOpenChange={setIsAddingIndustry}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" variant="outline" data-testid="button-add-industry">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Industry</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-industry">Industry Name</Label>
+                        <Input
+                          id="new-industry"
+                          placeholder="e.g., Veterinary Clinics"
+                          value={newIndustry}
+                          onChange={(e) => setNewIndustry(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAddIndustry()}
+                          data-testid="input-new-industry"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                      </DialogClose>
+                      <Button 
+                        onClick={handleAddIndustry} 
+                        disabled={!newIndustry.trim() || addOptionMutation.isPending}
+                        data-testid="button-save-industry"
+                      >
+                        {addOptionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Industry"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="segment">Segment</Label>
-              <Select value={segment} onValueChange={setSegment}>
-                <SelectTrigger id="segment" data-testid="select-segment">
-                  <SelectValue placeholder="Select segment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Segments</SelectItem>
-                  {SEGMENT_OPTIONS.map(opt => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={segment} onValueChange={setSegment}>
+                  <SelectTrigger id="segment" data-testid="select-segment" className="flex-1">
+                    <SelectValue placeholder="Select segment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Segments</SelectItem>
+                    {allSegments.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Dialog open={isAddingSegment} onOpenChange={setIsAddingSegment}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" variant="outline" data-testid="button-add-segment">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Segment</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-segment">Segment Name</Label>
+                        <Input
+                          id="new-segment"
+                          placeholder="e.g., Healthcare Chain"
+                          value={newSegment}
+                          onChange={(e) => setNewSegment(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAddSegment()}
+                          data-testid="input-new-segment"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                      </DialogClose>
+                      <Button 
+                        onClick={handleAddSegment} 
+                        disabled={!newSegment.trim() || addOptionMutation.isPending}
+                        data-testid="button-save-segment"
+                      >
+                        {addOptionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Segment"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
           </div>
 

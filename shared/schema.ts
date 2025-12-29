@@ -1715,3 +1715,22 @@ export const insertExtractedPlaceSchema = createInsertSchema(extractedPlaces).om
 
 export type InsertExtractedPlace = z.infer<typeof insertExtractedPlaceSchema>;
 export type ExtractedPlace = typeof extractedPlaces.$inferSelect;
+
+// Extractor Options - Custom industries and segments for Google Maps extraction
+export const extractorOptions = pgTable("extractor_options", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // 'industry' or 'segment'
+  value: text("value").notNull(),
+  label: text("label").notNull(), // Display label
+  isDefault: boolean("is_default").default(false), // System default options
+  createdById: varchar("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertExtractorOptionSchema = createInsertSchema(extractorOptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertExtractorOption = z.infer<typeof insertExtractorOptionSchema>;
+export type ExtractorOption = typeof extractorOptions.$inferSelect;
