@@ -532,6 +532,11 @@ export default function Sales() {
                             <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
                               <MapPin className="h-3 w-3 flex-shrink-0" />
                               {[lead.area, lead.city].filter(Boolean).join(", ")}
+                              {lead.locationCapturedAt && (
+                                <span className="text-xs opacity-75">
+                                  ({format(new Date(lead.locationCapturedAt), "MMM d, h:mm a")})
+                                </span>
+                              )}
                             </div>
                           )}
                         </CardHeader>
@@ -672,6 +677,11 @@ export default function Sales() {
                           <div className="text-xs text-muted-foreground flex items-center gap-1">
                             <MapPin className="h-3 w-3 flex-shrink-0" />
                             {[lead.area, lead.city].filter(Boolean).join(", ")}
+                            {lead.locationCapturedAt && (
+                              <span className="text-xs opacity-75">
+                                ({format(new Date(lead.locationCapturedAt), "MMM d, h:mm a")})
+                              </span>
+                            )}
                           </div>
                         )}
                       </CardHeader>
@@ -781,6 +791,11 @@ export default function Sales() {
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             <MapPin className="h-3 w-3 flex-shrink-0" />
                             {[lead.area, lead.city].filter(Boolean).join(", ")}
+                            {lead.locationCapturedAt && (
+                              <span className="text-xs opacity-75">
+                                ({format(new Date(lead.locationCapturedAt), "MMM d, h:mm a")})
+                              </span>
+                            )}
                           </p>
                         )}
                       </div>

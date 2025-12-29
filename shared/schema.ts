@@ -198,6 +198,7 @@ export const leads = pgTable("leads", {
   area: text("area"), // Area/locality name
   latitude: text("latitude"), // Latitude from geolocation
   longitude: text("longitude"), // Longitude from geolocation
+  locationCapturedAt: timestamp("location_captured_at"), // When location was captured
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -125,6 +125,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
         const { latitude, longitude } = position.coords;
         form.setValue("latitude", latitude.toString());
         form.setValue("longitude", longitude.toString());
+        form.setValue("locationCapturedAt", new Date());
         
         // Try to get city/area using reverse geocoding
         try {

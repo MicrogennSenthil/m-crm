@@ -123,6 +123,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
           ...editForm,
           latitude: latitude.toString(),
           longitude: longitude.toString(),
+          locationCapturedAt: new Date(),
         };
         
         // Try to get city/area using reverse geocoding
