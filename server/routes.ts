@@ -4429,13 +4429,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isSuperAdmin && !isAdmin && isSalesExec && !isDeptHead) {
         allLeads = allLeads.filter(l => l.salesExecutiveId === userId);
       }
-      // Department heads see leads assigned to users in their departments
+      // Department heads see leads assigned to users in their departments + unassigned leads
       else if (!isSuperAdmin && !isAdmin && isDeptHead) {
         // Get all users in the department head's departments
         const managedDeptIds = new Set(managedDepartments.map(d => d.id));
         const deptUsers = allUsers.filter(u => u.departmentId && managedDeptIds.has(u.departmentId));
         const deptUserIds = new Set(deptUsers.map(u => u.id));
-        allLeads = allLeads.filter(l => l.salesExecutiveId && deptUserIds.has(l.salesExecutiveId));
+        // Include leads assigned to department users OR unassigned leads (no salesExecutiveId)
+        allLeads = allLeads.filter(l => !l.salesExecutiveId || deptUserIds.has(l.salesExecutiveId));
       }
       
       const allFollowUps = await storage.getAllFollowUps();
