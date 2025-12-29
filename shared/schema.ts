@@ -199,6 +199,9 @@ export const leads = pgTable("leads", {
   latitude: text("latitude"), // Latitude from geolocation
   longitude: text("longitude"), // Longitude from geolocation
   locationCapturedAt: timestamp("location_captured_at"), // When location was captured
+  // Photo capture field
+  photoUrl: text("photo_url"), // URL of captured photo from camera
+  photoCapturedAt: timestamp("photo_captured_at"), // When photo was captured
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
