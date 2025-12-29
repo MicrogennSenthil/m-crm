@@ -169,6 +169,9 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
     try {
       setIsUploadingPhoto(true);
       
+      // Immediately show the preview using the base64 data URL
+      setCapturedPhoto(photoDataUrl);
+      
       // Get upload URL from server
       const uploadUrlResponse = await apiRequest("POST", "/api/leads/photo-upload", { leadId: null });
       const { uploadURL, photoUrl } = await uploadUrlResponse.json();
@@ -186,8 +189,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
         },
       });
       
-      // Store the photo URL
-      setCapturedPhoto(photoUrl);
+      // Store the storage URL in the form (for database persistence)
       form.setValue("photoUrl", photoUrl);
       form.setValue("photoCapturedAt", new Date());
       
@@ -197,6 +199,8 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       });
     } catch (error) {
       console.error("Error uploading photo:", error);
+      // Clear the preview on error
+      setCapturedPhoto(null);
       toast({
         title: "Upload failed",
         description: "Failed to upload the photo. Please try again.",
