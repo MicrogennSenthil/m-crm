@@ -489,7 +489,7 @@ function FollowUpsTable({
 
 const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
-const ALLOWED_ROLES = ["saleshead", "sales_head", "admin"];
+const ALLOWED_ROLES = ["saleshead", "sales_head", "sales_executive", "admin"];
 
 function hasAccess(user: any): boolean {
   if (!user) return false;

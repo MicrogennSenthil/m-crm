@@ -4404,18 +4404,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const currentUser = await storage.getUser(userId);
       
-      // Check if user has access to sales dashboard (admin, sales_executive, or super admin)
+      // Check if user has access to sales dashboard (admin, sales_executive, sales_head, or super admin)
       const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
       const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
       const isAdmin = currentUser?.role === 'admin';
       const isSalesExec = currentUser?.role === 'sales_executive';
+      const isSalesHead = currentUser?.role === 'sales_head';
       
       // Check if user is a department head and get their departments (using junction table)
       const managedDepartments = await storage.getDepartmentsByHead(userId);
       const isDeptHead = managedDepartments.length > 0;
       
-      if (!isSuperAdmin && !isAdmin && !isSalesExec && !isDeptHead) {
-        return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, or department head role." });
+      if (!isSuperAdmin && !isAdmin && !isSalesExec && !isSalesHead && !isDeptHead) {
+        return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, sales head, or department head role." });
       }
       
       // Get users first for department filtering
