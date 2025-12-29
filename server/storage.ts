@@ -152,6 +152,9 @@ import {
   type InsertMarketingDailyReport,
   type MarketingTaskEntry,
   type InsertMarketingTaskEntry,
+  extractedPlaces,
+  type ExtractedPlace,
+  type InsertExtractedPlace,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
@@ -573,6 +576,28 @@ export interface IStorage {
   syncSystemModulesFromManifest(): Promise<{ created: number; updated: number }>;
   ensureRoleHasAllModuleRights(roleId: string): Promise<number>;
   ensureAllRolesHaveAllModuleRights(): Promise<number>;
+
+  // Extracted Places operations (Google Maps data extraction)
+  getExtractedPlaces(filters?: { 
+    extractedById?: string;
+    isImported?: boolean;
+    city?: string;
+    area?: string;
+    industry?: string;
+  }): Promise<ExtractedPlace[]>;
+  getExtractedPlace(id: string): Promise<ExtractedPlace | undefined>;
+  createExtractedPlace(place: InsertExtractedPlace): Promise<ExtractedPlace>;
+  createExtractedPlaces(places: InsertExtractedPlace[]): Promise<ExtractedPlace[]>;
+  updateExtractedPlace(id: string, data: Partial<InsertExtractedPlace & { isImported?: boolean; importedLeadId?: string }>): Promise<ExtractedPlace>;
+  deleteExtractedPlace(id: string): Promise<void>;
+  checkDuplicateLead(data: { 
+    contactPhone?: string; 
+    businessName?: string; 
+    contactPerson?: string; 
+    contactEmail?: string; 
+    city?: string; 
+    area?: string; 
+  }): Promise<Lead | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4003,6 +4028,115 @@ export class DatabaseStorage implements IStorage {
     }
     
     return missingRights.length;
+  }
+
+  // Extracted Places operations (Google Maps data extraction)
+  async getExtractedPlaces(filters?: { 
+    extractedById?: string;
+    isImported?: boolean;
+    city?: string;
+    area?: string;
+    industry?: string;
+  }): Promise<ExtractedPlace[]> {
+    const conditions = [];
+    
+    if (filters?.extractedById) {
+      conditions.push(eq(extractedPlaces.extractedById, filters.extractedById));
+    }
+    if (filters?.isImported !== undefined) {
+      conditions.push(eq(extractedPlaces.isImported, filters.isImported));
+    }
+    if (filters?.city) {
+      conditions.push(eq(extractedPlaces.city, filters.city));
+    }
+    if (filters?.area) {
+      conditions.push(eq(extractedPlaces.area, filters.area));
+    }
+    if (filters?.industry) {
+      conditions.push(eq(extractedPlaces.industry, filters.industry));
+    }
+
+    if (conditions.length > 0) {
+      return await db
+        .select()
+        .from(extractedPlaces)
+        .where(and(...conditions))
+        .orderBy(desc(extractedPlaces.createdAt));
+    }
+
+    return await db
+      .select()
+      .from(extractedPlaces)
+      .orderBy(desc(extractedPlaces.createdAt));
+  }
+
+  async getExtractedPlace(id: string): Promise<ExtractedPlace | undefined> {
+    const [place] = await db.select().from(extractedPlaces).where(eq(extractedPlaces.id, id));
+    return place;
+  }
+
+  async createExtractedPlace(place: InsertExtractedPlace): Promise<ExtractedPlace> {
+    const [newPlace] = await db.insert(extractedPlaces).values(place).returning();
+    return newPlace;
+  }
+
+  async createExtractedPlaces(places: InsertExtractedPlace[]): Promise<ExtractedPlace[]> {
+    if (places.length === 0) return [];
+    const newPlaces = await db.insert(extractedPlaces).values(places).returning();
+    return newPlaces;
+  }
+
+  async updateExtractedPlace(id: string, data: Partial<InsertExtractedPlace & { isImported?: boolean; importedLeadId?: string }>): Promise<ExtractedPlace> {
+    const [updated] = await db
+      .update(extractedPlaces)
+      .set(data)
+      .where(eq(extractedPlaces.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteExtractedPlace(id: string): Promise<void> {
+    await db.delete(extractedPlaces).where(eq(extractedPlaces.id, id));
+  }
+
+  async checkDuplicateLead(data: { 
+    contactPhone?: string; 
+    businessName?: string; 
+    contactPerson?: string; 
+    contactEmail?: string; 
+    city?: string; 
+    area?: string; 
+  }): Promise<Lead | null> {
+    const conditions = [];
+    
+    // Check for exact match on phone number (primary identifier)
+    if (data.contactPhone) {
+      conditions.push(eq(leads.contactPhone, data.contactPhone));
+    }
+    
+    // Check for exact match on email (primary identifier)
+    if (data.contactEmail) {
+      conditions.push(eq(leads.contactEmail, data.contactEmail));
+    }
+    
+    // Check for combination of business name + city + area
+    if (data.businessName && data.city) {
+      const businessNameConditions = [eq(leads.companyName, data.businessName), eq(leads.city, data.city)];
+      if (data.area) {
+        businessNameConditions.push(eq(leads.area, data.area));
+      }
+      conditions.push(and(...businessNameConditions));
+    }
+    
+    if (conditions.length === 0) return null;
+    
+    const [existingLead] = await db
+      .select()
+      .from(leads)
+      .where(or(...conditions))
+      .limit(1);
+    
+    return existingLead || null;
   }
 }
 

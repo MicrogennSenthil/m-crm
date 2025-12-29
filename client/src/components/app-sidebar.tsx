@@ -40,6 +40,7 @@ import {
   MessageSquareHeart,
   Megaphone,
   CalendarDays,
+  MapPinned,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -97,6 +98,14 @@ const menuGroups = [
     color: "text-green-500",
     bgColor: "bg-green-500/10",
     items: [
+      {
+        title: "Extractor",
+        url: "/extractor",
+        icon: MapPinned,
+        color: "text-cyan-500",
+        bgColor: "bg-cyan-500/10",
+        module: "leads", // Uses leads permission
+      },
       {
         title: "Sales Pipeline",
         url: "/sales",

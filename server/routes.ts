@@ -13174,6 +13174,276 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==========================================
+  // Google Maps Extractor Routes
+  // ==========================================
+
+  // Search Google Places API
+  app.post("/api/extractor/search", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
+    try {
+      const { query, city, area, industry, segment } = req.body;
+      
+      if (!query) {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "Google Places API key not configured" });
+      }
+
+      // Build the search query with location context
+      let searchQuery = query;
+      if (city) searchQuery += ` in ${city}`;
+      if (area) searchQuery += `, ${area}`;
+
+      // Use Google Places Text Search (New) API
+      const url = "https://places.googleapis.com/v1/places:searchText";
+      
+      const payload = {
+        textQuery: searchQuery,
+        pageSize: 20,
+        languageCode: "en"
+      };
+
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.location,places.businessStatus,places.priceLevel,places.types"
+      };
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Google Places API error:", errorText);
+        return res.status(response.status).json({ message: "Google Places API request failed" });
+      }
+
+      const data = await response.json();
+      const places = data.places || [];
+
+      // Transform Google Places data to our format
+      const extractedPlaces = places.map((place: any) => {
+        // Parse address to extract city and area
+        const address = place.formattedAddress || "";
+        const addressParts = address.split(",").map((p: string) => p.trim());
+        
+        return {
+          googlePlaceId: place.id,
+          businessName: place.displayName?.text || "Unknown Business",
+          contactPhone: place.nationalPhoneNumber || place.internationalPhoneNumber || null,
+          website: place.websiteUri || null,
+          address: address,
+          city: city || (addressParts.length > 2 ? addressParts[addressParts.length - 3] : null),
+          area: area || (addressParts.length > 1 ? addressParts[0] : null),
+          latitude: place.location?.latitude?.toString() || null,
+          longitude: place.location?.longitude?.toString() || null,
+          rating: place.rating?.toString() || null,
+          reviewCount: place.userRatingCount || null,
+          industry: industry || (place.types?.[0]?.replace(/_/g, " ") || null),
+          segment: segment || null,
+          priceLevel: place.priceLevel || null,
+          businessStatus: place.businessStatus || "OPERATIONAL"
+        };
+      });
+
+      res.json({ places: extractedPlaces, total: extractedPlaces.length });
+    } catch (error) {
+      console.error("Error searching Google Places:", error);
+      res.status(500).json({ message: "Failed to search Google Places" });
+    }
+  });
+
+  // Get all extracted places for current user
+  app.get("/api/extractor/places", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const userClaims = req.user as any;
+      const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const { isImported, city, area, industry } = req.query;
+
+      const places = await storage.getExtractedPlaces({
+        extractedById: currentUserId,
+        isImported: isImported === 'true' ? true : isImported === 'false' ? false : undefined,
+        city: city as string,
+        area: area as string,
+        industry: industry as string
+      });
+
+      res.json(places);
+    } catch (error) {
+      console.error("Error fetching extracted places:", error);
+      res.status(500).json({ message: "Failed to fetch extracted places" });
+    }
+  });
+
+  // Save extracted places to database
+  app.post("/api/extractor/places", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
+    try {
+      const userClaims = req.user as any;
+      const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const { places, searchQuery } = req.body;
+
+      if (!Array.isArray(places) || places.length === 0) {
+        return res.status(400).json({ message: "No places to save" });
+      }
+
+      const placesToSave = places.map((place: any) => ({
+        ...place,
+        extractedById: currentUserId,
+        searchQuery: searchQuery || null
+      }));
+
+      const savedPlaces = await storage.createExtractedPlaces(placesToSave);
+      res.json({ saved: savedPlaces.length, places: savedPlaces });
+    } catch (error) {
+      console.error("Error saving extracted places:", error);
+      res.status(500).json({ message: "Failed to save extracted places" });
+    }
+  });
+
+  // Check for duplicate leads
+  app.post("/api/extractor/check-duplicate", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const { contactPhone, businessName, contactPerson, contactEmail, city, area } = req.body;
+
+      const existingLead = await storage.checkDuplicateLead({
+        contactPhone,
+        businessName,
+        contactPerson,
+        contactEmail,
+        city,
+        area
+      });
+
+      res.json({ isDuplicate: !!existingLead, existingLead });
+    } catch (error) {
+      console.error("Error checking duplicate:", error);
+      res.status(500).json({ message: "Failed to check for duplicates" });
+    }
+  });
+
+  // Import extracted places as seeds (leads with stage='seed')
+  app.post("/api/extractor/import-as-seeds", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
+    try {
+      const userClaims = req.user as any;
+      const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
+      const { placeIds, skipDuplicates = true } = req.body;
+
+      if (!Array.isArray(placeIds) || placeIds.length === 0) {
+        return res.status(400).json({ message: "No places to import" });
+      }
+
+      const results = {
+        imported: 0,
+        skipped: 0,
+        duplicates: [] as string[],
+        errors: [] as string[]
+      };
+
+      for (const placeId of placeIds) {
+        try {
+          const place = await storage.getExtractedPlace(placeId);
+          if (!place) {
+            results.errors.push(`Place ${placeId} not found`);
+            continue;
+          }
+
+          if (place.isImported) {
+            results.skipped++;
+            continue;
+          }
+
+          // Check for duplicates using multiple criteria
+          if (skipDuplicates) {
+            // Primary check: by phone number (most reliable)
+            if (place.contactPhone) {
+              const existingByPhone = await storage.checkDuplicateLead({
+                contactPhone: place.contactPhone
+              });
+              if (existingByPhone) {
+                results.duplicates.push(`${place.businessName} (phone match)`);
+                results.skipped++;
+                continue;
+              }
+            }
+
+            // Secondary check: by business name + city combination
+            if (place.businessName && place.city) {
+              const existingByName = await storage.checkDuplicateLead({
+                businessName: place.businessName,
+                city: place.city,
+                area: place.area || undefined
+              });
+              if (existingByName) {
+                results.duplicates.push(`${place.businessName} (name+location match)`);
+                results.skipped++;
+                continue;
+              }
+            }
+          }
+
+          // Generate a unique placeholder email using business name and timestamp
+          const sanitizedName = place.businessName.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+          const uniqueEmail = place.contactEmail || `${sanitizedName}.${Date.now()}@pending.com`;
+          
+          // Generate contact person from business name if not available
+          const contactPerson = place.contactPerson || `${place.businessName} - Contact`;
+
+          // Create lead as seed with proper field values
+          const leadData = {
+            companyName: place.businessName,
+            contactPerson: contactPerson,
+            contactEmail: uniqueEmail,
+            contactPhone: place.contactPhone || null,
+            leadSource: "google_maps",
+            stage: "seed",
+            salesExecutiveId: currentUserId,
+            city: place.city || null,
+            area: place.area || null,
+            latitude: place.latitude || null,
+            longitude: place.longitude || null,
+            currency: "INR" as const
+          };
+
+          const lead = await storage.createLead(leadData);
+
+          // Mark place as imported
+          await storage.updateExtractedPlace(placeId, {
+            isImported: true,
+            importedLeadId: lead.id
+          });
+
+          results.imported++;
+        } catch (error: any) {
+          console.error(`Error importing place ${placeId}:`, error);
+          results.errors.push(`Failed to import: ${error.message || 'Unknown error'}`);
+        }
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error importing places as seeds:", error);
+      res.status(500).json({ message: "Failed to import places as seeds" });
+    }
+  });
+
+  // Delete an extracted place
+  app.delete("/api/extractor/places/:id", isAuthenticated, requirePermission('leads', 'delete'), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteExtractedPlace(id);
+      res.json({ message: "Place deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting extracted place:", error);
+      res.status(500).json({ message: "Failed to delete extracted place" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

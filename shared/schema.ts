@@ -1678,3 +1678,40 @@ export const insertMarketingTaskEntrySchema = createInsertSchema(marketingTaskEn
 
 export type InsertMarketingTaskEntry = z.infer<typeof insertMarketingTaskEntrySchema>;
 export type MarketingTaskEntry = typeof marketingTaskEntries.$inferSelect;
+
+// Extracted Places - Temporary storage for Google Maps extracted business data before import
+export const extractedPlaces = pgTable("extracted_places", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  googlePlaceId: text("google_place_id"), // Google Places unique ID
+  businessName: text("business_name").notNull(),
+  contactPerson: text("contact_person"), // May not be available from Google Maps
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"), // May not be available from Google Maps
+  website: text("website"),
+  address: text("address"),
+  city: text("city"),
+  area: text("area"),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  rating: text("rating"), // Google rating
+  reviewCount: integer("review_count"),
+  industry: text("industry"), // Business category/type
+  segment: text("segment"), // Search segment used
+  priceLevel: text("price_level"),
+  businessStatus: text("business_status"), // OPERATIONAL, CLOSED, etc.
+  extractedById: varchar("extracted_by_id").references(() => users.id),
+  searchQuery: text("search_query"), // Original search query used
+  isImported: boolean("is_imported").default(false), // Whether imported as seed
+  importedLeadId: varchar("imported_lead_id").references(() => leads.id), // Link to imported lead
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertExtractedPlaceSchema = createInsertSchema(extractedPlaces).omit({
+  id: true,
+  isImported: true,
+  importedLeadId: true,
+  createdAt: true,
+});
+
+export type InsertExtractedPlace = z.infer<typeof insertExtractedPlaceSchema>;
+export type ExtractedPlace = typeof extractedPlaces.$inferSelect;

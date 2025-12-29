@@ -54,6 +54,7 @@ import AccountsContracts from "@/pages/accounts-contracts";
 import HRFeedback from "@/pages/hr-feedback";
 import MarketingDailyReport from "@/pages/marketing-daily-report";
 import MarketingDashboard from "@/pages/marketing-dashboard";
+import Extractor from "@/pages/extractor";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -92,6 +93,7 @@ function AuthenticatedLayout() {
               <Route path="/tasks" component={Tasks} />
               <Route path="/tasks/today" component={TodaysTasks} />
               <Route path="/tasks/:id" component={TaskDetail} />
+              <Route path="/extractor" component={Extractor} />
               <Route path="/sales" component={Sales} />
               <Route path="/sales-dashboard" component={SalesDashboard} />
               <Route path="/implementations" component={Implementations} />
