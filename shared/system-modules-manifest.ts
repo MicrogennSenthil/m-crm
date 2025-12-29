@@ -17,7 +17,8 @@ export const SYSTEM_MODULES_MANIFEST: SystemModuleDefinition[] = [
   // Sales Module
   { name: "leads", displayName: "Sales / Leads", description: "Lead management and sales pipeline", icon: "Target", sortOrder: 2 },
   { name: "sales_dashboard", displayName: "Sales Dashboard", description: "Sales analytics and performance dashboard", icon: "TrendingUp", sortOrder: 3, parentModule: "leads" },
-  { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 4, parentModule: "leads" },
+  { name: "extractor", displayName: "Google Maps Extractor", description: "Extract business data from Google Maps for lead generation", icon: "MapPin", sortOrder: 4, parentModule: "leads" },
+  { name: "quotes", displayName: "Quotes", description: "Quote generation and management", icon: "FileText", sortOrder: 5, parentModule: "leads" },
   
   // Implementation Module
   { name: "projects", displayName: "Implementation", description: "Project implementation tracking", icon: "FolderKanban", sortOrder: 5 },
