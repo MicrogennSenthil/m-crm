@@ -414,7 +414,8 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const { user } = useAuth();
   const { canView, isSuperAdmin: permissionsSuperAdmin, isLoading: permissionsLoading } = usePermissions();
   const { state, toggleSidebar, isMobile } = useSidebar();
-  const isCollapsed = state === "collapsed";
+  // On mobile, always show full menu (not collapsed) when sidebar sheet is open
+  const isCollapsed = state === "collapsed" && !isMobile;
   
   // Scroll navigation
   const scrollContainerRef = useRef<HTMLDivElement>(null);
