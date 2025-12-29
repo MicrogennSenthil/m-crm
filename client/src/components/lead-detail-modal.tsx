@@ -19,7 +19,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History } from "lucide-react";
 import { format, startOfDay, isToday } from "date-fns";
-import type { Lead, FollowUp, Quote, User, InsertLead } from "@shared/schema";
+import type { Lead, FollowUp, Quote, User, InsertLead, Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -46,16 +46,7 @@ const STAGES = [
   { value: "closed_lost", label: "Closed Lost" },
 ];
 
-const AVAILABLE_MODULES = [
-  "Front Office",
-  "Power Automation",
-  "POS",
-  "Inventory Management",
-  "HR & Payroll",
-  "Accounting",
-  "CRM Integration",
-  "Reporting & Analytics",
-];
+// Modules are now fetched from the database instead of hardcoded
 
 interface LeadDetailModalProps {
   lead: Lead;
@@ -126,6 +117,12 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const salesExecutives = allUsers?.filter(
     user => user.role === 'sales_executive' || user.role === 'sales_head'
   );
+
+  // Fetch modules from database
+  const { data: modules } = useQuery<Module[]>({
+    queryKey: ["/api/modules"],
+    enabled: open,
+  });
 
   const { data: demoHistory } = useQuery<Array<{
     id: string;
@@ -973,16 +970,16 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     
                     <div>
                       <Label className="text-xs mb-2 block">Select Modules</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {AVAILABLE_MODULES.map((module) => (
-                          <div key={module} className="flex items-center space-x-2">
+                      <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        {modules?.map((module) => (
+                          <div key={module.id} className="flex items-center space-x-2">
                             <Checkbox
-                              id={module}
-                              checked={selectedModules.includes(module)}
-                              onCheckedChange={() => handleModuleToggle(module)}
-                              data-testid={`checkbox-module-${module.toLowerCase().replace(/\s+/g, "-")}`}
+                              id={module.name}
+                              checked={selectedModules.includes(module.name)}
+                              onCheckedChange={() => handleModuleToggle(module.name)}
+                              data-testid={`checkbox-module-${module.name.toLowerCase().replace(/\s+/g, "-")}`}
                             />
-                            <label htmlFor={module} className="text-xs cursor-pointer">{module}</label>
+                            <label htmlFor={module.name} className="text-xs cursor-pointer">{module.name}</label>
                           </div>
                         ))}
                       </div>
