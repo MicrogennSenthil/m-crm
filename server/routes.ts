@@ -4893,7 +4893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user is a department head (using junction table)
       const isDeptHeadResult = await storage.isUserDepartmentHead(userId);
       
-      if (!isSuperAdmin && !isDeptHeadResult.isHead) {
+      if (!isSuperAdmin && !isDeptHeadResult.isDeptHead) {
         return res.status(403).json({ message: "Only super admin and department heads can add comments" });
       }
       
