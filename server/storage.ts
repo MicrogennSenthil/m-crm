@@ -589,6 +589,7 @@ export interface IStorage {
     industry?: string;
   }): Promise<ExtractedPlace[]>;
   getExtractedPlace(id: string): Promise<ExtractedPlace | undefined>;
+  getExistingGooglePlaceIds(googlePlaceIds: string[]): Promise<string[]>;
   createExtractedPlace(place: InsertExtractedPlace): Promise<ExtractedPlace>;
   createExtractedPlaces(places: InsertExtractedPlace[]): Promise<ExtractedPlace[]>;
   updateExtractedPlace(id: string, data: Partial<InsertExtractedPlace & { isImported?: boolean; importedLeadId?: string }>): Promise<ExtractedPlace>;
@@ -4082,6 +4083,19 @@ export class DatabaseStorage implements IStorage {
   async getExtractedPlace(id: string): Promise<ExtractedPlace | undefined> {
     const [place] = await db.select().from(extractedPlaces).where(eq(extractedPlaces.id, id));
     return place;
+  }
+
+  async getExistingGooglePlaceIds(googlePlaceIds: string[]): Promise<string[]> {
+    if (googlePlaceIds.length === 0) return [];
+    
+    const existingPlaces = await db
+      .select({ googlePlaceId: extractedPlaces.googlePlaceId })
+      .from(extractedPlaces)
+      .where(inArray(extractedPlaces.googlePlaceId, googlePlaceIds));
+    
+    return existingPlaces
+      .map(p => p.googlePlaceId)
+      .filter((id): id is string => id !== null);
   }
 
   async createExtractedPlace(place: InsertExtractedPlace): Promise<ExtractedPlace> {

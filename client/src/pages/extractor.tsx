@@ -195,9 +195,10 @@ export default function ExtractorPage() {
       setSearchResults(data.places || []);
       setHasSearched(true);
       setSelectedPlaces(new Set());
+      const skippedMsg = data.skippedExisting > 0 ? ` (${data.skippedExisting} already saved)` : "";
       toast({
         title: "Search Complete",
-        description: `Found ${data.total || 0} businesses`,
+        description: `Found ${data.total || 0} new businesses${skippedMsg}`,
       });
     },
     onError: (error: any) => {
