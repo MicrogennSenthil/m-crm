@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -59,6 +60,7 @@ interface ExtractedPlaceResult {
   segment: string | null;
   priceLevel: string | null;
   businessStatus: string;
+  alreadySaved?: boolean;
 }
 
 export default function ExtractorPage() {
@@ -77,6 +79,8 @@ export default function ExtractorPage() {
   const [isAddingIndustry, setIsAddingIndustry] = useState(false);
   const [isAddingSegment, setIsAddingSegment] = useState(false);
   const [selectedAssignee, setSelectedAssignee] = useState<string>("");
+  const [pendingSearchData, setPendingSearchData] = useState<any>(null);
+  const [showDuplicateAlert, setShowDuplicateAlert] = useState(false);
 
   // Check if current user is a department head
   const { data: deptHeadStatus } = useQuery<{ isHead: boolean }>({
@@ -192,14 +196,21 @@ export default function ExtractorPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      setSearchResults(data.places || []);
       setHasSearched(true);
       setSelectedPlaces(new Set());
-      const skippedMsg = data.skippedExisting > 0 ? ` (${data.skippedExisting} already saved)` : "";
-      toast({
-        title: "Search Complete",
-        description: `Found ${data.total || 0} new businesses${skippedMsg}`,
-      });
+      
+      // If there are existing places (duplicates), show alert for user decision
+      if (data.totalExisting > 0) {
+        setPendingSearchData(data);
+        setShowDuplicateAlert(true);
+      } else {
+        // No duplicates, show new places directly
+        setSearchResults(data.places || []);
+        toast({
+          title: "Search Complete",
+          description: `Found ${data.total || 0} new businesses`,
+        });
+      }
     },
     onError: (error: any) => {
       toast({
@@ -209,6 +220,40 @@ export default function ExtractorPage() {
       });
     }
   });
+
+  // Handle user's choice on duplicate alert
+  const handleShowOnlyNew = () => {
+    if (pendingSearchData) {
+      setSearchResults(pendingSearchData.places || []);
+      toast({
+        title: "Showing New Businesses Only",
+        description: `Found ${pendingSearchData.total || 0} new businesses (${pendingSearchData.totalExisting} already in CRM excluded)`,
+      });
+    }
+    setShowDuplicateAlert(false);
+    setPendingSearchData(null);
+  };
+
+  const handleShowAll = () => {
+    if (pendingSearchData) {
+      // Combine new and existing places
+      const allPlaces = [...(pendingSearchData.places || []), ...(pendingSearchData.existingPlaces || [])];
+      setSearchResults(allPlaces);
+      toast({
+        title: "Showing All Businesses",
+        description: `Found ${pendingSearchData.totalAll || 0} total businesses (${pendingSearchData.totalExisting} already in CRM)`,
+      });
+    }
+    setShowDuplicateAlert(false);
+    setPendingSearchData(null);
+  };
+
+  const handleCancelSearch = () => {
+    setSearchResults([]);
+    setHasSearched(false);
+    setShowDuplicateAlert(false);
+    setPendingSearchData(null);
+  };
 
   // Save places mutation
   const savePlacesMutation = useMutation({
@@ -310,15 +355,35 @@ export default function ExtractorPage() {
   };
 
   const handleSaveSelected = () => {
-    const placesToSave = searchResults.filter(p => selectedPlaces.has(p.googlePlaceId));
+    const allSelected = searchResults.filter(p => selectedPlaces.has(p.googlePlaceId));
+    // Filter out already-saved places
+    const placesToSave = allSelected.filter(p => !p.alreadySaved);
+    const skippedAlreadySaved = allSelected.length - placesToSave.length;
+    
     if (placesToSave.length === 0) {
-      toast({
-        title: "No Selection",
-        description: "Please select at least one place to save",
-        variant: "destructive",
-      });
+      if (skippedAlreadySaved > 0) {
+        toast({
+          title: "All Selected Already Saved",
+          description: `All ${skippedAlreadySaved} selected places are already in the CRM. Select new places to save.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "No Selection",
+          description: "Please select at least one place to save",
+          variant: "destructive",
+        });
+      }
       return;
     }
+    
+    if (skippedAlreadySaved > 0) {
+      toast({
+        title: "Note",
+        description: `Saving ${placesToSave.length} new places. ${skippedAlreadySaved} already-saved places were skipped.`,
+      });
+    }
+    
     savePlacesMutation.mutate(placesToSave);
   };
 
@@ -608,7 +673,11 @@ export default function ExtractorPage() {
                   </TableHeader>
                   <TableBody>
                     {searchResults.map((place) => (
-                      <TableRow key={place.googlePlaceId} data-testid={`row-result-${place.googlePlaceId}`}>
+                      <TableRow 
+                        key={place.googlePlaceId} 
+                        data-testid={`row-result-${place.googlePlaceId}`}
+                        className={place.alreadySaved ? "opacity-60 bg-muted/30" : ""}
+                      >
                         <TableCell>
                           <Checkbox
                             checked={selectedPlaces.has(place.googlePlaceId)}
@@ -617,7 +686,14 @@ export default function ExtractorPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium">{place.businessName}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{place.businessName}</span>
+                            {place.alreadySaved && (
+                              <Badge variant="secondary" className="text-xs">
+                                Already in CRM
+                              </Badge>
+                            )}
+                          </div>
                           {place.website && (
                             <a 
                               href={place.website} 
@@ -845,6 +921,48 @@ export default function ExtractorPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Duplicate Alert Dialog */}
+      <AlertDialog open={showDuplicateAlert} onOpenChange={setShowDuplicateAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Existing Data Found
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Your search found <strong>{pendingSearchData?.totalAll || 0}</strong> businesses, but{" "}
+                <strong>{pendingSearchData?.totalExisting || 0}</strong> of them are already saved in the CRM by other users.
+              </p>
+              <p>
+                Only <strong>{pendingSearchData?.total || 0}</strong> new businesses are available.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                How would you like to proceed?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={handleCancelSearch} data-testid="button-cancel-search">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleShowAll} 
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              data-testid="button-show-all"
+            >
+              Show All ({pendingSearchData?.totalAll || 0})
+            </AlertDialogAction>
+            <AlertDialogAction 
+              onClick={handleShowOnlyNew}
+              data-testid="button-show-new-only"
+            >
+              Show Only New ({pendingSearchData?.total || 0})
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

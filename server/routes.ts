@@ -13296,22 +13296,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return true;
         });
 
-      // Filter out places that have already been saved to the database
+      // Check which places already exist in the database (saved by ANY user)
       const allGooglePlaceIds = transformedPlaces.map(p => p.googlePlaceId);
       const existingGooglePlaceIds = await storage.getExistingGooglePlaceIds(allGooglePlaceIds);
       const existingIdsSet = new Set(existingGooglePlaceIds);
       
-      const newPlaces = transformedPlaces.filter(p => !existingIdsSet.has(p.googlePlaceId));
-      const skippedCount = transformedPlaces.length - newPlaces.length;
+      // Mark each place with whether it already exists
+      const placesWithStatus = transformedPlaces.map(p => ({
+        ...p,
+        alreadySaved: existingIdsSet.has(p.googlePlaceId)
+      }));
+      
+      const newPlaces = placesWithStatus.filter(p => !p.alreadySaved);
+      const existingPlaces = placesWithStatus.filter(p => p.alreadySaved);
 
-      console.log(`[Extractor] Fetched ${pageCount} page(s), ${transformedPlaces.length} from Google, ${skippedCount} already saved, ${newPlaces.length} new for query: ${searchQuery}`);
+      console.log(`[Extractor] Fetched ${pageCount} page(s), ${transformedPlaces.length} from Google, ${existingPlaces.length} already saved, ${newPlaces.length} new for query: ${searchQuery}`);
 
       res.json({ 
-        places: newPlaces, 
+        places: newPlaces,
+        existingPlaces: existingPlaces,
         total: newPlaces.length,
+        totalExisting: existingPlaces.length,
+        totalAll: transformedPlaces.length,
         pagesRetrieved: pageCount,
-        hasMoreResults: !!nextPageToken,
-        skippedExisting: skippedCount
+        hasMoreResults: !!nextPageToken
       });
     } catch (error) {
       console.error("Error searching Google Places:", error);
