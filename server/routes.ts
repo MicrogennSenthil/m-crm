@@ -13332,7 +13332,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
-      const { placeIds, skipDuplicates = true } = req.body;
+      const { placeIds, skipDuplicates = true, assigneeId } = req.body;
+      
+      // Get current user to check their role
+      const currentUser = await storage.getUser(currentUserId);
+      
+      // Check if user is privileged (can assign to others)
+      const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser?.role === "admin";
+      const isDepartmentHead = currentUser ? await storage.isDepartmentHead(currentUserId) : false;
+      const canAssign = isSuperAdmin || isAdmin || isDepartmentHead;
+      
+      // Determine the actual assignee
+      // Only privileged users can assign to others; regular users always get self-assigned
+      let targetAssigneeId = currentUserId;
+      if (assigneeId && assigneeId !== "self" && canAssign) {
+        // Validate that the assignee exists
+        const targetUser = await storage.getUser(assigneeId);
+        if (targetUser) {
+          targetAssigneeId = assigneeId;
+        }
+        // If assignee doesn't exist, fall back to current user
+      }
 
       if (!Array.isArray(placeIds) || placeIds.length === 0) {
         return res.status(400).json({ message: "No places to import" });
@@ -13402,7 +13423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             contactPhone: place.contactPhone || null,
             leadSource: "google_maps",
             stage: "seed",
-            salesExecutiveId: currentUserId,
+            salesExecutiveId: targetAssigneeId,
             city: place.city || null,
             area: place.area || null,
             latitude: place.latitude || null,

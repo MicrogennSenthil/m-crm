@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2, Plus, X } from "lucide-react";
+import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2, Plus, X, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ExtractedPlace, ExtractorOption } from "@shared/schema";
+import type { ExtractedPlace, ExtractorOption, User } from "@shared/schema";
+
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
 const DEFAULT_INDUSTRY_OPTIONS = [
   "Hospitals",
@@ -60,6 +63,7 @@ interface ExtractedPlaceResult {
 
 export default function ExtractorPage() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [city, setCity] = useState("");
   const [area, setArea] = useState("");
@@ -72,6 +76,29 @@ export default function ExtractorPage() {
   const [newSegment, setNewSegment] = useState("");
   const [isAddingIndustry, setIsAddingIndustry] = useState(false);
   const [isAddingSegment, setIsAddingSegment] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>("");
+
+  // Check if current user is a department head
+  const { data: deptHeadStatus } = useQuery<{ isHead: boolean }>({
+    queryKey: ["/api/auth/is-department-head"],
+    enabled: !!currentUser,
+  });
+
+  // Fetch sales executives for assignment
+  const { data: allUsers } = useQuery<User[]>({
+    queryKey: ["/api/users/all"],
+  });
+
+  // Determine if user can assign leads to others (admin/head/superadmin)
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin";
+  const isDepartmentHead = deptHeadStatus?.isHead || false;
+  const canAssign = isSuperAdmin || isAdmin || isDepartmentHead;
+
+  // Filter to include both sales_executive and sales_head roles
+  const salesExecutives = allUsers?.filter(
+    user => user.role === 'sales_executive' || user.role === 'sales_head'
+  );
 
   // Fetch custom extractor options
   const { data: customOptions = [] } = useQuery<ExtractorOption[]>({
@@ -211,16 +238,18 @@ export default function ExtractorPage() {
 
   // Import as seeds mutation
   const importMutation = useMutation({
-    mutationFn: async (placeIds: string[]) => {
+    mutationFn: async ({ placeIds, assigneeId }: { placeIds: string[]; assigneeId?: string }) => {
       const response = await apiRequest("POST", "/api/extractor/import-as-seeds", {
         placeIds,
-        skipDuplicates: true
+        skipDuplicates: true,
+        assigneeId: assigneeId || undefined
       });
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/extractor/places"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setSelectedAssignee("");
       toast({
         title: "Import Complete",
         description: `Imported ${data.imported} seeds. ${data.skipped > 0 ? `Skipped ${data.skipped} (${data.duplicates?.length || 0} duplicates)` : ""}`,
@@ -305,7 +334,10 @@ export default function ExtractorPage() {
       });
       return;
     }
-    importMutation.mutate(selectedIds);
+    importMutation.mutate({ 
+      placeIds: selectedIds, 
+      assigneeId: selectedAssignee || undefined 
+    });
   };
 
   return (
@@ -666,7 +698,24 @@ export default function ExtractorPage() {
               </CardDescription>
             </div>
             {savedPlaces.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Assignment dropdown for admin/head/superadmin */}
+                {canAssign && (
+                  <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+                    <SelectTrigger className="w-[200px]" data-testid="select-assignee">
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Assign to..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="self">Assign to me</SelectItem>
+                      {salesExecutives?.map((exec) => (
+                        <SelectItem key={exec.id} value={exec.id}>
+                          {exec.firstName} {exec.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button
                   onClick={() => {
                     // Select all saved places

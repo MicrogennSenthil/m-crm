@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { insertLeadSchema, type InsertLead, type User, type Customer, type Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -24,9 +25,11 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Building2, Plus, Package, MapPin, Loader2, Camera, X } from "lucide-react";
+import { Building2, Plus, Package, MapPin, Loader2, Camera, X, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { CameraCapture } from "@/components/camera-capture";
+
+const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
 const LEAD_SOURCES = [
   { value: "facebook", label: "Facebook" },
@@ -68,6 +71,7 @@ interface LeadFormProps {
 
 export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [isNewCompany, setIsNewCompany] = useState(false);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -78,6 +82,18 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
   const { data: allUsers } = useQuery<User[]>({
     queryKey: ["/api/users/all"],
   });
+
+  // Check if current user is a department head
+  const { data: deptHeadStatus } = useQuery<{ isHead: boolean }>({
+    queryKey: ["/api/auth/is-department-head"],
+    enabled: !!currentUser,
+  });
+  
+  // Determine if user can assign leads to others (admin/head/superadmin)
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
+  const isAdmin = currentUser?.role === "admin";
+  const isDepartmentHead = deptHeadStatus?.isHead || false;
+  const canAssign = isSuperAdmin || isAdmin || isDepartmentHead;
   
   // Filter to include both sales_executive and sales_head roles
   const salesExecutives = allUsers?.filter(
@@ -478,30 +494,43 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="salesExecutiveId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Sales Executive</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || undefined}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-sales-executive">
-                        <SelectValue placeholder="Select executive" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {salesExecutives?.map((exec) => (
-                        <SelectItem key={exec.id} value={exec.id}>
-                          {exec.firstName} {exec.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Assignment field - only shown to admin/head/superadmin */}
+            {canAssign ? (
+              <FormField
+                control={form.control}
+                name="salesExecutiveId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <UserPlus className="h-4 w-4" />
+                      Assign To
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-sales-executive">
+                          <SelectValue placeholder="Select sales executive" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {salesExecutives?.map((exec) => (
+                          <SelectItem key={exec.id} value={exec.id}>
+                            {exec.firstName} {exec.lastName} ({exec.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      As admin/head, you can assign this lead to any sales executive
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground p-2 bg-muted/30 rounded">
+                This lead will be assigned to you automatically
+              </div>
+            )}
           </div>
 
           {/* Location Section */}
