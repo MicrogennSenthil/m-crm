@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2, Camera } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2, Camera, Trash2 } from "lucide-react";
 import { format, startOfDay, isToday } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead, Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -291,6 +291,42 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       toast({
         title: "Error",
         description: "Failed to convert seed to lead",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete Seed mutation - allows re-import from extractor
+  const deleteSeedMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/leads/${lead.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/extractor/places"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      toast({
+        title: "Seed Deleted",
+        description: "Seed has been removed. You can now re-import this business from the Extractor.",
+      });
+      onClose();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to delete seed",
         variant: "destructive",
       });
     },
@@ -646,16 +682,32 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     Edit
                   </Button>
                   {lead.stage === "seed" && (
-                    <Button
-                      size="sm"
-                      onClick={() => convertToLeadMutation.mutate()}
-                      disabled={convertToLeadMutation.isPending}
-                      className="bg-green-600 hover:bg-green-700 text-white"
-                      data-testid="button-convert-to-lead"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      {convertToLeadMutation.isPending ? "Converting..." : "Convert to Lead"}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => convertToLeadMutation.mutate()}
+                        disabled={convertToLeadMutation.isPending}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        data-testid="button-convert-to-lead"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        {convertToLeadMutation.isPending ? "Converting..." : "Convert to Lead"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete "${lead.companyName}"? This will allow you to re-import it from the Extractor.`)) {
+                            deleteSeedMutation.mutate();
+                          }
+                        }}
+                        disabled={deleteSeedMutation.isPending}
+                        data-testid="button-delete-seed"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        {deleteSeedMutation.isPending ? "Deleting..." : "Delete"}
+                      </Button>
+                    </>
                   )}
                   <Badge variant="secondary" className="capitalize">
                     {lead.stage.replace(/_/g, " ")}

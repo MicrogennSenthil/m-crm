@@ -594,6 +594,8 @@ export interface IStorage {
   createExtractedPlaces(places: InsertExtractedPlace[]): Promise<ExtractedPlace[]>;
   updateExtractedPlace(id: string, data: Partial<InsertExtractedPlace & { isImported?: boolean; importedLeadId?: string }>): Promise<ExtractedPlace>;
   deleteExtractedPlace(id: string): Promise<void>;
+  getExtractedPlacesByLeadId(leadId: string): Promise<ExtractedPlace[]>;
+  resetExtractedPlaceImportByLeadId(leadId: string): Promise<void>;
   checkDuplicateLead(data: { 
     contactPhone?: string; 
     businessName?: string; 
@@ -4124,6 +4126,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExtractedPlace(id: string): Promise<void> {
     await db.delete(extractedPlaces).where(eq(extractedPlaces.id, id));
+  }
+
+  async getExtractedPlacesByLeadId(leadId: string): Promise<ExtractedPlace[]> {
+    return await db
+      .select()
+      .from(extractedPlaces)
+      .where(eq(extractedPlaces.importedLeadId, leadId));
+  }
+
+  async resetExtractedPlaceImportByLeadId(leadId: string): Promise<void> {
+    await db
+      .update(extractedPlaces)
+      .set({ isImported: false, importedLeadId: null })
+      .where(eq(extractedPlaces.importedLeadId, leadId));
   }
 
   async checkDuplicateLead(data: { 

@@ -2707,6 +2707,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete seed (allows re-import of the same place from extractor)
+  app.delete("/api/leads/:id", isAuthenticated, requirePermission('leads', 'delete'), async (req: any, res) => {
+    try {
+      const leadId = req.params.id;
+      
+      // Get the lead to verify it exists and check if it's a seed
+      const lead = await storage.getLead(leadId);
+      if (!lead) {
+        return res.status(404).json({ message: "Lead not found" });
+      }
+      
+      // Only allow deletion of seeds (not leads in other stages)
+      if (lead.stage !== "seed") {
+        return res.status(400).json({ 
+          message: "Only seeds can be deleted. Leads in other stages cannot be removed." 
+        });
+      }
+      
+      // Delete the lead first
+      await storage.deleteLead(leadId);
+      
+      // Reset any extracted places that were imported as this lead
+      // This allows them to be re-imported later
+      // Only done after successful deletion to maintain consistency
+      await storage.resetExtractedPlaceImportByLeadId(leadId);
+      
+      // Log the activity
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: leadId,
+        action: "deleted",
+        description: `Seed deleted: ${lead.companyName}`,
+        userId: req.user.claims.sub,
+      });
+      
+      console.log(`[Seed Delete] Deleted seed ${lead.companyName} (${leadId}), import status reset for re-import`);
+      
+      res.json({ success: true, message: "Seed deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting seed:", error);
+      res.status(500).json({ message: "Failed to delete seed" });
+    }
+  });
+
   // Upload photo for lead (seeds page camera feature)
   app.post("/api/leads/photo-upload", isAuthenticated, async (req: any, res) => {
     try {
