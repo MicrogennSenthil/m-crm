@@ -13200,36 +13200,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use Google Places Text Search (New) API
       const url = "https://places.googleapis.com/v1/places:searchText";
       
-      const payload = {
-        textQuery: searchQuery,
-        pageSize: 20,
-        languageCode: "en"
-      };
-
       const headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.location,places.businessStatus,places.priceLevel,places.types"
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.location,places.businessStatus,places.priceLevel,places.types,nextPageToken"
       };
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload)
-      });
+      // Helper to delay between pagination requests (Google requires ~2s delay)
+      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Google Places API error:", errorText);
-        return res.status(response.status).json({ message: "Google Places API request failed" });
-      }
-
-      const data = await response.json();
-      const places = data.places || [];
-
-      // Transform Google Places data to our format
-      const extractedPlaces = places.map((place: any) => {
-        // Parse address to extract city and area
+      // Transform a single place to our format
+      const transformPlace = (place: any) => {
         const address = place.formattedAddress || "";
         const addressParts = address.split(",").map((p: string) => p.trim());
         
@@ -13250,9 +13231,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
           priceLevel: place.priceLevel || null,
           businessStatus: place.businessStatus || "OPERATIONAL"
         };
-      });
+      };
 
-      res.json({ places: extractedPlaces, total: extractedPlaces.length });
+      // Collect all places across pages (Google allows up to 3 pages = 60 results max)
+      const allPlaces: any[] = [];
+      let nextPageToken: string | null = null;
+      let pageCount = 0;
+      const maxPages = 3; // Google Places API returns max 60 results (3 pages x 20)
+
+      do {
+        const payload: any = {
+          textQuery: searchQuery,
+          pageSize: 20,
+          languageCode: "en"
+        };
+
+        // Add page token for subsequent requests
+        if (nextPageToken) {
+          payload.pageToken = nextPageToken;
+        }
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Google Places API error:", errorText);
+          // If we have some results, return them even if pagination fails
+          if (allPlaces.length > 0) {
+            break;
+          }
+          return res.status(response.status).json({ message: "Google Places API request failed" });
+        }
+
+        const data = await response.json();
+        const places = data.places || [];
+        
+        // Add places to our collection
+        allPlaces.push(...places);
+        
+        // Check for next page token
+        nextPageToken = data.nextPageToken || null;
+        pageCount++;
+
+        // If there's another page, wait before requesting (Google requires delay)
+        if (nextPageToken && pageCount < maxPages) {
+          await delay(2000); // 2 second delay as required by Google
+        }
+
+      } while (nextPageToken && pageCount < maxPages);
+
+      // Transform all places to our format and deduplicate by googlePlaceId
+      const seenIds = new Set<string>();
+      const extractedPlaces = allPlaces
+        .map(transformPlace)
+        .filter(place => {
+          if (seenIds.has(place.googlePlaceId)) {
+            return false;
+          }
+          seenIds.add(place.googlePlaceId);
+          return true;
+        });
+
+      console.log(`[Extractor] Fetched ${pageCount} page(s), ${extractedPlaces.length} unique places for query: ${searchQuery}`);
+
+      res.json({ 
+        places: extractedPlaces, 
+        total: extractedPlaces.length,
+        pagesRetrieved: pageCount,
+        hasMoreResults: !!nextPageToken
+      });
     } catch (error) {
       console.error("Error searching Google Places:", error);
       res.status(500).json({ message: "Failed to search Google Places" });
@@ -13340,7 +13391,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user is privileged (can assign to others)
       const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
       const isAdmin = currentUser?.role === "admin";
-      const isDepartmentHead = currentUser ? await storage.isDepartmentHead(currentUserId) : false;
+      // Check if user is a department head by looking for departments they manage
+      const managedDepartments = currentUser ? await storage.getDepartmentsByHead(currentUserId) : [];
+      const isDepartmentHead = managedDepartments.length > 0;
       const canAssign = isSuperAdmin || isAdmin || isDepartmentHead;
       
       // Determine the actual assignee
