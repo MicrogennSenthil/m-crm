@@ -5849,7 +5849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         department = await storage.getDepartment(departmentId);
         // Check if user is a department head using junction table
         const headResult = await storage.isUserDepartmentHead(userId);
-        isDepartmentHead = headResult.isHead;
+        isDepartmentHead = headResult.isDeptHead;
         
         // If department head, get all department members for their managed departments
         if (isDepartmentHead) {
