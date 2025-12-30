@@ -1043,7 +1043,8 @@ export class DatabaseStorage implements IStorage {
   // Lead operations
   async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number }): Promise<Lead[]> {
     const conditions: any[] = [];
-    const maxLimit = filters?.limit || 500; // Default limit for performance
+    // No default limit - return all leads unless explicitly limited
+    const maxLimit = filters?.limit;
     
     if (filters?.stage) {
       conditions.push(eq(leads.stage, filters.stage));
@@ -1057,11 +1058,19 @@ export class DatabaseStorage implements IStorage {
       conditions.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
     }
     
+    let query = db.select().from(leads);
+    
     if (conditions.length > 0) {
-      return await db.select().from(leads).where(and(...conditions)).orderBy(desc(leads.createdAt)).limit(maxLimit);
+      query = query.where(and(...conditions)) as any;
     }
     
-    return await db.select().from(leads).orderBy(desc(leads.createdAt)).limit(maxLimit);
+    query = query.orderBy(desc(leads.createdAt)) as any;
+    
+    if (maxLimit) {
+      query = query.limit(maxLimit) as any;
+    }
+    
+    return await query;
   }
 
   async getLead(id: string): Promise<Lead | undefined> {
