@@ -855,6 +855,8 @@ export default function ExtractorPage() {
                     <TableHead>City</TableHead>
                     <TableHead>Area</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Website</TableHead>
                     <TableHead>Industry</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
@@ -879,21 +881,37 @@ export default function ExtractorPage() {
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{place.businessName}</div>
-                        {place.website && (
-                          <a 
-                            href={place.website} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-500 hover:underline"
-                          >
-                            {place.website}
-                          </a>
-                        )}
                       </TableCell>
                       <TableCell>{place.city || "N/A"}</TableCell>
                       <TableCell>{place.area || "N/A"}</TableCell>
                       <TableCell>
                         {place.contactPhone || <span className="text-muted-foreground">N/A</span>}
+                      </TableCell>
+                      <TableCell>
+                        {place.contactEmail ? (
+                          <a 
+                            href={`mailto:${place.contactEmail}`}
+                            className="text-xs text-blue-500 hover:underline"
+                          >
+                            {place.contactEmail}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">N/A</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {place.website ? (
+                          <a 
+                            href={place.website} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-500 hover:underline truncate max-w-[150px] block"
+                          >
+                            {place.website.replace(/^https?:\/\//, '')}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">N/A</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {place.industry && (

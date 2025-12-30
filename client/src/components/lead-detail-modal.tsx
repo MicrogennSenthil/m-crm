@@ -695,20 +695,28 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Phone Number - Display prominently */}
                   <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <a href={`mailto:${lead.contactEmail}`} className="hover:underline">
-                      {lead.contactEmail}
-                    </a>
-                  </div>
-                  {lead.contactPhone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <a href={`tel:${lead.contactPhone}`} className="hover:underline">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    {lead.contactPhone ? (
+                      <a href={`tel:${lead.contactPhone}`} className="hover:underline font-medium">
                         {lead.contactPhone}
                       </a>
-                    </div>
-                  )}
+                    ) : (
+                      <span className="text-muted-foreground">Not available</span>
+                    )}
+                  </div>
+                  {/* Email - Check if it's a placeholder email */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    {lead.contactEmail && !lead.contactEmail.endsWith('@pending.com') ? (
+                      <a href={`mailto:${lead.contactEmail}`} className="hover:underline">
+                        {lead.contactEmail}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Not available</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
