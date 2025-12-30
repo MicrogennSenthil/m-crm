@@ -2725,13 +2725,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Delete the lead first
-      await storage.deleteLead(leadId);
-      
-      // Reset any extracted places that were imported as this lead
-      // This allows them to be re-imported later
-      // Only done after successful deletion to maintain consistency
+      // First, reset any extracted places that reference this lead
+      // This removes the foreign key reference before we delete the lead
       await storage.resetExtractedPlaceImportByLeadId(leadId);
+      
+      // Now delete the lead (safe because FK reference is cleared)
+      await storage.deleteLead(leadId);
       
       // Log the activity
       await storage.logActivity({
