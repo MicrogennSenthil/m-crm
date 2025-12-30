@@ -602,6 +602,10 @@ export interface IStorage {
     city?: string; 
     area?: string; 
   }): Promise<Lead | null>;
+  
+  // Batch check for duplicates in leads table - returns phone numbers that already exist
+  checkDuplicateLeadsByPhone(phoneNumbers: string[]): Promise<string[]>;
+  checkDuplicateLeadsByCompanyName(companyNames: { name: string; city?: string }[]): Promise<string[]>;
 
   // Extractor Options operations (custom industries and segments)
   getExtractorOptions(type?: 'industry' | 'segment'): Promise<ExtractorOption[]>;
@@ -4160,6 +4164,56 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return existingLead || null;
+  }
+
+  // Batch check for duplicate leads by phone numbers
+  async checkDuplicateLeadsByPhone(phoneNumbers: string[]): Promise<string[]> {
+    if (phoneNumbers.length === 0) return [];
+    
+    // Filter out null/empty phone numbers
+    const validPhones = phoneNumbers.filter(p => p && p.trim());
+    if (validPhones.length === 0) return [];
+    
+    const existingLeads = await db
+      .select({ contactPhone: leads.contactPhone })
+      .from(leads)
+      .where(inArray(leads.contactPhone, validPhones));
+    
+    return existingLeads
+      .map(l => l.contactPhone)
+      .filter((phone): phone is string => phone !== null);
+  }
+
+  // Batch check for duplicate leads by company name (+ optional city)
+  // Returns composite keys in format "name::city" for matched entries
+  async checkDuplicateLeadsByCompanyName(companyNames: { name: string; city?: string }[]): Promise<string[]> {
+    if (companyNames.length === 0) return [];
+    
+    // Get all existing leads with matching company names
+    const names = companyNames.map(c => c.name).filter(n => n && n.trim());
+    if (names.length === 0) return [];
+    
+    const existingLeads = await db
+      .select({ companyName: leads.companyName, city: leads.city })
+      .from(leads)
+      .where(inArray(leads.companyName, names));
+    
+    // Return composite keys (name::city) that have matches
+    const matchedKeys: string[] = [];
+    for (const input of companyNames) {
+      const match = existingLeads.find(l => {
+        if (l.companyName !== input.name) return false;
+        // If input has city, check city match; if no city provided, match any
+        if (input.city && l.city && l.city.toLowerCase() !== input.city.toLowerCase()) return false;
+        return true;
+      });
+      if (match) {
+        // Return composite key for exact matching
+        matchedKeys.push(`${input.name}::${input.city || ""}`);
+      }
+    }
+    
+    return matchedKeys;
   }
 
   // Extractor Options operations

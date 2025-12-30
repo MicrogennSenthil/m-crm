@@ -13296,21 +13296,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return true;
         });
 
-      // Check which places already exist in the database (saved by ANY user)
-      const allGooglePlaceIds = transformedPlaces.map(p => p.googlePlaceId);
-      const existingGooglePlaceIds = await storage.getExistingGooglePlaceIds(allGooglePlaceIds);
-      const existingIdsSet = new Set(existingGooglePlaceIds);
+      // Check which places already exist as LEADS in the CRM (by phone or company name)
+      // This checks against actual CRM data, not just extracted places
+      const phoneNumbers = transformedPlaces
+        .map(p => p.contactPhone)
+        .filter((phone): phone is string => !!phone);
       
-      // Mark each place with whether it already exists
-      const placesWithStatus = transformedPlaces.map(p => ({
-        ...p,
-        alreadySaved: existingIdsSet.has(p.googlePlaceId)
+      const companyChecks = transformedPlaces.map(p => ({
+        name: p.businessName,
+        city: p.city || undefined
       }));
+      
+      // Batch check for duplicates in leads table
+      const existingPhones = await storage.checkDuplicateLeadsByPhone(phoneNumbers);
+      const existingCompanyKeys = await storage.checkDuplicateLeadsByCompanyName(companyChecks);
+      
+      const existingPhonesSet = new Set(existingPhones);
+      const existingCompanyKeysSet = new Set(existingCompanyKeys);
+      
+      // Mark each place with whether it already exists in CRM
+      const placesWithStatus = transformedPlaces.map(p => {
+        // Check if phone number matches
+        const phoneMatch = p.contactPhone && existingPhonesSet.has(p.contactPhone);
+        // Check company name + city using composite key format
+        const companyKey = `${p.businessName}::${p.city || ""}`;
+        const companyMatch = existingCompanyKeysSet.has(companyKey);
+        
+        return {
+          ...p,
+          alreadySaved: phoneMatch || companyMatch
+        };
+      });
       
       const newPlaces = placesWithStatus.filter(p => !p.alreadySaved);
       const existingPlaces = placesWithStatus.filter(p => p.alreadySaved);
 
-      console.log(`[Extractor] Fetched ${pageCount} page(s), ${transformedPlaces.length} from Google, ${existingPlaces.length} already saved, ${newPlaces.length} new for query: ${searchQuery}`);
+      console.log(`[Extractor] Fetched ${pageCount} page(s), ${transformedPlaces.length} from Google, ${existingPlaces.length} already in CRM, ${newPlaces.length} new for query: ${searchQuery}`);
 
       res.json({ 
         places: newPlaces,
