@@ -1599,9 +1599,16 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           <p className={cn("text-sm", followUp.completed && "line-through")}>
                             {followUp.notes}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {format(new Date(followUp.followUpDate), "PPP 'at' h:mm a")}
-                          </p>
+                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                            <p>
+                              <span className="font-medium">Next Follow-up:</span> {format(new Date(followUp.followUpDate), "PPP 'at' h:mm a")}
+                            </p>
+                            {followUp.createdAt && (
+                              <p>
+                                <span className="font-medium">Created:</span> {format(new Date(followUp.createdAt), "PPP 'at' h:mm a")}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))
