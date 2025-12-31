@@ -3580,17 +3580,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return true;
     }
     
-    // Check if user is a department manager and the lead's assignee is in their department (using junction table)
+    // Check if user is a department head (using junction table)
     const managedDepartments = await storage.getDepartmentsByHead(userId);
     
-    if (managedDepartments.length > 0 && lead.salesExecutiveId) {
-      const leadAssignee = await storage.getUser(lead.salesExecutiveId);
-      if (leadAssignee && leadAssignee.departmentId) {
-        for (const dept of managedDepartments) {
-          if (leadAssignee.departmentId === dept.id) {
-            return true;
+    if (managedDepartments.length > 0) {
+      // Department heads can access all leads assigned to users in their department
+      if (lead.salesExecutiveId) {
+        const leadAssignee = await storage.getUser(lead.salesExecutiveId);
+        if (leadAssignee && leadAssignee.departmentId) {
+          for (const dept of managedDepartments) {
+            if (leadAssignee.departmentId === dept.id) {
+              return true;
+            }
           }
         }
+      }
+      
+      // Department heads in Sales department can also access unassigned leads
+      const salesDept = managedDepartments.find(d => d.name.toLowerCase() === 'sales');
+      if (salesDept && !lead.salesExecutiveId) {
+        return true;
       }
     }
     
