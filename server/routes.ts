@@ -5280,7 +5280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const bOpen = !resolvedStatuses.includes(b.status);
         if (aOpen && !bOpen) return -1;
         if (!aOpen && bOpen) return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
       });
       
       console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${user.email} (db id: ${user.id})`);
@@ -5711,7 +5711,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const newTicketNumber = `TKT-${String(count.length + 1).padStart(6, '0')}`;
         
         const newTicket = await storage.createTicket({
-          ticketNumber: newTicketNumber,
           customerId: ticket.customerId,
           customerName: ticket.customerName,
           customerEmail: ticket.customerEmail,
@@ -5891,8 +5890,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (departmentName.includes('sales') || userRole.includes('sales')) {
         const allLeads = await storage.getLeads();
         const userLeads = isDepartmentHead 
-          ? allLeads.filter(l => departmentMembers.some(m => m.id === l.assignedTo) || l.assignedTo === userId)
-          : allLeads.filter(l => l.assignedTo === userId);
+          ? allLeads.filter(l => departmentMembers.some(m => m.id === l.salesExecutiveId) || l.salesExecutiveId === userId)
+          : allLeads.filter(l => l.salesExecutiveId === userId);
+        
+        // Get follow-ups for counting pending ones
+        const allFollowUps = await Promise.all(userLeads.map(l => storage.getFollowUpsByLead(l.id)));
+        const pendingFollowups = allFollowUps.flat().filter(f => !f.completed && new Date(f.followUpDate) <= new Date()).length;
         
         departmentStats.stats = {
           type: 'sales',
@@ -5900,7 +5903,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           activeLeads: userLeads.filter(l => l.stage !== 'closed_won' && l.stage !== 'closed_lost').length,
           wonLeads: userLeads.filter(l => l.stage === 'closed_won').length,
           lostLeads: userLeads.filter(l => l.stage === 'closed_lost').length,
-          pendingFollowups: userLeads.filter(l => l.nextFollowUp && new Date(l.nextFollowUp) <= new Date()).length
+          pendingFollowups
         };
       }
       
@@ -5925,9 +5928,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Technical/Implementation Department Stats
       else if (departmentName.includes('technical') || departmentName.includes('implementation')) {
         const allProjects = await storage.getProjects();
-        const userProjects = isDepartmentHead
-          ? allProjects
-          : allProjects.filter(p => p.engineers?.includes(userId) || p.leadEngineerId === userId);
+        // For non-heads, filter projects by checking project engineer assignments
+        let userProjects = allProjects;
+        if (!isDepartmentHead) {
+          const projectEngineerAssignments = await Promise.all(
+            allProjects.map(async (p) => {
+              const engineers = await storage.getProjectEngineers(p.id);
+              return { projectId: p.id, engineerIds: engineers.map(e => e.engineerId) };
+            })
+          );
+          const userProjectIds = projectEngineerAssignments
+            .filter(pe => pe.engineerIds.includes(userId))
+            .map(pe => pe.projectId);
+          userProjects = allProjects.filter(p => userProjectIds.includes(p.id));
+        }
         
         departmentStats.stats = {
           type: 'implementation',
@@ -9295,7 +9309,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userTickets = allTickets.filter(t => t.assignedEngineerId === user.id);
         const periodTicketsClosed = userTickets.filter(t => {
           if (!resolvedStatuses.includes(t.status)) return false;
-          const date = t.closedAt || t.updatedAt ? new Date(t.closedAt || t.updatedAt) : null;
+          const dateVal = t.closedAt || t.updatedAt;
+          const date = dateVal ? new Date(dateVal) : null;
           return date && date >= startDate && date < endDate;
         });
         const overdueTickets = userTickets.filter(t => {
@@ -9730,7 +9745,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!customerMap.has(customerId)) {
             const customer = customers.find(c => c.id === customerId);
             customerMap.set(customerId, {
-              customer: customer ? { id: customer.id, name: customer.name, code: customer.code } : null,
+              customer: customer ? { id: customer.id, name: customer.name } : null,
               pending: 0,
               inProgress: 0,
               completed: 0,
@@ -10082,9 +10097,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Ticket not found" });
       }
       
-      // Authorization: Allow if user is assigned, created the ticket, is admin, or has super admin email
+      // Authorization: Allow if user is assigned, is admin, or has super admin email
       const isSuperAdmin = userEmail === "senthil@microgenn.com";
-      const isAssigned = ticket.assignedTo === userId || ticket.createdBy === userId;
+      const isAssigned = ticket.assignedEngineerId === userId;
       const isAdminRole = userRole === "admin";
       
       if (!isAssigned && !isAdminRole && !isSuperAdmin) {
@@ -10122,9 +10137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Ticket not found" });
       }
       
-      // Authorization: Allow if user is assigned, created the ticket, is admin, or has super admin email
+      // Authorization: Allow if user is assigned, is admin, or has super admin email
       const isSuperAdmin = userEmail === "senthil@microgenn.com";
-      const isAssigned = ticket.assignedTo === userId || ticket.createdBy === userId;
+      const isAssigned = ticket.assignedEngineerId === userId;
       const isAdminRole = userRole === "admin";
       
       if (!isAssigned && !isAdminRole && !isSuperAdmin) {
@@ -10200,27 +10215,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Determine final status
       const finalStatus = completionStatus === 'complete' ? 'completed' : 'incomplete';
       
-      // If marking as incomplete, apply penalty to the current assignee
+      // If marking as incomplete, log the penalty activity
       if (completionStatus === 'incomplete' && existingTask.assignedTo) {
-        // Apply penalty points for incomplete work
-        const penaltyPoints = 5; // Configurable penalty points for incomplete work
-        await storage.updateDevelopmentTask(id, {
-          previousAssignedTo: existingTask.assignedTo,
-          incompleteMarkedAt: new Date(),
-          incompleteMarkedBy: userId,
-          incompleteReason: completionDescription.trim(),
-          penaltyApplied: true,
-          penaltyPoints: (existingTask.penaltyPoints || 0) + penaltyPoints,
-          penaltyReason: `Work marked incomplete: ${completionDescription.trim()}`,
-        });
-        
-        // Log penalty activity
+        // Log penalty activity for incomplete work
+        const penaltyPoints = 5;
         await storage.logActivity({
           userId,
           entityType: 'development_task',
           entityId: id,
           action: 'penalty_applied',
-          description: `${penaltyPoints} penalty points applied to previous assignee for incomplete work on ${existingTask.taskNumber}`,
+          description: `${penaltyPoints} penalty points applied for incomplete work on ${existingTask.taskNumber}`,
         });
       }
       
@@ -10251,24 +10255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateTicket(existingTask.sourceId, { status: sourceTicketStatus });
           }
           
-          // Add a comment to the ticket about the development task completion
-          if (sourceTicketComment) {
-            await storage.createConversation({
-              ticketId: existingTask.sourceId,
-              userId,
-              message: sourceTicketComment,
-              isInternal: false,
-            });
-          } else {
-            // Auto-add a comment about the development task completion
-            await storage.createConversation({
-              ticketId: existingTask.sourceId,
-              userId,
-              message: `Development task ${updated.taskNumber} has been marked as ${completionStatus}. ${completionDescription.trim()}`,
-              isInternal: true,
-            });
-          }
-          
+          // Log activity for the ticket about development task completion
           await storage.logActivity({
             userId,
             entityType: 'ticket',
@@ -10321,7 +10308,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completionDescription: null,
         completionImageUrl: null,
         notes: notes || existingTask.notes,
-        reassignmentCount: (existingTask.reassignmentCount || 0) + 1,
       });
       
       // Log activity
@@ -12890,7 +12876,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Recent reports (last 10)
       const recentReports = allReports
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
         .slice(0, 10);
       
       res.json({
@@ -13169,7 +13155,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const report = await storage.updateMarketingDailyReport(id, { 
         status: 'submitted',
-        submittedAt: new Date(),
       });
       
       res.json(report);
@@ -13215,8 +13200,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newStatus = action === 'approve' ? 'approved' : 'rejected';
       const report = await storage.updateMarketingDailyReport(id, { 
         status: newStatus,
-        approvedBy: currentUserId,
-        approvedAt: new Date(),
       });
       
       res.json(report);
