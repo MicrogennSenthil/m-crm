@@ -660,41 +660,81 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             )}
             
-            {task.voiceNoteUrl && (
-              <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-2">Voice Note</h4>
-                <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => {
-                      const audio = document.getElementById("task-voice-audio") as HTMLAudioElement;
-                      if (audio) {
-                        if (isPlayingVoice) {
-                          audio.pause();
-                        } else {
-                          audio.play();
+            {/* Task Media Section - Voice Note, Video, Image */}
+            {(task.voiceNoteUrl || task.videoUrl || task.imageUrl) && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <FileIcon className="h-4 w-4" />
+                  Task Media
+                </h4>
+                
+                {/* Voice Note */}
+                {task.voiceNoteUrl && (
+                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg" data-testid="task-voice-note">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => {
+                        const audio = document.getElementById("task-voice-audio") as HTMLAudioElement;
+                        if (audio) {
+                          if (isPlayingVoice) {
+                            audio.pause();
+                          } else {
+                            audio.play();
+                          }
+                          setIsPlayingVoice(!isPlayingVoice);
                         }
-                        setIsPlayingVoice(!isPlayingVoice);
-                      }
-                    }}
-                    data-testid="button-play-task-voice"
-                  >
-                    {isPlayingVoice ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <Mic className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">
-                      Voice Note ({formatDuration(task.voiceNoteDuration)})
-                    </span>
+                      }}
+                      data-testid="button-play-task-voice"
+                    >
+                      {isPlayingVoice ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Mic className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        Voice Note {task.voiceNoteDuration ? `(${formatDuration(task.voiceNoteDuration)})` : ""}
+                      </span>
+                    </div>
+                    <audio
+                      id="task-voice-audio"
+                      src={task.voiceNoteUrl}
+                      onEnded={() => setIsPlayingVoice(false)}
+                      className="hidden"
+                    />
                   </div>
-                  <audio
-                    id="task-voice-audio"
-                    src={task.voiceNoteUrl}
-                    onEnded={() => setIsPlayingVoice(false)}
-                    className="hidden"
-                  />
-                </div>
+                )}
+                
+                {/* Video Recording */}
+                {task.videoUrl && (
+                  <div className="space-y-2" data-testid="task-video">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Video className="h-4 w-4" />
+                      <span>Video Recording</span>
+                    </div>
+                    <video 
+                      src={task.videoUrl} 
+                      controls 
+                      className="w-full rounded-lg max-h-64 bg-black" 
+                      data-testid="video-task-recording"
+                    />
+                  </div>
+                )}
+                
+                {/* Photo/Image */}
+                {task.imageUrl && (
+                  <div className="space-y-2" data-testid="task-image">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Image className="h-4 w-4" />
+                      <span>Photo</span>
+                    </div>
+                    <img 
+                      src={task.imageUrl} 
+                      alt="Task photo" 
+                      className="w-full rounded-lg max-h-64 object-contain bg-muted" 
+                      data-testid="image-task-photo"
+                    />
+                  </div>
+                )}
               </div>
             )}
             
@@ -1011,6 +1051,24 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                           </span>
                         </div>
                         <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
+                        
+                        {/* Voice Note for Comment */}
+                        {comment.voiceNoteUrl && (
+                          <div className="mt-2 flex items-center gap-2 p-2 bg-muted rounded-lg" data-testid={`comment-voice-${comment.id}`}>
+                            <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <audio 
+                              src={comment.voiceNoteUrl} 
+                              controls 
+                              className="h-8 flex-1"
+                              data-testid={`audio-comment-${comment.id}`}
+                            />
+                            {comment.voiceNoteDuration && (
+                              <span className="text-xs text-muted-foreground flex-shrink-0">
+                                {formatDuration(comment.voiceNoteDuration)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
