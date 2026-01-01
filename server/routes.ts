@@ -7037,12 +7037,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Log activity
-      await storage.createActivity({
+      await storage.logActivity({
         userId,
         action: "task_converted_to_lead",
         entityType: "lead",
         entityId: lead.id,
-        details: { 
+        description: `Converted task "${task.title}" to lead "${lead.companyName}"`,
+        metadata: { 
           taskId: task.id,
           taskTitle: task.title,
           leadId: lead.id,
@@ -7050,10 +7051,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
       
-      // Optionally mark the task as completed
+      // Mark the task as completed (completedAt is set automatically by storage)
       await storage.updateTask(taskId, { 
         status: "completed",
-        completedAt: new Date(),
       });
       
       res.json({ 

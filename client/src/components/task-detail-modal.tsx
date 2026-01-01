@@ -64,6 +64,11 @@ import {
   Camera,
   Type,
   Code2,
+  Target,
+  Building2,
+  Mail,
+  Phone,
+  Loader2,
 } from "lucide-react";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 
@@ -121,6 +126,20 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [followupsOpen, setFollowupsOpen] = useState(true);
   const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
+  
+  // Convert to Lead state
+  const [showConvertToLeadDialog, setShowConvertToLeadDialog] = useState(false);
+  const [convertLeadForm, setConvertLeadForm] = useState({
+    companyName: "",
+    contactPerson: "",
+    contactEmail: "",
+    contactPhone: "",
+    leadSource: "task_conversion",
+    currency: "INR",
+    estimatedValue: "",
+    city: "",
+    area: "",
+  });
   
   // Refs for recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -263,6 +282,71 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     setVoiceRecordingUrl(null);
     setVideoRecordingUrl(null);
     setImageUrl(null);
+  };
+
+  // Convert to Lead mutation
+  const convertToLeadMutation = useMutation({
+    mutationFn: async (data: typeof convertLeadForm) => {
+      const response = await apiRequest("POST", `/api/tasks/${task.id}/convert-to-lead`, data);
+      return response as unknown as { success: boolean; lead: { id: string }; message: string };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      setShowConvertToLeadDialog(false);
+      resetConvertLeadForm();
+      onOpenChange(false);
+      onTaskUpdate?.();
+      toast({ 
+        title: "Task converted to lead", 
+        description: result.message,
+      });
+      // Navigate to the new lead
+      navigate(`/sales?lead=${result.lead.id}`);
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to convert task to lead", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const resetConvertLeadForm = () => {
+    setConvertLeadForm({
+      companyName: "",
+      contactPerson: "",
+      contactEmail: "",
+      contactPhone: "",
+      leadSource: "task_conversion",
+      currency: "INR",
+      estimatedValue: "",
+      city: "",
+      area: "",
+    });
+  };
+
+  const handleConvertToLead = () => {
+    if (!convertLeadForm.companyName || !convertLeadForm.contactPerson || !convertLeadForm.contactEmail) {
+      toast({ 
+        title: "Required fields missing", 
+        description: "Please fill in company name, contact person, and email",
+        variant: "destructive" 
+      });
+      return;
+    }
+    convertToLeadMutation.mutate(convertLeadForm);
+  };
+
+  const openConvertToLeadDialog = () => {
+    // Pre-fill form with task title as company name
+    setConvertLeadForm(prev => ({
+      ...prev,
+      companyName: task.title,
+    }));
+    setShowConvertToLeadDialog(true);
   };
 
   const handleAddFollowup = () => {
@@ -420,6 +504,15 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openConvertToLeadDialog}
+                data-testid="button-convert-to-lead"
+              >
+                <Target className="h-4 w-4 mr-2" />
+                Convert to Lead
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -964,6 +1057,196 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
           sourceReference={task.id}
           sourceDescription={task.description || undefined}
         />
+
+        {/* Convert to Lead Dialog */}
+        <Dialog open={showConvertToLeadDialog} onOpenChange={setShowConvertToLeadDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Convert Task to Lead
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Create a new sales lead from this task. All comments will be transferred to the new lead.
+              </p>
+              
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="companyName">Company Name *</Label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="companyName"
+                      placeholder="Company name"
+                      value={convertLeadForm.companyName}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, companyName: e.target.value }))}
+                      className="pl-10"
+                      data-testid="input-convert-company-name"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="contactPerson">Contact Person *</Label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="contactPerson"
+                      placeholder="Contact person name"
+                      value={convertLeadForm.contactPerson}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, contactPerson: e.target.value }))}
+                      className="pl-10"
+                      data-testid="input-convert-contact-person"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="contactEmail">Contact Email *</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="contactEmail"
+                      type="email"
+                      placeholder="email@example.com"
+                      value={convertLeadForm.contactEmail}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, contactEmail: e.target.value }))}
+                      className="pl-10"
+                      data-testid="input-convert-contact-email"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="contactPhone">Contact Phone</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="contactPhone"
+                      placeholder="Phone number"
+                      value={convertLeadForm.contactPhone}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, contactPhone: e.target.value }))}
+                      className="pl-10"
+                      data-testid="input-convert-contact-phone"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="leadSource">Lead Source</Label>
+                    <Select
+                      value={convertLeadForm.leadSource}
+                      onValueChange={(value) => setConvertLeadForm(prev => ({ ...prev, leadSource: value }))}
+                    >
+                      <SelectTrigger data-testid="select-convert-lead-source">
+                        <SelectValue placeholder="Select source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="task_conversion">Task Conversion</SelectItem>
+                        <SelectItem value="referral">Referral</SelectItem>
+                        <SelectItem value="website">Website</SelectItem>
+                        <SelectItem value="linkedin">LinkedIn</SelectItem>
+                        <SelectItem value="facebook">Facebook</SelectItem>
+                        <SelectItem value="instagram">Instagram</SelectItem>
+                        <SelectItem value="cold_call">Cold Call</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select
+                      value={convertLeadForm.currency}
+                      onValueChange={(value) => setConvertLeadForm(prev => ({ ...prev, currency: value }))}
+                    >
+                      <SelectTrigger data-testid="select-convert-currency">
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INR">INR</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                        <SelectItem value="AED">AED</SelectItem>
+                        <SelectItem value="SGD">SGD</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="estimatedValue">Estimated Value</Label>
+                  <Input
+                    id="estimatedValue"
+                    type="number"
+                    placeholder="Enter estimated value"
+                    value={convertLeadForm.estimatedValue}
+                    onChange={(e) => setConvertLeadForm(prev => ({ ...prev, estimatedValue: e.target.value }))}
+                    data-testid="input-convert-estimated-value"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      placeholder="City"
+                      value={convertLeadForm.city}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, city: e.target.value }))}
+                      data-testid="input-convert-city"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="area">Area</Label>
+                    <Input
+                      id="area"
+                      placeholder="Area/Locality"
+                      value={convertLeadForm.area}
+                      onChange={(e) => setConvertLeadForm(prev => ({ ...prev, area: e.target.value }))}
+                      data-testid="input-convert-area"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConvertToLeadDialog(false);
+                  resetConvertLeadForm();
+                }}
+                data-testid="button-cancel-convert-lead"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConvertToLead}
+                disabled={convertToLeadMutation.isPending || !convertLeadForm.companyName || !convertLeadForm.contactPerson || !convertLeadForm.contactEmail}
+                data-testid="button-confirm-convert-lead"
+              >
+                {convertToLeadMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Converting...
+                  </>
+                ) : (
+                  <>
+                    <Target className="h-4 w-4 mr-2" />
+                    Convert to Lead
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
