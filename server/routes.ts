@@ -6973,6 +6973,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Convert task to lead
+  app.post("/api/tasks/:id/convert-to-lead", isAuthenticated, requirePermission('sales', 'create'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const taskId = req.params.id;
+      
+      // Get the task
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      
+      // Validate required fields from the request body
+      const { 
+        companyName, 
+        contactPerson, 
+        contactEmail, 
+        contactPhone,
+        leadSource = "task_conversion",
+        currency = "INR",
+        estimatedValue,
+        city,
+        area,
+      } = req.body;
+      
+      if (!companyName || !contactPerson || !contactEmail || !leadSource) {
+        return res.status(400).json({ message: "Company name, contact person, contact email, and lead source are required" });
+      }
+      
+      // Create the lead
+      const leadData = {
+        companyName,
+        contactPerson,
+        contactEmail,
+        contactPhone: contactPhone || null,
+        leadSource,
+        currency,
+        estimatedValue: estimatedValue ? parseInt(estimatedValue) : null,
+        stage: "lead", // Start as lead since it came from a qualified task
+        salesExecutiveId: userId,
+        city: city || null,
+        area: area || null,
+      };
+      
+      const lead = await storage.createLead(leadData);
+      
+      // Transfer task comments as lead comments
+      const taskComments = await storage.getTaskComments(taskId);
+      for (const comment of taskComments) {
+        await storage.createLeadComment({
+          leadId: lead.id,
+          userId: comment.userId,
+          comment: comment.content,
+        });
+      }
+      
+      // Add a note about the conversion
+      await storage.createLeadComment({
+        leadId: lead.id,
+        userId: userId,
+        comment: `Lead created from task: ${task.title}\n\n${task.description || ''}`,
+      });
+      
+      // Log activity
+      await storage.createActivity({
+        userId,
+        action: "task_converted_to_lead",
+        entityType: "lead",
+        entityId: lead.id,
+        details: { 
+          taskId: task.id,
+          taskTitle: task.title,
+          leadId: lead.id,
+          companyName: lead.companyName,
+        },
+      });
+      
+      // Optionally mark the task as completed
+      await storage.updateTask(taskId, { 
+        status: "completed",
+        completedAt: new Date(),
+      });
+      
+      res.json({ 
+        success: true, 
+        lead,
+        message: `Task converted to lead successfully. ${taskComments.length} comments transferred.`,
+      });
+    } catch (error) {
+      console.error("Error converting task to lead:", error);
+      res.status(500).json({ message: "Failed to convert task to lead" });
+    }
+  });
+
   // Get all users for task assignment/mentions - only return active users for selection
   app.get("/api/users/all", isAuthenticated, async (req, res) => {
     try {
