@@ -660,83 +660,91 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             )}
             
-            {/* Task Media Section - Voice Note, Video, Image */}
-            {(task.voiceNoteUrl || task.videoUrl || task.imageUrl) && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <FileIcon className="h-4 w-4" />
-                  Task Media
-                </h4>
-                
-                {/* Voice Note */}
-                {task.voiceNoteUrl && (
-                  <div className="flex items-center gap-3 p-3 bg-muted rounded-lg" data-testid="task-voice-note">
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={() => {
-                        const audio = document.getElementById("task-voice-audio") as HTMLAudioElement;
-                        if (audio) {
-                          if (isPlayingVoice) {
-                            audio.pause();
-                          } else {
-                            audio.play();
+            {/* Task Media Section - Voice Note, Video, Image from attachments */}
+            {(() => {
+              const videoAttachments = task.attachments?.filter(a => a.type === "video") || [];
+              const photoAttachments = task.attachments?.filter(a => a.type === "photo") || [];
+              const hasMedia = task.voiceNoteUrl || videoAttachments.length > 0 || photoAttachments.length > 0;
+              
+              if (!hasMedia) return null;
+              
+              return (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <FileIcon className="h-4 w-4" />
+                    Task Media
+                  </h4>
+                  
+                  {/* Voice Note */}
+                  {task.voiceNoteUrl && (
+                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg" data-testid="task-voice-note">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => {
+                          const audio = document.getElementById("task-voice-audio") as HTMLAudioElement;
+                          if (audio) {
+                            if (isPlayingVoice) {
+                              audio.pause();
+                            } else {
+                              audio.play();
+                            }
+                            setIsPlayingVoice(!isPlayingVoice);
                           }
-                          setIsPlayingVoice(!isPlayingVoice);
-                        }
-                      }}
-                      data-testid="button-play-task-voice"
-                    >
-                      {isPlayingVoice ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <Mic className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        Voice Note {task.voiceNoteDuration ? `(${formatDuration(task.voiceNoteDuration)})` : ""}
-                      </span>
+                        }}
+                        data-testid="button-play-task-voice"
+                      >
+                        {isPlayingVoice ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Mic className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">
+                          Voice Note {task.voiceNoteDuration ? `(${formatDuration(task.voiceNoteDuration)})` : ""}
+                        </span>
+                      </div>
+                      <audio
+                        id="task-voice-audio"
+                        src={task.voiceNoteUrl}
+                        onEnded={() => setIsPlayingVoice(false)}
+                        className="hidden"
+                      />
                     </div>
-                    <audio
-                      id="task-voice-audio"
-                      src={task.voiceNoteUrl}
-                      onEnded={() => setIsPlayingVoice(false)}
-                      className="hidden"
-                    />
-                  </div>
-                )}
-                
-                {/* Video Recording */}
-                {task.videoUrl && (
-                  <div className="space-y-2" data-testid="task-video">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Video className="h-4 w-4" />
-                      <span>Video Recording</span>
+                  )}
+                  
+                  {/* Video Recordings from attachments */}
+                  {videoAttachments.map((video, idx) => (
+                    <div key={video.id || idx} className="space-y-2" data-testid={`task-video-${idx}`}>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Video className="h-4 w-4" />
+                        <span>{video.name || "Video Recording"}</span>
+                      </div>
+                      <video 
+                        src={video.url} 
+                        controls 
+                        className="w-full rounded-lg max-h-64 bg-black" 
+                        data-testid={`video-task-recording-${idx}`}
+                      />
                     </div>
-                    <video 
-                      src={task.videoUrl} 
-                      controls 
-                      className="w-full rounded-lg max-h-64 bg-black" 
-                      data-testid="video-task-recording"
-                    />
-                  </div>
-                )}
-                
-                {/* Photo/Image */}
-                {task.imageUrl && (
-                  <div className="space-y-2" data-testid="task-image">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Image className="h-4 w-4" />
-                      <span>Photo</span>
+                  ))}
+                  
+                  {/* Photos from attachments */}
+                  {photoAttachments.map((photo, idx) => (
+                    <div key={photo.id || idx} className="space-y-2" data-testid={`task-image-${idx}`}>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Image className="h-4 w-4" />
+                        <span>{photo.name || "Photo"}</span>
+                      </div>
+                      <img 
+                        src={photo.url} 
+                        alt={photo.name || "Task photo"} 
+                        className="w-full rounded-lg max-h-64 object-contain bg-muted" 
+                        data-testid={`image-task-photo-${idx}`}
+                      />
                     </div>
-                    <img 
-                      src={task.imageUrl} 
-                      alt="Task photo" 
-                      className="w-full rounded-lg max-h-64 object-contain bg-muted" 
-                      data-testid="image-task-photo"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
             
             {/* Attachments Section - with upload capability for images, audio, video, documents */}
             <div className="p-4 border rounded-lg" data-testid="section-attachments">

@@ -148,12 +148,12 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   });
   
   // Fetch all customers
-  const { data: customers = [] } = useQuery<Customer[]>({
+  const { data: customers = [], refetch: refetchCustomers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
   
-  // Filter active customers
-  const activeCustomers = customers.filter((c) => c.isActive !== false);
+  // Filter active customers (status = "active")
+  const activeCustomers = customers.filter((c) => c.status === "active");
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -316,8 +316,11 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       const response = await apiRequest("POST", "/api/customers", data);
       return response.json();
     },
-    onSuccess: (newCustomer) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+    onSuccess: async (newCustomer) => {
+      // Immediately refetch customers to get the new one in the list
+      await queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      await refetchCustomers();
+      
       setSelectedCustomerId(newCustomer.id);
       setIsNewCustomer(false);
       form.setValue("relatedEntityType", "customer");
