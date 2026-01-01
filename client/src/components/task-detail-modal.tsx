@@ -493,8 +493,8 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl mb-2">{task.title}</DialogTitle>
@@ -551,8 +551,8 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
           </div>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
+          <div className="space-y-6 pb-4">
             {task.description && (
               <div>
                 <h4 className="text-sm font-medium text-muted-foreground mb-2">Description</h4>
@@ -1086,9 +1086,9 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
           </div>
         </ScrollArea>
         
-        <Separator className="my-4" />
+        <Separator className="my-4 flex-shrink-0" />
         
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-shrink-0">
           <Avatar className="h-8 w-8 flex-shrink-0">
             <AvatarImage src={currentUser?.profileImageUrl || undefined} />
             <AvatarFallback className="text-xs">
