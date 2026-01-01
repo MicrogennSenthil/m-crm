@@ -175,7 +175,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
   const addCommentMutation = useMutation({
     mutationFn: async (content: string) => {
       const response = await apiRequest("POST", `/api/tasks/${task.id}/comments`, { content });
-      return response as CommentWithUser;
+      return response as unknown as CommentWithUser;
     },
     onMutate: async (content: string) => {
       // Cancel any outgoing refetches
@@ -192,6 +192,9 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
         content,
         createdAt: new Date(),
         updatedAt: new Date(),
+        mentionedUsers: null,
+        voiceNoteUrl: null,
+        voiceNoteDuration: null,
         user: currentUser,
       };
       
@@ -824,14 +827,14 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                       followups.map((followup) => (
                         <div key={followup.id} className="flex gap-3 p-3 bg-muted/50 rounded-lg" data-testid={`followup-${followup.id}`}>
                           <div className="flex-shrink-0 mt-1">
-                            {getFollowupTypeIcon(followup.type)}
+                            {getFollowupTypeIcon(followup.followupType)}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-sm font-medium">
                                 {followup.createdByUser?.firstName} {followup.createdByUser?.lastName}
                               </span>
-                              <Badge variant="outline" className="text-xs py-0 capitalize">{followup.type}</Badge>
+                              <Badge variant="outline" className="text-xs py-0 capitalize">{followup.followupType}</Badge>
                               <span className="text-xs text-muted-foreground">
                                 {followup.createdAt && format(new Date(followup.createdAt), "MMM d, h:mm a")}
                               </span>
@@ -841,16 +844,16 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                               <p className="text-sm whitespace-pre-wrap mb-2">{followup.description}</p>
                             )}
                             
-                            {followup.contentUrl && followup.type === "voice" && (
-                              <audio src={followup.contentUrl} controls className="w-full" data-testid={`audio-followup-${followup.id}`} />
+                            {followup.voiceNoteUrl && followup.followupType === "voice" && (
+                              <audio src={followup.voiceNoteUrl} controls className="w-full" data-testid={`audio-followup-${followup.id}`} />
                             )}
                             
-                            {followup.contentUrl && followup.type === "video" && (
-                              <video src={followup.contentUrl} controls className="w-full rounded-lg max-h-48" data-testid={`video-followup-${followup.id}`} />
+                            {followup.videoUrl && followup.followupType === "video" && (
+                              <video src={followup.videoUrl} controls className="w-full rounded-lg max-h-48" data-testid={`video-followup-${followup.id}`} />
                             )}
                             
-                            {followup.contentUrl && followup.type === "image" && (
-                              <img src={followup.contentUrl} alt="Follow-up" className="w-full rounded-lg max-h-48 object-contain" data-testid={`image-followup-${followup.id}`} />
+                            {followup.imageUrl && followup.followupType === "image" && (
+                              <img src={followup.imageUrl} alt="Follow-up" className="w-full rounded-lg max-h-48 object-contain" data-testid={`image-followup-${followup.id}`} />
                             )}
                             
                             {followup.nextFollowupDate && (
@@ -958,7 +961,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
           sourceType="task"
           sourceId={task.id}
           sourceTitle={task.title}
-          sourceReference={task.taskNumber}
+          sourceReference={task.id}
           sourceDescription={task.description || undefined}
         />
       </DialogContent>
