@@ -1,11 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -21,7 +33,7 @@ import { LeadImportDialog } from "@/components/lead-import-dialog";
 import { GoogleSheetsImportDialog } from "@/components/google-sheets-import-dialog";
 import { WebhookAuthSettingsDialog } from "@/components/webhook-auth-settings";
 import { RescheduleDemoDialog } from "@/components/reschedule-demo-dialog";
-import type { Lead, FollowUp } from "@shared/schema";
+import type { Lead, FollowUp, User as UserType } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -42,6 +54,7 @@ interface ProcessedFollowUp {
   completed: boolean;
   leadCompanyName: string | null;
   leadContactPerson: string | null;
+  leadStage: string | null;
   isOverdue: boolean;
   daysOverdue: number;
 }
@@ -70,6 +83,11 @@ export default function Sales() {
     return (saved as LayoutType) || "kanban";
   });
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCity, setSelectedCity] = useState<string>("all");
+  const [selectedArea, setSelectedArea] = useState<string>("all");
+  const [selectedUser, setSelectedUser] = useState<string>("all");
+  const [selectedLeadSource, setSelectedLeadSource] = useState<string>("all");
   const { toast } = useToast();
 
   const handleLayoutChange = (newLayout: LayoutType) => {
@@ -79,6 +97,11 @@ export default function Sales() {
 
   const { data: leads, isLoading } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
+  });
+
+  // Fetch users for filter dropdown
+  const { data: users = [] } = useQuery<UserType[]>({
+    queryKey: ["/api/users"],
   });
 
   // Fetch today's followups (pending followups with date <= today)
@@ -158,12 +181,94 @@ export default function Sales() {
     },
   });
 
-  const filteredLeads = leads?.filter((lead) =>
-    searchQuery
-      ? lead.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())
-      : true
-  );
+  // Extract unique cities, areas, and lead sources for filter dropdowns
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    leads?.forEach((lead) => {
+      if (lead.city && lead.city.trim()) {
+        cities.add(lead.city.trim());
+      }
+    });
+    return Array.from(cities).sort();
+  }, [leads]);
+
+  const uniqueAreas = useMemo(() => {
+    const areas = new Set<string>();
+    leads?.forEach((lead) => {
+      if (lead.area && lead.area.trim()) {
+        if (selectedCity === "all" || lead.city === selectedCity) {
+          areas.add(lead.area.trim());
+        }
+      }
+    });
+    return Array.from(areas).sort();
+  }, [leads, selectedCity]);
+
+  const uniqueLeadSources = useMemo(() => {
+    const sources = new Set<string>();
+    leads?.forEach((lead) => {
+      if (lead.leadSource && lead.leadSource.trim()) {
+        sources.add(lead.leadSource.trim());
+      }
+    });
+    return Array.from(sources).sort();
+  }, [leads]);
+
+  // Clear filters function
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedCity("all");
+    setSelectedArea("all");
+    setSelectedUser("all");
+    setSelectedLeadSource("all");
+    setSelectedStage(null);
+  };
+
+  // Count active filters
+  const activeFilterCount = [
+    selectedCity !== "all",
+    selectedArea !== "all",
+    selectedUser !== "all",
+    selectedLeadSource !== "all",
+    searchQuery !== "",
+  ].filter(Boolean).length;
+
+  const filteredLeads = useMemo(() => {
+    return leads?.filter((lead) => {
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          lead.companyName.toLowerCase().includes(query) ||
+          lead.contactPerson?.toLowerCase().includes(query) ||
+          lead.contactPhone?.toLowerCase().includes(query) ||
+          lead.contactEmail?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      // City filter
+      if (selectedCity !== "all" && lead.city !== selectedCity) {
+        return false;
+      }
+
+      // Area filter
+      if (selectedArea !== "all" && lead.area !== selectedArea) {
+        return false;
+      }
+
+      // User filter
+      if (selectedUser !== "all" && lead.salesExecutiveId !== selectedUser) {
+        return false;
+      }
+
+      // Lead source filter
+      if (selectedLeadSource !== "all" && lead.leadSource !== selectedLeadSource) {
+        return false;
+      }
+
+      return true;
+    }) || [];
+  }, [leads, searchQuery, selectedCity, selectedArea, selectedUser, selectedLeadSource]);
 
   const getLeadsByStage = (stageId: string) => {
     return filteredLeads?.filter((lead) => lead.stage === stageId) || [];
@@ -330,10 +435,124 @@ export default function Sales() {
             <List className="h-4 w-4" />
           </Button>
         </div>
-        <Button variant="outline" size="icon" className="min-h-[44px] min-w-[44px]">
+        <Button 
+          variant="outline" 
+          size="icon" 
+          className="min-h-[44px] min-w-[44px]"
+          onClick={() => setShowFilters(!showFilters)}
+          data-testid="button-toggle-filters"
+        >
           <Filter className="h-4 w-4" />
+          {activeFilterCount > 0 && (
+            <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+              {activeFilterCount}
+            </Badge>
+          )}
         </Button>
       </div>
+
+      {/* Filter Panel */}
+      <Collapsible open={showFilters} onOpenChange={setShowFilters}>
+        <CollapsibleContent>
+          <Card className="mb-4">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Options
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-muted-foreground"
+                  data-testid="button-clear-filters"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear All
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                {/* City Filter */}
+                <div className="space-y-2">
+                  <Label className="text-xs">City</Label>
+                  <Select value={selectedCity} onValueChange={(val) => {
+                    setSelectedCity(val);
+                    setSelectedArea("all");
+                  }}>
+                    <SelectTrigger className="min-h-[40px]" data-testid="select-city">
+                      <SelectValue placeholder="All Cities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities</SelectItem>
+                      {uniqueCities.map((city) => (
+                        <SelectItem key={city} value={city}>{city}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Area Filter */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Area</Label>
+                  <Select value={selectedArea} onValueChange={setSelectedArea}>
+                    <SelectTrigger className="min-h-[40px]" data-testid="select-area">
+                      <SelectValue placeholder="All Areas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Areas</SelectItem>
+                      {uniqueAreas.map((area) => (
+                        <SelectItem key={area} value={area}>{area}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Assigned User Filter */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Assigned To</Label>
+                  <Select value={selectedUser} onValueChange={setSelectedUser}>
+                    <SelectTrigger className="min-h-[40px]" data-testid="select-user">
+                      <SelectValue placeholder="All Users" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Users</SelectItem>
+                      {users.filter(u => u.isActive).map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.firstName} {user.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Lead Source Filter */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Lead Source</Label>
+                  <Select value={selectedLeadSource} onValueChange={setSelectedLeadSource}>
+                    <SelectTrigger className="min-h-[40px]" data-testid="select-lead-source">
+                      <SelectValue placeholder="All Sources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      {uniqueLeadSources.map((source) => (
+                        <SelectItem key={source} value={source}>{source}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Results Count */}
+                <div className="space-y-2 flex items-end">
+                  <div className="text-sm text-muted-foreground">
+                    Showing <span className="font-medium text-foreground">{filteredLeads.length}</span> of {leads?.length || 0} leads
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Stage Filter Buttons - shown in compact and list views */}
       {(layout === "compact" || layout === "list") && (
