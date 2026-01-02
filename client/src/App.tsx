@@ -27,6 +27,7 @@ import SalesReports from "@/pages/reports-sales";
 import ImplementationReports from "@/pages/reports-implementation";
 import SupportReports from "@/pages/reports-support";
 import DevelopmentReports from "@/pages/reports-development";
+import SeedsReport from "@/pages/seeds-report";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
 import Tasks from "@/pages/tasks";
@@ -126,6 +127,7 @@ function AuthenticatedLayout() {
               <Route path="/hr/feedback" component={HRFeedback} />
               <Route path="/marketing/daily-report" component={MarketingDailyReport} />
               <Route path="/marketing/dashboard" component={MarketingDashboard} />
+              <Route path="/reports/seeds" component={SeedsReport} />
               {/* Fallback to Home for any unmatched routes in authenticated layout */}
               <Route component={Home} />
             </Switch>

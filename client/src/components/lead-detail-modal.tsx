@@ -72,6 +72,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [closedReason, setClosedReason] = useState("");
   
+  // Seed interest tracking state
+  const [interestStatus, setInterestStatus] = useState<string | null>(null);
+  const [notInterestedReason, setNotInterestedReason] = useState("");
+  const [nextFollowupDate, setNextFollowupDate] = useState<Date>();
+  const [nextFollowupTime, setNextFollowupTime] = useState("10:00");
+  const [seedFollowupCalendarOpen, setSeedFollowupCalendarOpen] = useState(false);
+  
   // Calendar popover open states for auto-close
   const [demoCalendarOpen, setDemoCalendarOpen] = useState(false);
   const [followUpCalendarOpen, setFollowUpCalendarOpen] = useState(false);
@@ -102,6 +109,14 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         latitude: lead.latitude || undefined,
         longitude: lead.longitude || undefined,
       });
+      // Initialize interest tracking state from lead
+      setInterestStatus((lead as any).interestStatus || null);
+      setNotInterestedReason((lead as any).notInterestedReason || "");
+      if ((lead as any).nextFollowupDate) {
+        setNextFollowupDate(new Date((lead as any).nextFollowupDate));
+      } else {
+        setNextFollowupDate(undefined);
+      }
     }
   }, [lead, open]);
 
@@ -327,6 +342,47 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       toast({
         title: "Error",
         description: "Failed to delete seed",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update seed interest status mutation
+  const updateInterestMutation = useMutation({
+    mutationFn: async (data: { 
+      interestStatus: string; 
+      notInterestedReason?: string;
+      nextFollowupDate?: Date;
+    }) => {
+      await apiRequest("PATCH", `/api/leads/${lead.id}/interest`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/seeds/report"] });
+      toast({
+        title: "Interest Status Updated",
+        description: interestStatus === "interested" 
+          ? "Seed marked as interested with followup scheduled" 
+          : "Seed marked as not interested",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update interest status",
         variant: "destructive",
       });
     },
@@ -952,6 +1008,179 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 </div>
               )}
             </div>
+
+            {/* Seed Interest Tracking Section - Only show for seeds */}
+            {!isEditing && lead.stage === "seed" && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Interest Status
+                  </h3>
+                  
+                  {/* Current Status Display */}
+                  {(lead as any).interestStatus && (
+                    <div className={cn(
+                      "mb-3 p-3 border rounded-md",
+                      (lead as any).interestStatus === "interested" 
+                        ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                        : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
+                    )}>
+                      <div className="flex items-center gap-2 text-sm">
+                        {(lead as any).interestStatus === "interested" ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="font-medium text-green-700 dark:text-green-300">Interested</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span className="font-medium text-red-700 dark:text-red-300">Not Interested</span>
+                          </>
+                        )}
+                      </div>
+                      {(lead as any).interestStatus === "interested" && (lead as any).nextFollowupDate && (
+                        <div className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                          <CalendarIcon className="h-3 w-3" />
+                          <span>Next Followup: {format(new Date((lead as any).nextFollowupDate), "PPP 'at' h:mm a")}</span>
+                        </div>
+                      )}
+                      {(lead as any).interestStatus === "not_interested" && (lead as any).notInterestedReason && (
+                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                          Reason: {(lead as any).notInterestedReason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Interest Status Selection */}
+                  <div className="space-y-3 p-3 border rounded-md">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant={interestStatus === "interested" ? "default" : "outline"}
+                        onClick={() => setInterestStatus("interested")}
+                        className={interestStatus === "interested" ? "bg-green-600 hover:bg-green-700" : ""}
+                        data-testid="button-interested"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Interested
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={interestStatus === "not_interested" ? "default" : "outline"}
+                        onClick={() => setInterestStatus("not_interested")}
+                        className={interestStatus === "not_interested" ? "bg-red-600 hover:bg-red-700" : ""}
+                        data-testid="button-not-interested"
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Not Interested
+                      </Button>
+                    </div>
+                    
+                    {/* If Interested - Show Next Followup Date */}
+                    {interestStatus === "interested" && (
+                      <div className="space-y-2">
+                        <Label>Next Followup Date & Time</Label>
+                        <div className="flex gap-2">
+                          <Popover open={seedFollowupCalendarOpen} onOpenChange={setSeedFollowupCalendarOpen}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "justify-start text-left font-normal flex-1",
+                                  !nextFollowupDate && "text-muted-foreground"
+                                )}
+                                data-testid="button-pick-followup-date"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {nextFollowupDate ? format(nextFollowupDate, "PPP") : "Pick date"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={nextFollowupDate}
+                                onSelect={(date) => {
+                                  setNextFollowupDate(date);
+                                  setSeedFollowupCalendarOpen(false);
+                                }}
+                                disabled={(date) => date < startOfDay(new Date())}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <Select value={nextFollowupTime} onValueChange={setNextFollowupTime}>
+                            <SelectTrigger className="w-24" data-testid="select-followup-time">
+                              <SelectValue placeholder="Time" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 24 }, (_, i) => {
+                                const hour = i.toString().padStart(2, "0");
+                                return (
+                                  <SelectItem key={`${hour}:00`} value={`${hour}:00`}>
+                                    {hour}:00
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* If Not Interested - Show Reason */}
+                    {interestStatus === "not_interested" && (
+                      <div className="space-y-2">
+                        <Label>Reason (optional)</Label>
+                        <Textarea
+                          placeholder="Enter reason for not interested..."
+                          value={notInterestedReason}
+                          onChange={(e) => setNotInterestedReason(e.target.value)}
+                          className="min-h-[60px]"
+                          data-testid="input-not-interested-reason"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Save Button */}
+                    {interestStatus && (
+                      <Button
+                        onClick={() => {
+                          const data: any = { interestStatus };
+                          if (interestStatus === "not_interested" && notInterestedReason) {
+                            data.notInterestedReason = notInterestedReason;
+                          }
+                          if (interestStatus === "interested" && nextFollowupDate) {
+                            const [hours, minutes] = nextFollowupTime.split(":").map(Number);
+                            const dateWithTime = new Date(nextFollowupDate);
+                            dateWithTime.setHours(hours, minutes, 0, 0);
+                            data.nextFollowupDate = dateWithTime;
+                          }
+                          updateInterestMutation.mutate(data);
+                        }}
+                        disabled={updateInterestMutation.isPending || (interestStatus === "interested" && !nextFollowupDate)}
+                        className="w-full"
+                        data-testid="button-save-interest"
+                      >
+                        {updateInterestMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Interest Status
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             {!isEditing && quotes && quotes.length > 0 && (
               <>

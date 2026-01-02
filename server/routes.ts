@@ -3606,6 +3606,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return false;
   }
 
+  // Update seed interest status
+  app.patch("/api/leads/:id/interest", isAuthenticated, requirePermission('leads', 'edit'), async (req: any, res) => {
+    try {
+      const { interestStatus, notInterestedReason, nextFollowupDate } = req.body;
+      
+      if (!interestStatus || !["interested", "not_interested"].includes(interestStatus)) {
+        return res.status(400).json({ message: "Valid interest status (interested/not_interested) is required" });
+      }
+      
+      const updateData: any = {
+        interestStatus,
+        interestUpdatedAt: new Date(),
+      };
+      
+      if (interestStatus === "not_interested") {
+        updateData.notInterestedReason = notInterestedReason || null;
+        updateData.nextFollowupDate = null; // Clear followup date if not interested
+      } else if (interestStatus === "interested") {
+        updateData.notInterestedReason = null; // Clear reason if interested
+        if (nextFollowupDate) {
+          updateData.nextFollowupDate = new Date(nextFollowupDate);
+        }
+      }
+      
+      const updated = await storage.updateLead(req.params.id, updateData);
+      
+      // Log activity
+      const lead = await storage.getLead(req.params.id);
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: req.params.id,
+        action: interestStatus === "interested" ? "seed_interested" : "seed_not_interested",
+        description: interestStatus === "interested" 
+          ? `Seed "${lead?.companyName}" marked as interested${nextFollowupDate ? `, followup scheduled for ${new Date(nextFollowupDate).toLocaleDateString()}` : ""}`
+          : `Seed "${lead?.companyName}" marked as not interested${notInterestedReason ? `: ${notInterestedReason}` : ""}`,
+        userId: req.user.claims.sub,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating interest status:", error);
+      res.status(500).json({ message: "Failed to update interest status" });
+    }
+  });
+
+  // Seeds Report - Get seeds with interest status filtering
+  app.get("/api/seeds/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const { interestStatus, fromDate, toDate } = req.query;
+      
+      // Get all seeds (leads with stage = 'seed')
+      const allLeads = await storage.getLeads();
+      let seeds = allLeads.filter(lead => lead.stage === "seed");
+      
+      // Filter by interest status
+      if (interestStatus === "interested") {
+        seeds = seeds.filter(seed => (seed as any).interestStatus === "interested");
+      } else if (interestStatus === "not_interested") {
+        seeds = seeds.filter(seed => (seed as any).interestStatus === "not_interested");
+      } else if (interestStatus === "undecided") {
+        seeds = seeds.filter(seed => !(seed as any).interestStatus);
+      }
+      
+      // Filter by date range
+      if (fromDate) {
+        const from = new Date(fromDate as string);
+        seeds = seeds.filter(seed => seed.createdAt && new Date(seed.createdAt) >= from);
+      }
+      if (toDate) {
+        const to = new Date(toDate as string);
+        to.setHours(23, 59, 59, 999);
+        seeds = seeds.filter(seed => seed.createdAt && new Date(seed.createdAt) <= to);
+      }
+      
+      // Get sales executives for display
+      const allUsers = await storage.getUsers();
+      const usersMap = new Map(allUsers.map(u => [u.id, u]));
+      
+      const seedsWithDetails = seeds.map(seed => ({
+        ...seed,
+        salesExecutive: seed.salesExecutiveId ? usersMap.get(seed.salesExecutiveId) : null,
+      }));
+      
+      res.json(seedsWithDetails);
+    } catch (error) {
+      console.error("Error fetching seeds report:", error);
+      res.status(500).json({ message: "Failed to fetch seeds report" });
+    }
+  });
+
+  // Seed followup reminders - Get seeds with upcoming followups
+  app.get("/api/seeds/followup-reminders", isAuthenticated, async (req: any, res) => {
+    try {
+      const { days = "7" } = req.query;
+      const daysAhead = parseInt(days as string) || 7;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const futureDate = new Date(today);
+      futureDate.setDate(futureDate.getDate() + daysAhead);
+      
+      // Get all seeds with next followup dates
+      const allLeads = await storage.getLeads();
+      const seedsWithFollowups = allLeads.filter(lead => {
+        if (lead.stage !== "seed") return false;
+        if ((lead as any).interestStatus !== "interested") return false;
+        if (!(lead as any).nextFollowupDate) return false;
+        
+        const followupDate = new Date((lead as any).nextFollowupDate);
+        return followupDate >= today && followupDate <= futureDate;
+      });
+      
+      // Get sales executives for display
+      const allUsers = await storage.getUsers();
+      const usersMap = new Map(allUsers.map(u => [u.id, u]));
+      
+      const seedsWithDetails = seedsWithFollowups.map(seed => ({
+        ...seed,
+        salesExecutive: seed.salesExecutiveId ? usersMap.get(seed.salesExecutiveId) : null,
+      }));
+      
+      // Sort by followup date
+      seedsWithDetails.sort((a, b) => {
+        const dateA = new Date((a as any).nextFollowupDate);
+        const dateB = new Date((b as any).nextFollowupDate);
+        return dateA.getTime() - dateB.getTime();
+      });
+      
+      res.json(seedsWithDetails);
+    } catch (error) {
+      console.error("Error fetching seed followup reminders:", error);
+      res.status(500).json({ message: "Failed to fetch followup reminders" });
+    }
+  });
+
   // Follow-up routes
   app.get("/api/leads/:id/follow-ups", isAuthenticated, async (req: any, res) => {
     try {

@@ -41,6 +41,7 @@ import {
   Megaphone,
   CalendarDays,
   MapPinned,
+  Sprout,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -339,6 +340,14 @@ const reportsSubItems = [
     bgColor: "bg-indigo-500/10",
     module: "development_reports",
   },
+  {
+    title: "Seeds Report",
+    url: "/reports/seeds",
+    icon: Sprout,
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
+    module: "leads", // Use leads module for permission since seeds are leads
+  },
 ];
 
 // User Management sub-menu items - with module permissions
@@ -467,7 +476,7 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || permissionsSuperAdmin;
 
   // Check if user has access to reports based on permissions (not hardcoded roles)
-  const canViewReports = isSuperAdmin || canView("reports") || canView("sales_reports") || canView("implementation_reports") || canView("support_reports");
+  const canViewReports = isSuperAdmin || canView("reports") || canView("sales_reports") || canView("implementation_reports") || canView("support_reports") || canView("leads");
   
   // Check if user has access to tasks based on permissions
   const canViewTasks = isSuperAdmin || canView("tasks") || canView("today_tasks");
