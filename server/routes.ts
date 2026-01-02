@@ -3085,10 +3085,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Verify token should be configured in environment
     const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
     
+    // If no verify token is configured, show helpful message
+    if (!verifyToken) {
+      console.warn("[Facebook Webhook] FB_WEBHOOK_VERIFY_TOKEN not configured");
+      return res.status(500).send("Webhook not configured. Please set FB_WEBHOOK_VERIFY_TOKEN environment variable.");
+    }
+    
+    // Handle Facebook verification challenge
     if (mode === "subscribe" && token === verifyToken) {
+      console.log("[Facebook Webhook] Verification successful");
       res.status(200).send(challenge);
+    } else if (mode && token) {
+      console.warn(`[Facebook Webhook] Verification failed. Mode: ${mode}, Token mismatch`);
+      res.status(403).send("Verification failed - token mismatch");
     } else {
-      res.status(403).send("Verification failed");
+      // Direct browser access without Facebook parameters
+      res.status(200).send("Facebook Webhook endpoint ready. Configure this URL in Facebook Developers Console.");
     }
   });
 
