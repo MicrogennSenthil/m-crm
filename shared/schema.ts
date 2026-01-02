@@ -202,6 +202,11 @@ export const leads = pgTable("leads", {
   // Photo capture field
   photoUrl: text("photo_url"), // URL of captured photo from camera
   photoCapturedAt: timestamp("photo_captured_at"), // When photo was captured
+  // Seed interest tracking fields
+  interestStatus: text("interest_status"), // null = undecided, "interested", "not_interested"
+  interestUpdatedAt: timestamp("interest_updated_at"), // When interest status was last changed
+  notInterestedReason: text("not_interested_reason"), // Reason if marked as not interested
+  nextFollowupDate: timestamp("next_followup_date"), // Next followup date for interested seeds
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
