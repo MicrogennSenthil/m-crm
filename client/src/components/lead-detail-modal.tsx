@@ -1078,6 +1078,32 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         Not Interested
                       </Button>
                     </div>
+
+                    {/* Existing Customer Checkbox */}
+                    <div className="flex items-center gap-3 p-2 border rounded-md bg-muted/30">
+                      <Checkbox
+                        id="existing-customer"
+                        checked={(lead as any).isExistingCustomer || false}
+                        onCheckedChange={(checked) => {
+                          updateLeadMutation.mutate({ isExistingCustomer: checked === true });
+                        }}
+                        disabled={updateLeadMutation.isPending}
+                        data-testid="checkbox-existing-customer"
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="existing-customer" className="cursor-pointer font-medium text-sm">
+                          Existing Customer
+                        </Label>
+                        <span className="text-xs text-muted-foreground">
+                          Mark if this is an existing customer (will be added to Customer Master)
+                        </span>
+                      </div>
+                      {(lead as any).isExistingCustomer && (
+                        <Badge variant="outline" className="ml-auto bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                          Existing
+                        </Badge>
+                      )}
+                    </div>
                     
                     {/* If Interested - Show Next Followup Date */}
                     {interestStatus === "interested" && (
