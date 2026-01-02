@@ -2593,6 +2593,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updated = await storage.updateLead(req.params.id, updateData);
       
+      // Auto-create customer record when existing customer flag is set
+      if (updateData.isExistingCustomer === true && !currentLead?.isExistingCustomer && !updated.customerId) {
+        try {
+          // Check if a customer with same name already exists
+          const existingCustomers = await storage.getCustomers();
+          const existingCustomer = existingCustomers.find(
+            c => c.name.toLowerCase().trim() === updated.companyName.toLowerCase().trim()
+          );
+          
+          let customerId: string;
+          
+          if (existingCustomer) {
+            // Link to existing customer
+            customerId = existingCustomer.id;
+            console.log(`[Existing Customer] Linked seed to existing customer: ${updated.companyName}`);
+          } else {
+            // Create new customer record
+            const newCustomer = await storage.createCustomer({
+              name: updated.companyName,
+              contactPerson: updated.contactPerson || null,
+              email: updated.contactEmail || null,
+              phone: updated.contactPhone || null,
+              customerType: "customer",
+              status: "active",
+              selectedModules: updated.selectedModules || [],
+            });
+            
+            customerId = newCustomer.id;
+            
+            // Log customer creation activity
+            await storage.logActivity({
+              entityType: "customer",
+              entityId: newCustomer.id,
+              action: "created",
+              description: `Customer auto-created from existing customer seed: ${updated.companyName}`,
+              userId: req.user.claims.sub,
+            });
+            
+            console.log(`[Existing Customer] Created customer record from seed: ${updated.companyName}`);
+          }
+          
+          // Link customer to seed
+          await storage.updateLead(req.params.id, { customerId });
+        } catch (customerError) {
+          console.error("[Existing Customer] Error creating/linking customer:", customerError);
+          // Don't fail the whole update if customer creation fails
+        }
+      }
+      
       // Handle points for sales executive assignment changes
       if (updateData.salesExecutiveId !== undefined && 
           currentLead && 
@@ -3758,10 +3807,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       futureDate.setDate(futureDate.getDate() + daysAhead);
       
       // Get all seeds with next followup dates
+      // Only show seeds that are: interested, NOT existing customers, and have followup dates
       const allLeads = await storage.getLeads();
       const seedsWithFollowups = allLeads.filter(lead => {
         if (lead.stage !== "seed") return false;
         if ((lead as any).interestStatus !== "interested") return false;
+        if ((lead as any).isExistingCustomer === true) return false; // Exclude existing customers from followups
         if (!(lead as any).nextFollowupDate) return false;
         
         const followupDate = new Date((lead as any).nextFollowupDate);
