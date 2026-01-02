@@ -207,6 +207,8 @@ export const leads = pgTable("leads", {
   interestUpdatedAt: timestamp("interest_updated_at"), // When interest status was last changed
   notInterestedReason: text("not_interested_reason"), // Reason if marked as not interested
   nextFollowupDate: timestamp("next_followup_date"), // Next followup date for interested seeds
+  // Existing customer flag
+  isExistingCustomer: boolean("is_existing_customer").default(false), // Flag to mark if this is an existing customer
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

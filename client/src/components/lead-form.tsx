@@ -126,6 +126,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       area: "",
       latitude: undefined,
       longitude: undefined,
+      isExistingCustomer: false,
     },
   });
 
@@ -333,6 +334,31 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
                 Contact details will be auto-filled from Customer Master
               </FormDescription>
             )}
+            
+            {/* Existing Customer Flag */}
+            <FormField
+              control={form.control}
+              name="isExistingCustomer"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center gap-3 mt-3 space-y-0">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value || false}
+                      onCheckedChange={field.onChange}
+                      data-testid="checkbox-existing-customer"
+                    />
+                  </FormControl>
+                  <div className="flex items-center gap-2">
+                    <FormLabel className="font-normal cursor-pointer mb-0">
+                      Existing Customer
+                    </FormLabel>
+                    <FormDescription className="text-xs text-muted-foreground mb-0">
+                      Mark if this is an existing customer
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

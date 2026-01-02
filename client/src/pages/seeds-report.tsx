@@ -79,6 +79,7 @@ export default function SeedsReportPage() {
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedLeadSource, setSelectedLeadSource] = useState<string>("all");
+  const [selectedExistingCustomer, setSelectedExistingCustomer] = useState<string>("all");
 
   const getInterestStatusParam = (tab: string) => {
     switch (tab) {
@@ -200,9 +201,16 @@ export default function SeedsReportPage() {
         return false;
       }
 
+      // Existing customer filter
+      if (selectedExistingCustomer !== "all") {
+        const isExisting = seed.isExistingCustomer === true;
+        if (selectedExistingCustomer === "yes" && !isExisting) return false;
+        if (selectedExistingCustomer === "no" && isExisting) return false;
+      }
+
       return true;
     });
-  }, [allLeads, searchQuery, selectedCity, selectedArea, selectedStage, selectedUser, selectedCustomer, selectedLeadSource]);
+  }, [allLeads, searchQuery, selectedCity, selectedArea, selectedStage, selectedUser, selectedCustomer, selectedLeadSource, selectedExistingCustomer]);
 
   const stats = useMemo(() => ({
     total: filteredSeeds.length,
@@ -231,6 +239,7 @@ export default function SeedsReportPage() {
     selectedUser !== "all",
     selectedCustomer !== "all",
     selectedLeadSource !== "all",
+    selectedExistingCustomer !== "all",
     searchQuery !== "",
   ].filter(Boolean).length;
 
@@ -260,6 +269,7 @@ export default function SeedsReportPage() {
 
       const headers = [
         "Company Name",
+        "Existing Customer",
         "Contact Person",
         "Email",
         "Phone",
@@ -276,6 +286,7 @@ export default function SeedsReportPage() {
 
       const rows = dataToExport.map((seed) => [
         seed.companyName || "",
+        seed.isExistingCustomer ? "Yes" : "No",
         seed.contactPerson || "",
         seed.contactEmail || "",
         seed.contactPhone || "",
@@ -598,7 +609,7 @@ export default function SeedsReportPage() {
                       <SelectItem value="all">All Customers</SelectItem>
                       {customers.map((customer) => (
                         <SelectItem key={customer.id} value={customer.id}>
-                          {customer.companyName}
+                          {customer.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -617,6 +628,21 @@ export default function SeedsReportPage() {
                       {uniqueLeadSources.map((source) => (
                         <SelectItem key={source} value={source}>{source}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Existing Customer Filter */}
+                <div className="space-y-2">
+                  <Label>Existing Customer</Label>
+                  <Select value={selectedExistingCustomer} onValueChange={setSelectedExistingCustomer}>
+                    <SelectTrigger data-testid="select-existing-customer">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="yes">Yes - Existing</SelectItem>
+                      <SelectItem value="no">No - New Prospect</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -870,6 +896,11 @@ function SeedsTable({
                 <div className="flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{seed.companyName}</span>
+                  {seed.isExistingCustomer && (
+                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                      Existing
+                    </Badge>
+                  )}
                 </div>
               </TableCell>
               <TableCell>
