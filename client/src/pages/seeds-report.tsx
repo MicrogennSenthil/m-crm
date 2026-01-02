@@ -578,7 +578,7 @@ export default function SeedsReportPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Users</SelectItem>
-                      {users.filter(u => u.status === "active").map((user) => (
+                      {users.filter(u => u.isActive).map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.firstName} {user.lastName}
                         </SelectItem>
@@ -596,7 +596,7 @@ export default function SeedsReportPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Customers</SelectItem>
-                      {customers.filter(c => c.status === "active").map((customer) => (
+                      {customers.map((customer) => (
                         <SelectItem key={customer.id} value={customer.id}>
                           {customer.companyName}
                         </SelectItem>
