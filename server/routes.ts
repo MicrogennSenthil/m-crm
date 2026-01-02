@@ -3654,11 +3654,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Seeds Report - Get seeds with interest status filtering
   app.get("/api/seeds/report", isAuthenticated, async (req: any, res) => {
     try {
-      const { interestStatus, fromDate, toDate } = req.query;
+      const { interestStatus, fromDate, toDate, stage } = req.query;
       
-      // Get all seeds (leads with stage = 'seed')
+      // Get all leads
       const allLeads = await storage.getLeads();
-      let seeds = allLeads.filter(lead => lead.stage === "seed");
+      
+      // Filter by stage (default to seed only if no stage specified)
+      let seeds = allLeads;
+      if (stage && stage !== "all") {
+        seeds = seeds.filter(lead => lead.stage === stage);
+      } else if (!stage) {
+        // Default to seeds only for backward compatibility
+        seeds = seeds.filter(lead => lead.stage === "seed");
+      }
       
       // Filter by interest status
       if (interestStatus === "interested") {

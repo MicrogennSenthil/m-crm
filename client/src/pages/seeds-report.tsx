@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import {
@@ -17,6 +17,8 @@ import {
   Clock,
   Loader2,
   FileSpreadsheet,
+  X,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,10 +44,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
-import type { Lead, User as UserType } from "@shared/schema";
+import type { Lead, User as UserType, Customer } from "@shared/schema";
 
 type SeedWithDetails = Lead & {
   salesExecutive?: UserType | null;
@@ -64,6 +70,15 @@ export default function SeedsReportPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSeed, setSelectedSeed] = useState<Lead | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // Filter states
+  const [selectedCity, setSelectedCity] = useState<string>("all");
+  const [selectedArea, setSelectedArea] = useState<string>("all");
+  const [selectedStage, setSelectedStage] = useState<string>("seed");
+  const [selectedUser, setSelectedUser] = useState<string>("all");
+  const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
+  const [selectedLeadSource, setSelectedLeadSource] = useState<string>("all");
 
   const getInterestStatusParam = (tab: string) => {
     switch (tab) {
@@ -78,13 +93,15 @@ export default function SeedsReportPage() {
     }
   };
 
-  const { data: seeds = [], isLoading, refetch } = useQuery<SeedWithDetails[]>({
+  // Fetch leads/seeds data
+  const { data: allLeads = [], isLoading, refetch } = useQuery<SeedWithDetails[]>({
     queryKey: [
       "/api/seeds/report",
       {
         interestStatus: getInterestStatusParam(activeTab),
         fromDate: fromDate?.toISOString(),
         toDate: toDate?.toISOString(),
+        stage: selectedStage === "all" ? undefined : selectedStage,
       },
     ],
   });
@@ -93,25 +110,129 @@ export default function SeedsReportPage() {
     queryKey: ["/api/seeds/followup-reminders", { days: "30" }],
   });
 
-  const filteredSeeds = seeds.filter((seed) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      seed.companyName.toLowerCase().includes(query) ||
-      seed.contactPerson?.toLowerCase().includes(query) ||
-      seed.contactPhone?.toLowerCase().includes(query) ||
-      seed.contactEmail?.toLowerCase().includes(query) ||
-      seed.city?.toLowerCase().includes(query)
-    );
+  // Fetch users for filter dropdown
+  const { data: users = [] } = useQuery<UserType[]>({
+    queryKey: ["/api/users"],
   });
 
-  const stats = {
-    total: seeds.length,
-    interested: seeds.filter((s) => s.interestStatus === "interested").length,
-    notInterested: seeds.filter((s) => s.interestStatus === "not_interested").length,
-    undecided: seeds.filter((s) => !s.interestStatus).length,
+  // Fetch customers for filter dropdown
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  // Extract unique cities and areas from all leads for dropdowns
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    allLeads.forEach((lead) => {
+      if (lead.city && lead.city.trim()) {
+        cities.add(lead.city.trim());
+      }
+    });
+    return Array.from(cities).sort();
+  }, [allLeads]);
+
+  const uniqueAreas = useMemo(() => {
+    const areas = new Set<string>();
+    allLeads.forEach((lead) => {
+      if (lead.area && lead.area.trim()) {
+        // Only include areas from selected city if city is selected
+        if (selectedCity === "all" || lead.city === selectedCity) {
+          areas.add(lead.area.trim());
+        }
+      }
+    });
+    return Array.from(areas).sort();
+  }, [allLeads, selectedCity]);
+
+  const uniqueLeadSources = useMemo(() => {
+    const sources = new Set<string>();
+    allLeads.forEach((lead) => {
+      if (lead.leadSource && lead.leadSource.trim()) {
+        sources.add(lead.leadSource.trim());
+      }
+    });
+    return Array.from(sources).sort();
+  }, [allLeads]);
+
+  // Apply all filters
+  const filteredSeeds = useMemo(() => {
+    return allLeads.filter((seed) => {
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          seed.companyName.toLowerCase().includes(query) ||
+          seed.contactPerson?.toLowerCase().includes(query) ||
+          seed.contactPhone?.toLowerCase().includes(query) ||
+          seed.contactEmail?.toLowerCase().includes(query) ||
+          seed.city?.toLowerCase().includes(query) ||
+          seed.area?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      // City filter
+      if (selectedCity !== "all" && seed.city !== selectedCity) {
+        return false;
+      }
+
+      // Area filter
+      if (selectedArea !== "all" && seed.area !== selectedArea) {
+        return false;
+      }
+
+      // Stage filter (already applied in API, but double-check here)
+      if (selectedStage !== "all" && seed.stage !== selectedStage) {
+        return false;
+      }
+
+      // User filter
+      if (selectedUser !== "all" && seed.salesExecutiveId !== selectedUser) {
+        return false;
+      }
+
+      // Customer filter
+      if (selectedCustomer !== "all" && seed.customerId !== selectedCustomer) {
+        return false;
+      }
+
+      // Lead source filter
+      if (selectedLeadSource !== "all" && seed.leadSource !== selectedLeadSource) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [allLeads, searchQuery, selectedCity, selectedArea, selectedStage, selectedUser, selectedCustomer, selectedLeadSource]);
+
+  const stats = useMemo(() => ({
+    total: filteredSeeds.length,
+    interested: filteredSeeds.filter((s) => s.interestStatus === "interested").length,
+    notInterested: filteredSeeds.filter((s) => s.interestStatus === "not_interested").length,
+    undecided: filteredSeeds.filter((s) => !s.interestStatus).length,
     upcomingFollowups: followupReminders.length,
+  }), [filteredSeeds, followupReminders]);
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedCity("all");
+    setSelectedArea("all");
+    setSelectedStage("seed");
+    setSelectedUser("all");
+    setSelectedCustomer("all");
+    setSelectedLeadSource("all");
+    setFromDate(startOfMonth(new Date()));
+    setToDate(endOfMonth(new Date()));
   };
+
+  const activeFilterCount = [
+    selectedCity !== "all",
+    selectedArea !== "all",
+    selectedStage !== "seed",
+    selectedUser !== "all",
+    selectedCustomer !== "all",
+    selectedLeadSource !== "all",
+    searchQuery !== "",
+  ].filter(Boolean).length;
 
   const exportToExcel = async (type: "all" | "not_interested" | "interested" | "followups") => {
     setIsExporting(true);
@@ -121,11 +242,11 @@ export default function SeedsReportPage() {
 
       switch (type) {
         case "not_interested":
-          dataToExport = seeds.filter((s) => s.interestStatus === "not_interested");
+          dataToExport = filteredSeeds.filter((s) => s.interestStatus === "not_interested");
           filename = `not_interested_seeds_${format(new Date(), "yyyy-MM-dd")}.csv`;
           break;
         case "interested":
-          dataToExport = seeds.filter((s) => s.interestStatus === "interested");
+          dataToExport = filteredSeeds.filter((s) => s.interestStatus === "interested");
           filename = `interested_seeds_${format(new Date(), "yyyy-MM-dd")}.csv`;
           break;
         case "followups":
@@ -144,12 +265,13 @@ export default function SeedsReportPage() {
         "Phone",
         "City",
         "Area",
+        "Stage",
         "Interest Status",
         "Reason (Not Interested)",
         "Next Followup Date",
         "Assigned To",
-        "Created Date",
         "Lead Source",
+        "Created Date",
       ];
 
       const rows = dataToExport.map((seed) => [
@@ -159,12 +281,13 @@ export default function SeedsReportPage() {
         seed.contactPhone || "",
         seed.city || "",
         seed.area || "",
+        seed.stage || "",
         seed.interestStatus || "Undecided",
         seed.notInterestedReason || "",
         seed.nextFollowupDate ? format(new Date(seed.nextFollowupDate), "yyyy-MM-dd HH:mm") : "",
         seed.salesExecutive ? `${seed.salesExecutive.firstName} ${seed.salesExecutive.lastName}` : "Unassigned",
-        seed.createdAt ? format(new Date(seed.createdAt), "yyyy-MM-dd") : "",
         seed.leadSource || "",
+        seed.createdAt ? format(new Date(seed.createdAt), "yyyy-MM-dd") : "",
       ]);
 
       const csvContent = [
@@ -215,7 +338,7 @@ export default function SeedsReportPage() {
 
   return (
     <div className="p-6 space-y-6" data-testid="page-seeds-report">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Sprout className="h-6 w-6" />
@@ -228,16 +351,30 @@ export default function SeedsReportPage() {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            data-testid="button-toggle-filters"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => refetch()}
             data-testid="button-refresh-report"
           >
-            <Filter className="h-4 w-4 mr-2" />
+            <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Seeds</CardTitle>
@@ -292,81 +429,220 @@ export default function SeedsReportPage() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="space-y-2">
-          <Label>From Date</Label>
-          <Popover open={fromCalendarOpen} onOpenChange={setFromCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-[180px] justify-start text-left font-normal",
-                  !fromDate && "text-muted-foreground"
-                )}
-                data-testid="button-from-date"
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {fromDate ? format(fromDate, "PPP") : "Pick date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={fromDate}
-                onSelect={(date) => {
-                  setFromDate(date);
-                  setFromCalendarOpen(false);
-                }}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <div className="space-y-2">
-          <Label>To Date</Label>
-          <Popover open={toCalendarOpen} onOpenChange={setToCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-[180px] justify-start text-left font-normal",
-                  !toDate && "text-muted-foreground"
-                )}
-                data-testid="button-to-date"
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {toDate ? format(toDate, "PPP") : "Pick date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={toDate}
-                onSelect={(date) => {
-                  setToDate(date);
-                  setToCalendarOpen(false);
-                }}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <div className="space-y-2 flex-1 min-w-[200px]">
-          <Label>Search</Label>
-          <Input
-            placeholder="Search by company, contact, phone, email, city..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search-seeds"
-          />
-        </div>
-      </div>
+      {/* Filters Section */}
+      <Collapsible open={showFilters} onOpenChange={setShowFilters}>
+        <CollapsibleContent>
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Options
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="text-muted-foreground"
+                  data-testid="button-clear-filters"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear All
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                {/* Date Range */}
+                <div className="space-y-2">
+                  <Label>From Date</Label>
+                  <Popover open={fromCalendarOpen} onOpenChange={setFromCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !fromDate && "text-muted-foreground"
+                        )}
+                        data-testid="button-from-date"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {fromDate ? format(fromDate, "PP") : "Pick date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={fromDate}
+                        onSelect={(date) => {
+                          setFromDate(date);
+                          setFromCalendarOpen(false);
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
+                <div className="space-y-2">
+                  <Label>To Date</Label>
+                  <Popover open={toCalendarOpen} onOpenChange={setToCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !toDate && "text-muted-foreground"
+                        )}
+                        data-testid="button-to-date"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {toDate ? format(toDate, "PP") : "Pick date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={toDate}
+                        onSelect={(date) => {
+                          setToDate(date);
+                          setToCalendarOpen(false);
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Stage Filter */}
+                <div className="space-y-2">
+                  <Label>Stage</Label>
+                  <Select value={selectedStage} onValueChange={setSelectedStage}>
+                    <SelectTrigger data-testid="select-stage">
+                      <SelectValue placeholder="All Stages" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Stages</SelectItem>
+                      <SelectItem value="seed">Seeds Only</SelectItem>
+                      <SelectItem value="lead">Leads Only</SelectItem>
+                      <SelectItem value="prospect">Prospects</SelectItem>
+                      <SelectItem value="quote">Quotes</SelectItem>
+                      <SelectItem value="negotiation">Negotiation</SelectItem>
+                      <SelectItem value="closed_won">Closed Won</SelectItem>
+                      <SelectItem value="closed_lost">Closed Lost</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* City Filter */}
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Select value={selectedCity} onValueChange={(val) => {
+                    setSelectedCity(val);
+                    setSelectedArea("all"); // Reset area when city changes
+                  }}>
+                    <SelectTrigger data-testid="select-city">
+                      <SelectValue placeholder="All Cities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities</SelectItem>
+                      {uniqueCities.map((city) => (
+                        <SelectItem key={city} value={city}>{city}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Area Filter */}
+                <div className="space-y-2">
+                  <Label>Area</Label>
+                  <Select value={selectedArea} onValueChange={setSelectedArea}>
+                    <SelectTrigger data-testid="select-area">
+                      <SelectValue placeholder="All Areas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Areas</SelectItem>
+                      {uniqueAreas.map((area) => (
+                        <SelectItem key={area} value={area}>{area}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Assigned User Filter */}
+                <div className="space-y-2">
+                  <Label>Assigned To</Label>
+                  <Select value={selectedUser} onValueChange={setSelectedUser}>
+                    <SelectTrigger data-testid="select-user">
+                      <SelectValue placeholder="All Users" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Users</SelectItem>
+                      {users.filter(u => u.status === "active").map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.firstName} {user.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Customer Filter */}
+                <div className="space-y-2">
+                  <Label>Customer</Label>
+                  <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                    <SelectTrigger data-testid="select-customer">
+                      <SelectValue placeholder="All Customers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Customers</SelectItem>
+                      {customers.filter(c => c.status === "active").map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.companyName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Lead Source Filter */}
+                <div className="space-y-2">
+                  <Label>Lead Source</Label>
+                  <Select value={selectedLeadSource} onValueChange={setSelectedLeadSource}>
+                    <SelectTrigger data-testid="select-lead-source">
+                      <SelectValue placeholder="All Sources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      {uniqueLeadSources.map((source) => (
+                        <SelectItem key={source} value={source}>{source}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Search */}
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Search</Label>
+                  <Input
+                    placeholder="Search company, contact, phone, email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    data-testid="input-search-seeds"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Tabs and Table */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex items-center justify-between">
-          <TabsList>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="all" data-testid="tab-all-seeds">
-              All Seeds ({stats.total})
+              All ({stats.total})
             </TabsTrigger>
             <TabsTrigger value="interested" data-testid="tab-interested">
               Interested ({stats.interested})
@@ -381,7 +657,7 @@ export default function SeedsReportPage() {
               Followups ({stats.upcomingFollowups})
             </TabsTrigger>
           </TabsList>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {activeTab === "not_interested" && (
               <Button
                 variant="outline"
@@ -394,7 +670,7 @@ export default function SeedsReportPage() {
                 ) : (
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                 )}
-                Export Not Interested (Email Blasting)
+                Export Not Interested
               </Button>
             )}
             {activeTab === "interested" && (
@@ -469,10 +745,10 @@ export default function SeedsReportPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <XCircle className="h-5 w-5 text-red-600" />
-                Not Interested Seeds - For Email/Marketing Campaigns
+                Not Interested - For Email/Marketing Campaigns
               </CardTitle>
               <CardDescription>
-                Export this list with contact details for future marketing campaigns and email blasting
+                Export this list with contact details for future marketing campaigns
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -501,7 +777,7 @@ export default function SeedsReportPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-blue-600" />
-                Upcoming Seed Followups (Next 30 Days)
+                Upcoming Followups (Next 30 Days)
               </CardTitle>
               <CardDescription>
                 Seeds marked as interested with scheduled followup dates
@@ -575,6 +851,7 @@ function SeedsTable({
             <TableHead>Phone</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Location</TableHead>
+            <TableHead>Stage</TableHead>
             <TableHead>Status</TableHead>
             {showFollowupDate && <TableHead>Next Followup</TableHead>}
             {showReason && <TableHead>Reason</TableHead>}
@@ -639,13 +916,18 @@ function SeedsTable({
                   "-"
                 )}
               </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="capitalize">
+                  {seed.stage || "seed"}
+                </Badge>
+              </TableCell>
               <TableCell>{getInterestBadge(seed.interestStatus)}</TableCell>
               {showFollowupDate && (
                 <TableCell>
                   {seed.nextFollowupDate ? (
                     <div className="flex items-center gap-1 text-sm">
                       <CalendarIcon className="h-3 w-3 text-blue-600" />
-                      {format(new Date(seed.nextFollowupDate), "PPP 'at' h:mm a")}
+                      {format(new Date(seed.nextFollowupDate), "PP 'at' h:mm a")}
                     </div>
                   ) : (
                     "-"
