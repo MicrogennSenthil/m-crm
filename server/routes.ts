@@ -2842,11 +2842,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const username = await storage.getSystemSetting("webhook_auth_username");
       // Don't return the actual password for security
       const password = await storage.getSystemSetting("webhook_auth_password");
+      // Get Facebook verification token status (don't return actual value for security)
+      const fbVerifyToken = await storage.getSystemSetting("fb_webhook_verify_token");
       
       res.json({
         enabled: enabled?.settingValue === "true",
         username: username?.settingValue || "",
         hasPassword: !!password?.settingValue,
+        hasFbVerifyToken: !!fbVerifyToken?.settingValue,
       });
     } catch (error) {
       console.error("Error fetching webhook auth settings:", error);
@@ -2857,7 +2860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Save webhook auth settings
   app.post("/api/settings/webhook-auth", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const { enabled, username, password } = req.body;
+      const { enabled, username, password, fbVerifyToken } = req.body;
       
       // Validate inputs if enabling
       if (enabled && (!username || !password)) {
@@ -2899,6 +2902,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           settingType: "string",
           category: "webhook",
           description: "Webhook authentication password",
+          isSecret: true,
+          updatedBy: authId,
+        });
+      }
+      
+      // Save Facebook webhook verification token (only if provided)
+      if (fbVerifyToken) {
+        await storage.upsertSystemSetting({
+          settingKey: "fb_webhook_verify_token",
+          settingValue: fbVerifyToken,
+          settingType: "string",
+          category: "webhook",
+          description: "Facebook/Meta webhook verification token",
           isSecret: true,
           updatedBy: authId,
         });
@@ -3077,18 +3093,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Facebook Webhook Verification (GET request for initial setup)
-  app.get("/api/webhooks/facebook", (req, res) => {
+  app.get("/api/webhooks/facebook", async (req, res) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
     
-    // Verify token should be configured in environment
-    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    // Try to get verify token from database first, then fall back to environment variable
+    let verifyToken: string | undefined;
+    try {
+      const dbToken = await storage.getSystemSetting("fb_webhook_verify_token");
+      verifyToken = dbToken?.settingValue || process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    } catch (error) {
+      console.error("[Facebook Webhook] Error fetching token from database:", error);
+      verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    }
     
     // If no verify token is configured, show helpful message
     if (!verifyToken) {
-      console.warn("[Facebook Webhook] FB_WEBHOOK_VERIFY_TOKEN not configured");
-      return res.status(500).send("Webhook not configured. Please set FB_WEBHOOK_VERIFY_TOKEN environment variable.");
+      console.warn("[Facebook Webhook] Verification token not configured");
+      return res.status(500).send("Webhook not configured. Please configure the Facebook Verification Token in Webhook Settings or set FB_WEBHOOK_VERIFY_TOKEN environment variable.");
     }
     
     // Handle Facebook verification challenge
@@ -3141,13 +3164,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Instagram Lead Ads Webhook Verification (uses Facebook's API)
-  app.get("/api/webhooks/instagram", (req, res) => {
+  app.get("/api/webhooks/instagram", async (req, res) => {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
     
     // Instagram uses the same Meta/Facebook API, so shares the same verify token
-    const verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    let verifyToken: string | undefined;
+    try {
+      const dbToken = await storage.getSystemSetting("fb_webhook_verify_token");
+      verifyToken = dbToken?.settingValue || process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    } catch (error) {
+      console.error("[Instagram Webhook] Error fetching token from database:", error);
+      verifyToken = process.env.FB_WEBHOOK_VERIFY_TOKEN;
+    }
     
     if (mode === "subscribe" && token === verifyToken) {
       res.status(200).send(challenge);

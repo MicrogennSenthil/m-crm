@@ -29,6 +29,7 @@ interface WebhookAuthSettings {
   enabled: boolean;
   username: string;
   hasPassword: boolean;
+  hasFbVerifyToken: boolean;
 }
 
 interface WebhookAuthSettingsDialogProps {
@@ -249,6 +250,8 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [fbVerifyToken, setFbVerifyToken] = useState("");
+  const [showFbToken, setShowFbToken] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
   const { toast } = useToast();
@@ -263,6 +266,7 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
       setEnabled(settings.enabled);
       setUsername(settings.username || "");
       setPassword("");
+      setFbVerifyToken("");
     }
   }, [settings]);
 
@@ -272,6 +276,7 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
         enabled,
         username,
         password: password || undefined,
+        fbVerifyToken: fbVerifyToken || undefined,
       });
       return response.json();
     },
@@ -414,6 +419,72 @@ export function WebhookAuthSettingsDialog({ open, onOpenChange }: WebhookAuthSet
                       </AlertDescription>
                     </Alert>
                   </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Facebook/Meta Verification Token */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-blue-600" />
+                  Facebook/Meta Verification Token
+                </CardTitle>
+                <CardDescription>
+                  Configure the verification token for Facebook and Instagram webhook verification
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fb-verify-token">
+                    Verification Token {settings?.hasFbVerifyToken && "(leave empty to keep current)"}
+                  </Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        id="fb-verify-token"
+                        type={showFbToken ? "text" : "password"}
+                        value={fbVerifyToken}
+                        onChange={(e) => setFbVerifyToken(e.target.value)}
+                        placeholder={settings?.hasFbVerifyToken ? "••••••••" : "Enter verification token"}
+                        data-testid="input-fb-verify-token"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full"
+                        onClick={() => setShowFbToken(!showFbToken)}
+                      >
+                        {showFbToken ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This token is used by Facebook/Meta to verify your webhook endpoint. You'll set this same token in the Facebook Developer Console.
+                  </p>
+                </div>
+
+                {settings?.hasFbVerifyToken && (
+                  <Alert className="border-green-200 bg-green-50 dark:bg-green-900/20">
+                    <Check className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-700 dark:text-green-400">
+                      Facebook verification token is configured. Your Facebook and Instagram webhooks are ready for verification.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {!settings?.hasFbVerifyToken && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      To receive leads from Facebook Lead Ads or Instagram, you need to set a verification token here and use the same token when configuring the webhook in Facebook Developer Console.
+                    </AlertDescription>
+                  </Alert>
                 )}
               </CardContent>
             </Card>
