@@ -6380,8 +6380,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create user lookup map for O(1) access
       const userLookup = new Map(activeUsers.map(u => [u.id, u]));
       
-      // Create a map of date -> user -> {coldCalls, followupCalls}
-      const dailyData = new Map<string, Map<string, { coldCalls: number; followupCalls: number; userName: string }>>();
+      // Create a map of date -> user -> {coldCalls, followupCalls, leadConversions, demoCount}
+      const dailyData = new Map<string, Map<string, { coldCalls: number; followupCalls: number; leadConversions: number; demoCount: number; userName: string }>>();
       
       // Initialize last 30 days
       for (let i = 0; i < 30; i++) {
@@ -6391,8 +6391,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dailyData.set(dateKey, new Map());
       }
       
-      // Count cold calls (seeds created) per day per user
+      // Count cold calls, conversions, and demos per day per user
       // Cold calls = leads/seeds created (at creation time, regardless of current stage)
+      // Conversions and demos are based on current stage of leads created on that day
       allLeads.forEach(lead => {
         if (!filteredUserIds.has(lead.salesExecutiveId || '')) return;
         
@@ -6407,9 +6408,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
         
         if (!userMap.has(lead.salesExecutiveId || '')) {
-          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, userName });
+          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, leadConversions: 0, demoCount: 0, userName });
         }
-        userMap.get(lead.salesExecutiveId || '')!.coldCalls++;
+        const userData = userMap.get(lead.salesExecutiveId || '')!;
+        userData.coldCalls++;
+        
+        // Check if this lead converted (has a valid post-seed stage)
+        if (lead.stage && CONVERTED_STAGES.includes(lead.stage)) {
+          userData.leadConversions++;
+        }
+        
+        // Check if this lead reached demo stage or beyond
+        if (lead.stage && DEMO_STAGES.includes(lead.stage)) {
+          userData.demoCount++;
+        }
       });
       
       // Count followups per day per user
@@ -6433,7 +6445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
         
         if (!userMap.has(lead.salesExecutiveId || '')) {
-          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, userName });
+          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, leadConversions: 0, demoCount: 0, userName });
         }
         userMap.get(lead.salesExecutiveId || '')!.followupCalls++;
       });
@@ -6445,12 +6457,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dateLabel: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
           totalColdCalls: Array.from(userMap.values()).reduce((sum, u) => sum + u.coldCalls, 0),
           totalFollowupCalls: Array.from(userMap.values()).reduce((sum, u) => sum + u.followupCalls, 0),
+          totalLeadConversions: Array.from(userMap.values()).reduce((sum, u) => sum + u.leadConversions, 0),
+          totalDemoCount: Array.from(userMap.values()).reduce((sum, u) => sum + u.demoCount, 0),
           users: Array.from(userMap.entries()).map(([userId, data]) => ({
             userId,
             userName: data.userName,
             coldCalls: data.coldCalls,
-            followupCalls: data.followupCalls
-          })).filter(u => u.coldCalls > 0 || u.followupCalls > 0)
+            followupCalls: data.followupCalls,
+            leadConversions: data.leadConversions,
+            demoCount: data.demoCount
+          })).filter(u => u.coldCalls > 0 || u.followupCalls > 0 || u.leadConversions > 0 || u.demoCount > 0)
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
       

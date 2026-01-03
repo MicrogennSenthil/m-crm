@@ -37,6 +37,8 @@ interface DailyUserData {
   userName: string;
   coldCalls: number;
   followupCalls: number;
+  leadConversions: number;
+  demoCount: number;
 }
 
 interface DailyAnalytics {
@@ -44,6 +46,8 @@ interface DailyAnalytics {
   dateLabel: string;
   totalColdCalls: number;
   totalFollowupCalls: number;
+  totalLeadConversions: number;
+  totalDemoCount: number;
   users: DailyUserData[];
 }
 
@@ -124,12 +128,14 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
 
   // Day-wise chart data - filter to only show days with activity
   const dailyChartData = (dailyAnalytics || [])
-    .filter(d => d.totalColdCalls > 0 || d.totalFollowupCalls > 0)
+    .filter(d => d.totalColdCalls > 0 || d.totalFollowupCalls > 0 || d.totalLeadConversions > 0 || d.totalDemoCount > 0)
     .map(d => ({
       date: d.date,
       dateLabel: d.dateLabel,
       coldCalls: d.totalColdCalls,
       followupCalls: d.totalFollowupCalls,
+      leadConversions: d.totalLeadConversions,
+      demoCount: d.totalDemoCount,
       total: d.totalColdCalls + d.totalFollowupCalls,
       users: d.users
     }));
@@ -248,7 +254,7 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                 </div>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={350}>
                     <AreaChart data={dailyChartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                       <defs>
                         <linearGradient id="coldCallsGradient" x1="0" y1="0" x2="0" y2="1">
@@ -258,6 +264,14 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                         <linearGradient id="followupGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#f5a623" stopOpacity={0.8}/>
                           <stop offset="95%" stopColor="#f5a623" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="conversionsGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4ade80" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#4ade80" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="demosGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ec4899" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#ec4899" stopOpacity={0.1}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -283,12 +297,20 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                                     <div className="w-3 h-3 rounded-full bg-[#f5a623]" />
                                     <span>Follow-ups: {data?.followupCalls || 0}</span>
                                   </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-[#4ade80]" />
+                                    <span>Conversions: {data?.leadConversions || 0}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-[#ec4899]" />
+                                    <span>Demos: {data?.demoCount || 0}</span>
+                                  </div>
                                   {data?.users && data.users.length > 0 && (
                                     <div className="mt-2 pt-2 border-t">
                                       <p className="text-xs text-muted-foreground mb-1">By User:</p>
                                       {data.users.slice(0, 5).map((u: DailyUserData) => (
                                         <div key={u.userId} className="text-xs text-muted-foreground">
-                                          {u.userName}: {u.coldCalls} cold, {u.followupCalls} followups
+                                          {u.userName}: {u.coldCalls} cold, {u.followupCalls} f/u, {u.leadConversions} conv, {u.demoCount} demos
                                         </div>
                                       ))}
                                       {data.users.length > 5 && (
@@ -320,6 +342,22 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                         fillOpacity={1}
                         fill="url(#followupGradient)"
                       />
+                      <Area 
+                        type="monotone" 
+                        dataKey="leadConversions" 
+                        name="Conversions" 
+                        stroke="#4ade80" 
+                        fillOpacity={1}
+                        fill="url(#conversionsGradient)"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="demoCount" 
+                        name="Demos" 
+                        stroke="#ec4899" 
+                        fillOpacity={1}
+                        fill="url(#demosGradient)"
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
 
@@ -331,8 +369,10 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                           <TableHead>Date</TableHead>
                           <TableHead className="text-center">Cold Calls</TableHead>
                           <TableHead className="text-center">Follow-ups</TableHead>
+                          <TableHead className="text-center">Conversions</TableHead>
+                          <TableHead className="text-center">Demos</TableHead>
                           <TableHead className="text-center">Total</TableHead>
-                          <TableHead className="hidden md:table-cell">Users Active</TableHead>
+                          <TableHead className="hidden lg:table-cell">Users Active</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -340,22 +380,37 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                           <TableRow key={day.date} data-testid={`row-daily-${day.date}`}>
                             <TableCell className="font-medium">{day.dateLabel}</TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400">
                                 {day.coldCalls}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400">
                                 {day.followupCalls}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge className="bg-green-500">{day.total}</Badge>
+                              <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                                {day.leadConversions}
+                              </Badge>
                             </TableCell>
-                            <TableCell className="hidden md:table-cell">
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="bg-pink-50 text-pink-600 border-pink-200 dark:bg-pink-950/50 dark:text-pink-400">
+                                {day.demoCount}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge className="bg-slate-500">{day.total}</Badge>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">
                               <div className="flex flex-wrap gap-1">
                                 {day.users.slice(0, 3).map((u) => (
-                                  <Badge key={u.userId} variant="outline" className="text-xs">
+                                  <Badge 
+                                    key={u.userId} 
+                                    variant="outline" 
+                                    className="text-xs"
+                                    title={`${u.userName}: ${u.coldCalls} cold, ${u.followupCalls} f/u, ${u.leadConversions} conv, ${u.demoCount} demos`}
+                                  >
                                     {u.userName.split(' ')[0]}
                                   </Badge>
                                 ))}
