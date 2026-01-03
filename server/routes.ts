@@ -6279,9 +6279,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Build user-wise analytics
       const userAnalytics = activeUsers.map(user => {
-        // Cold calls = Seeds/Leads created by this user (initial contact)
+        // Cold calls = All leads/seeds created by this user (initial contact at creation time)
+        // This counts all leads created, regardless of current stage
         const userLeads = allLeads.filter(l => l.salesExecutiveId === user.id);
-        const coldCalls = userLeads.filter(l => l.stage === "seed").length;
+        const coldCalls = userLeads.length; // All leads represent cold calls (initial contact)
         
         // Followup calls = Followups linked to leads assigned to this user
         const userLeadIds = new Set(userLeads.map(l => l.id));
@@ -6293,16 +6294,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Customer breakdown - unique customers contacted
         const customerBreakdown = new Map<string, { coldCalls: number; followups: number; customerName: string }>();
         
-        // Count cold calls per customer (from leads)
+        // Count cold calls per customer (from leads - all leads count as initial contact)
         userLeads.forEach(lead => {
           const customerId = (lead as any).customerId || lead.companyName;
           const customerName = lead.companyName;
           if (!customerBreakdown.has(customerId)) {
             customerBreakdown.set(customerId, { coldCalls: 0, followups: 0, customerName });
           }
-          if (lead.stage === "seed") {
-            customerBreakdown.get(customerId)!.coldCalls++;
-          }
+          customerBreakdown.get(customerId)!.coldCalls++;
         });
         
         // Count followups per customer
@@ -6358,6 +6357,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get filtered user IDs for day-wise data
       const filteredUserIds = new Set(filteredAnalytics.map(u => u.userId));
       
+      // Create lead lookup map for O(1) access
+      const leadLookup = new Map(allLeads.map(l => [l.id, l]));
+      
+      // Create user lookup map for O(1) access
+      const userLookup = new Map(activeUsers.map(u => [u.id, u]));
+      
       // Create a map of date -> user -> {coldCalls, followupCalls}
       const dailyData = new Map<string, Map<string, { coldCalls: number; followupCalls: number; userName: string }>>();
       
@@ -6369,10 +6374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dailyData.set(dateKey, new Map());
       }
       
-      // Count cold calls (seeds) per day per user
+      // Count cold calls (seeds created) per day per user
+      // Cold calls = leads/seeds created (at creation time, regardless of current stage)
       allLeads.forEach(lead => {
         if (!filteredUserIds.has(lead.salesExecutiveId || '')) return;
-        if (lead.stage !== 'seed') return;
         
         const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
         if (!leadDate || leadDate < thirtyDaysAgo) return;
@@ -6381,7 +6386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userMap = dailyData.get(dateKey);
         if (!userMap) return;
         
-        const user = activeUsers.find(u => u.id === lead.salesExecutiveId);
+        const user = userLookup.get(lead.salesExecutiveId || '');
         const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
         
         if (!userMap.has(lead.salesExecutiveId || '')) {
@@ -6391,18 +6396,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Count followups per day per user
+      // Use createdAt (when followup was recorded) for actual activity tracking
       allFollowups.forEach((followup: any) => {
-        const lead = allLeads.find(l => l.id === followup.leadId);
+        const lead = leadLookup.get(followup.leadId);
         if (!lead || !filteredUserIds.has(lead.salesExecutiveId || '')) return;
         
-        const followupDate = followup.followUpDate ? new Date(followup.followUpDate) : null;
-        if (!followupDate || followupDate < thirtyDaysAgo) return;
+        // Use createdAt for when the followup was actually recorded/executed
+        // Fall back to followUpDate if createdAt not available
+        const activityDate = followup.createdAt 
+          ? new Date(followup.createdAt) 
+          : (followup.followUpDate ? new Date(followup.followUpDate) : null);
+        if (!activityDate || activityDate < thirtyDaysAgo) return;
         
-        const dateKey = followupDate.toISOString().split('T')[0];
+        const dateKey = activityDate.toISOString().split('T')[0];
         const userMap = dailyData.get(dateKey);
         if (!userMap) return;
         
-        const user = activeUsers.find(u => u.id === lead.salesExecutiveId);
+        const user = userLookup.get(lead.salesExecutiveId || '');
         const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
         
         if (!userMap.has(lead.salesExecutiveId || '')) {
