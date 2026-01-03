@@ -739,16 +739,19 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   </Button>
                   {lead.stage === "seed" && (
                     <>
-                      <Button
-                        size="sm"
-                        onClick={() => convertToLeadMutation.mutate()}
-                        disabled={convertToLeadMutation.isPending}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                        data-testid="button-convert-to-lead"
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        {convertToLeadMutation.isPending ? "Converting..." : "Convert to Lead"}
-                      </Button>
+                      {/* Only show Convert to Lead for interested seeds */}
+                      {(lead as any).interestStatus === "interested" && !(lead as any).isExistingCustomer && (
+                        <Button
+                          size="sm"
+                          onClick={() => convertToLeadMutation.mutate()}
+                          disabled={convertToLeadMutation.isPending}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          data-testid="button-convert-to-lead"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          {convertToLeadMutation.isPending ? "Converting..." : "Convert to Lead"}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="destructive"

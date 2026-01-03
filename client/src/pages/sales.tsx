@@ -271,7 +271,20 @@ export default function Sales() {
   }, [leads, searchQuery, selectedCity, selectedArea, selectedUser, selectedLeadSource]);
 
   const getLeadsByStage = (stageId: string) => {
-    return filteredLeads?.filter((lead) => lead.stage === stageId) || [];
+    return filteredLeads?.filter((lead) => {
+      if (lead.stage !== stageId) return false;
+      
+      // For seeds stage, hide "not interested" and "existing customer" seeds
+      if (stageId === "seed") {
+        const leadAny = lead as any;
+        // Hide not interested seeds
+        if (leadAny.interestStatus === "not_interested") return false;
+        // Hide existing customer seeds
+        if (leadAny.isExistingCustomer === true) return false;
+      }
+      
+      return true;
+    }) || [];
   };
 
   // Calculate total value for a stage
