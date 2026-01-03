@@ -1,4 +1,7 @@
 import { CallAnalytics } from "@/components/call-analytics";
+import { CallDetails } from "@/components/call-details";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BarChart3, FileSpreadsheet } from "lucide-react";
 
 export default function MyPerformancePage() {
   return (
@@ -8,7 +11,26 @@ export default function MyPerformancePage() {
         <p className="text-muted-foreground">Track your call activity and performance metrics</p>
       </div>
       
-      <CallAnalytics />
+      <Tabs defaultValue="analytics" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="analytics" className="flex items-center gap-2" data-testid="tab-analytics">
+            <BarChart3 className="h-4 w-4" />
+            Analytics Overview
+          </TabsTrigger>
+          <TabsTrigger value="details" className="flex items-center gap-2" data-testid="tab-details">
+            <FileSpreadsheet className="h-4 w-4" />
+            Detailed Report
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="analytics">
+          <CallAnalytics />
+        </TabsContent>
+        
+        <TabsContent value="details">
+          <CallDetails />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

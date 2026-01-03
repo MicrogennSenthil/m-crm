@@ -6554,6 +6554,251 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Detailed call data endpoint with date/week/month filtering
+  app.get("/api/analytics/call-details", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { startDate, endDate, period = 'day', salesExecutiveId } = req.query;
+      
+      // Calculate date range based on period if not provided
+      let dateFrom: Date;
+      let dateTo: Date = new Date();
+      dateTo.setHours(23, 59, 59, 999);
+      
+      if (startDate && endDate) {
+        dateFrom = new Date(startDate as string);
+        dateTo = new Date(endDate as string);
+        dateTo.setHours(23, 59, 59, 999);
+      } else if (period === 'week') {
+        dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - 7);
+        dateFrom.setHours(0, 0, 0, 0);
+      } else if (period === 'month') {
+        dateFrom = new Date();
+        dateFrom.setMonth(dateFrom.getMonth() - 1);
+        dateFrom.setHours(0, 0, 0, 0);
+      } else {
+        // Default to today
+        dateFrom = new Date();
+        dateFrom.setHours(0, 0, 0, 0);
+      }
+      
+      // Check permissions
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = userEmail === SUPER_ADMIN_EMAIL;
+      
+      // Check if user is admin
+      const currentUser = await storage.getUser(userId);
+      const isAdmin = isSuperAdmin || currentUser?.role === 'admin';
+      
+      // Check if user is department head
+      const headDepartments = await storage.getDepartmentsByHead(userId);
+      const isDepartmentHead = headDepartments.length > 0;
+      
+      // Get all users and filter based on role
+      const allUsers = await storage.getUsers();
+      const activeUsers = allUsers.filter((u: any) => u.isActive !== false && u.isApproved !== false);
+      
+      // Get team member IDs if department head
+      const teamMemberIds = new Set<string>();
+      if (isDepartmentHead) {
+        const deptIds = headDepartments.map(d => d.id);
+        activeUsers.forEach((u: any) => {
+          if (u.departmentId && deptIds.includes(u.departmentId)) {
+            teamMemberIds.add(u.id);
+          }
+        });
+        teamMemberIds.add(userId); // Include self
+      }
+      
+      // Determine which users to include
+      let targetUserIds: Set<string>;
+      let viewScope = 'self';
+      
+      if (isAdmin) {
+        viewScope = 'all';
+        targetUserIds = new Set(activeUsers.map((u: any) => u.id));
+      } else if (isDepartmentHead && teamMemberIds.size > 0) {
+        viewScope = 'team';
+        targetUserIds = teamMemberIds;
+      } else {
+        viewScope = 'self';
+        targetUserIds = new Set([userId]);
+      }
+      
+      // If salesExecutiveId is provided, filter to that user (if authorized)
+      // We must validate against the ORIGINAL targetUserIds before any modification
+      if (salesExecutiveId && typeof salesExecutiveId === 'string') {
+        // Admin can view any user
+        // Department head can only view team members
+        // Regular user can only view themselves
+        const authorizedUserIds = isAdmin 
+          ? new Set(activeUsers.map((u: any) => u.id))
+          : isDepartmentHead && teamMemberIds.size > 0
+            ? teamMemberIds
+            : new Set([userId]);
+        
+        if (!authorizedUserIds.has(salesExecutiveId)) {
+          return res.status(403).json({ message: "Not authorized to view this user's data" });
+        }
+        targetUserIds = new Set([salesExecutiveId]);
+      }
+      
+      // Get all leads within date range for target users
+      const allLeads = await storage.getLeads();
+      const filteredLeads = allLeads.filter((lead: any) => {
+        if (!lead.salesExecutiveId || !targetUserIds.has(lead.salesExecutiveId)) return false;
+        const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+        if (!leadDate) return false;
+        return leadDate >= dateFrom && leadDate <= dateTo;
+      });
+      
+      // Get all followups within date range for target users' leads
+      const allFollowups = await storage.getAllFollowUps();
+      const leadIds = new Set(allLeads.filter((l: any) => l.salesExecutiveId && targetUserIds.has(l.salesExecutiveId)).map((l: any) => l.id));
+      const leadLookup = new Map(allLeads.map((l: any) => [l.id, l]));
+      
+      const filteredFollowups = allFollowups.filter((followup: any) => {
+        if (!leadIds.has(followup.leadId)) return false;
+        const followupDate = followup.createdAt 
+          ? new Date(followup.createdAt) 
+          : (followup.followUpDate ? new Date(followup.followUpDate) : null);
+        if (!followupDate) return false;
+        return followupDate >= dateFrom && followupDate <= dateTo;
+      });
+      
+      // Create user lookup for names
+      const userLookup = new Map(activeUsers.map((u: any) => [u.id, u]));
+      
+      // Build detailed cold calls data
+      const coldCalls = filteredLeads.map((lead: any) => {
+        const user: any = userLookup.get(lead.salesExecutiveId || '');
+        return {
+          id: lead.id,
+          type: 'cold_call' as const,
+          date: lead.createdAt,
+          salesExecutiveId: lead.salesExecutiveId,
+          salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+          companyName: lead.companyName,
+          contactPerson: lead.contactPerson,
+          contactPhone: lead.contactPhone,
+          contactEmail: lead.contactEmail,
+          stage: lead.stage,
+          source: lead.source,
+          city: lead.city,
+          area: lead.area,
+          isExistingCustomer: lead.isExistingCustomer || false,
+          notes: null
+        };
+      });
+      
+      // Build detailed followups data
+      const followups = filteredFollowups.map((followup: any) => {
+        const lead: any = leadLookup.get(followup.leadId);
+        const user: any = lead ? userLookup.get(lead.salesExecutiveId || '') : null;
+        return {
+          id: followup.id,
+          type: 'followup' as const,
+          date: followup.createdAt || followup.followUpDate,
+          salesExecutiveId: lead?.salesExecutiveId,
+          salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+          companyName: lead?.companyName || 'Unknown',
+          contactPerson: lead?.contactPerson || 'Unknown',
+          contactPhone: lead?.contactPhone || '',
+          contactEmail: lead?.contactEmail || '',
+          stage: lead?.stage,
+          source: lead?.source,
+          city: lead?.city,
+          area: lead?.area,
+          isExistingCustomer: lead?.isExistingCustomer || false,
+          notes: followup.notes,
+          completed: followup.completed
+        };
+      });
+      
+      // Combine and sort by date (newest first)
+      const allCallDetails = [...coldCalls, ...followups].sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      // Group by date
+      const groupedByDate = new Map<string, typeof allCallDetails>();
+      allCallDetails.forEach(call => {
+        const dateKey = call.date ? new Date(call.date).toISOString().split('T')[0] : 'unknown';
+        if (!groupedByDate.has(dateKey)) {
+          groupedByDate.set(dateKey, []);
+        }
+        groupedByDate.get(dateKey)!.push(call);
+      });
+      
+      // Convert to array
+      const dailyBreakdown = Array.from(groupedByDate.entries())
+        .map(([date, calls]) => ({
+          date,
+          dateLabel: new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+          coldCallCount: calls.filter(c => c.type === 'cold_call').length,
+          followupCount: calls.filter(c => c.type === 'followup').length,
+          totalCount: calls.length,
+          calls
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      
+      // Group by sales executive
+      const byExecutive = new Map<string, typeof allCallDetails>();
+      allCallDetails.forEach(call => {
+        const execId = call.salesExecutiveId || 'unknown';
+        if (!byExecutive.has(execId)) {
+          byExecutive.set(execId, []);
+        }
+        byExecutive.get(execId)!.push(call);
+      });
+      
+      const executiveBreakdown = Array.from(byExecutive.entries())
+        .map(([execId, calls]) => {
+          const user: any = userLookup.get(execId);
+          return {
+            salesExecutiveId: execId,
+            salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown',
+            email: user?.email || '',
+            coldCallCount: calls.filter(c => c.type === 'cold_call').length,
+            followupCount: calls.filter(c => c.type === 'followup').length,
+            totalCount: calls.length
+          };
+        })
+        .sort((a, b) => b.totalCount - a.totalCount);
+      
+      res.json({
+        dateRange: {
+          from: dateFrom.toISOString(),
+          to: dateTo.toISOString(),
+          period
+        },
+        summary: {
+          totalColdCalls: coldCalls.length,
+          totalFollowups: followups.length,
+          totalCalls: allCallDetails.length,
+          uniqueCompanies: new Set(allCallDetails.map(c => c.companyName)).size,
+          uniqueExecutives: executiveBreakdown.length
+        },
+        dailyBreakdown,
+        executiveBreakdown,
+        callDetails: allCallDetails,
+        viewScope
+      });
+    } catch (error) {
+      console.error("Error fetching call details:", error);
+      res.status(500).json({ message: "Failed to fetch call details" });
+    }
+  });
+
   // Reports routes (real analytics)
   app.get("/api/reports/sales", isAuthenticated, async (req, res) => {
     try {
