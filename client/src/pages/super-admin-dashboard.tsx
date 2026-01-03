@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CallAnalytics } from "@/components/call-analytics";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, RadarChart, PolarGrid, 
@@ -3507,7 +3508,10 @@ export default function SuperAdminDashboard() {
         </TabsContent>
         
         <TabsContent value="calls">
-          <FrequentCallersTab viewMode={viewMode} />
+          <div className="space-y-6">
+            <CallAnalytics />
+            <FrequentCallersTab viewMode={viewMode} />
+          </div>
         </TabsContent>
         
         <TabsContent value="development">
