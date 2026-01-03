@@ -6254,6 +6254,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User-wise Call Analytics API - Cold Calls vs Followups
+  app.get("/api/analytics/calls", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      // Check if user is admin/super admin
+      const isSuperAdmin = currentUser?.email === "senthil@microgenn.com";
+      const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+      
+      // Get all users for the analytics
+      const allUsers = await storage.getUsers();
+      const activeUsers = allUsers.filter(u => u.isActive);
+      
+      // Get all leads (seeds count as cold calls)
+      const allLeads = await storage.getLeads({});
+      
+      // Get all follow-ups
+      const allFollowups = await storage.getAllFollowUps();
+      
+      // Get all customers for customer breakdown
+      const allCustomers = await storage.getCustomers();
+      
+      // Build user-wise analytics
+      const userAnalytics = activeUsers.map(user => {
+        // Cold calls = Seeds/Leads created by this user (initial contact)
+        const userLeads = allLeads.filter(l => l.salesExecutiveId === user.id);
+        const coldCalls = userLeads.filter(l => l.stage === "seed").length;
+        
+        // Followup calls = Followups linked to leads assigned to this user
+        const userLeadIds = new Set(userLeads.map(l => l.id));
+        const followupCalls = allFollowups.filter((f: any) => userLeadIds.has(f.leadId)).length;
+        
+        // Total calls
+        const totalCalls = coldCalls + followupCalls;
+        
+        // Customer breakdown - unique customers contacted
+        const customerBreakdown = new Map<string, { coldCalls: number; followups: number; customerName: string }>();
+        
+        // Count cold calls per customer (from leads)
+        userLeads.forEach(lead => {
+          const customerId = (lead as any).customerId || lead.companyName;
+          const customerName = lead.companyName;
+          if (!customerBreakdown.has(customerId)) {
+            customerBreakdown.set(customerId, { coldCalls: 0, followups: 0, customerName });
+          }
+          if (lead.stage === "seed") {
+            customerBreakdown.get(customerId)!.coldCalls++;
+          }
+        });
+        
+        // Count followups per customer
+        allFollowups.filter((f: any) => userLeadIds.has(f.leadId)).forEach((followup: any) => {
+          const lead = userLeads.find(l => l.id === followup.leadId);
+          if (lead) {
+            const customerId = (lead as any).customerId || lead.companyName;
+            const customerName = lead.companyName;
+            if (!customerBreakdown.has(customerId)) {
+              customerBreakdown.set(customerId, { coldCalls: 0, followups: 0, customerName });
+            }
+            customerBreakdown.get(customerId)!.followups++;
+          }
+        });
+        
+        return {
+          userId: user.id,
+          userName: `${user.firstName} ${user.lastName}`,
+          email: user.email,
+          role: user.role,
+          coldCalls,
+          followupCalls,
+          totalCalls,
+          customers: Array.from(customerBreakdown.entries()).map(([id, data]) => ({
+            customerId: id,
+            customerName: data.customerName,
+            coldCalls: data.coldCalls,
+            followups: data.followups,
+            total: data.coldCalls + data.followups
+          })).sort((a, b) => b.total - a.total)
+        };
+      }).filter(u => u.totalCalls > 0 || isAdmin).sort((a, b) => b.totalCalls - a.totalCalls);
+      
+      // Filter based on role - sales exec only sees their own data, admin/superadmin sees all
+      let filteredAnalytics = userAnalytics;
+      if (!isAdmin) {
+        filteredAnalytics = userAnalytics.filter(u => u.userId === userId);
+      }
+      
+      // Calculate totals
+      const totals = {
+        coldCalls: filteredAnalytics.reduce((sum, u) => sum + u.coldCalls, 0),
+        followupCalls: filteredAnalytics.reduce((sum, u) => sum + u.followupCalls, 0),
+        totalCalls: filteredAnalytics.reduce((sum, u) => sum + u.totalCalls, 0),
+        totalUsers: filteredAnalytics.length
+      };
+      
+      res.json({
+        userAnalytics: filteredAnalytics,
+        totals,
+        isAdmin
+      });
+    } catch (error) {
+      console.error("Error fetching call analytics:", error);
+      res.status(500).json({ message: "Failed to fetch call analytics" });
+    }
+  });
+
   // Reports routes (real analytics)
   app.get("/api/reports/sales", isAuthenticated, async (req, res) => {
     try {
