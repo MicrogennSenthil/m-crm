@@ -7,9 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
-import { Phone, PhoneCall, Users, Building2 } from "lucide-react";
+import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp } from "lucide-react";
 
 interface CustomerData {
   customerId: string;
@@ -30,8 +30,24 @@ interface UserAnalytics {
   customers: CustomerData[];
 }
 
+interface DailyUserData {
+  userId: string;
+  userName: string;
+  coldCalls: number;
+  followupCalls: number;
+}
+
+interface DailyAnalytics {
+  date: string;
+  dateLabel: string;
+  totalColdCalls: number;
+  totalFollowupCalls: number;
+  users: DailyUserData[];
+}
+
 interface CallAnalyticsData {
   userAnalytics: UserAnalytics[];
+  dailyAnalytics: DailyAnalytics[];
   totals: {
     coldCalls: number;
     followupCalls: number;
@@ -85,7 +101,7 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  const { userAnalytics, totals, isAdmin } = data;
+  const { userAnalytics, dailyAnalytics, totals, isAdmin } = data;
 
   const chartData = userAnalytics.map(user => ({
     name: user.userName.split(' ')[0],
@@ -99,6 +115,18 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     { name: 'Cold Calls', value: totals.coldCalls, color: '#1a2b6d' },
     { name: 'Follow-ups', value: totals.followupCalls, color: '#f5a623' }
   ];
+
+  // Day-wise chart data - filter to only show days with activity
+  const dailyChartData = (dailyAnalytics || [])
+    .filter(d => d.totalColdCalls > 0 || d.totalFollowupCalls > 0)
+    .map(d => ({
+      date: d.date,
+      dateLabel: d.dateLabel,
+      coldCalls: d.totalColdCalls,
+      followupCalls: d.totalFollowupCalls,
+      total: d.totalColdCalls + d.totalFollowupCalls,
+      users: d.users
+    }));
 
   if (compact) {
     return (
@@ -180,12 +208,157 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
           </div>
         </div>
 
-        <Tabs defaultValue="chart" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="chart" data-testid="tab-call-chart">Bar Chart</TabsTrigger>
+        <Tabs defaultValue="daily" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="daily" data-testid="tab-call-daily">
+              <Calendar className="h-4 w-4 mr-1" />
+              Day-wise
+            </TabsTrigger>
+            <TabsTrigger value="chart" data-testid="tab-call-chart">By User</TabsTrigger>
             <TabsTrigger value="pie" data-testid="tab-call-pie">Distribution</TabsTrigger>
             <TabsTrigger value="table" data-testid="tab-call-table">Details</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="daily" className="mt-4">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                <span>Daily call activity (last 30 days with activity)</span>
+              </div>
+              
+              {dailyChartData.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No call data available for the selected period
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={dailyChartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="coldCallsGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#1a2b6d" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#1a2b6d" stopOpacity={0.1}/>
+                        </linearGradient>
+                        <linearGradient id="followupGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f5a623" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#f5a623" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis 
+                        dataKey="dateLabel" 
+                        tick={{ fontSize: 11 }}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip 
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0]?.payload;
+                            return (
+                              <div className="bg-background border rounded-lg shadow-lg p-3">
+                                <p className="font-medium mb-2">{label}</p>
+                                <div className="space-y-1 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-[#1a2b6d]" />
+                                    <span>Cold Calls: {data?.coldCalls || 0}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-[#f5a623]" />
+                                    <span>Follow-ups: {data?.followupCalls || 0}</span>
+                                  </div>
+                                  {data?.users && data.users.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t">
+                                      <p className="text-xs text-muted-foreground mb-1">By User:</p>
+                                      {data.users.slice(0, 5).map((u: DailyUserData) => (
+                                        <div key={u.userId} className="text-xs text-muted-foreground">
+                                          {u.userName}: {u.coldCalls} cold, {u.followupCalls} followups
+                                        </div>
+                                      ))}
+                                      {data.users.length > 5 && (
+                                        <div className="text-xs text-muted-foreground">+{data.users.length - 5} more</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Legend />
+                      <Area 
+                        type="monotone" 
+                        dataKey="coldCalls" 
+                        name="Cold Calls" 
+                        stroke="#1a2b6d" 
+                        fillOpacity={1}
+                        fill="url(#coldCallsGradient)"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="followupCalls" 
+                        name="Follow-ups" 
+                        stroke="#f5a623" 
+                        fillOpacity={1}
+                        fill="url(#followupGradient)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+
+                  {/* Daily breakdown table */}
+                  <ScrollArea className="h-[300px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-center">Cold Calls</TableHead>
+                          <TableHead className="text-center">Follow-ups</TableHead>
+                          <TableHead className="text-center">Total</TableHead>
+                          <TableHead className="hidden md:table-cell">Users Active</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dailyChartData.slice().reverse().map((day) => (
+                          <TableRow key={day.date} data-testid={`row-daily-${day.date}`}>
+                            <TableCell className="font-medium">{day.dateLabel}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                                {day.coldCalls}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                                {day.followupCalls}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge className="bg-green-500">{day.total}</Badge>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <div className="flex flex-wrap gap-1">
+                                {day.users.slice(0, 3).map((u) => (
+                                  <Badge key={u.userId} variant="outline" className="text-xs">
+                                    {u.userName.split(' ')[0]}
+                                  </Badge>
+                                ))}
+                                {day.users.length > 3 && (
+                                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                                    +{day.users.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </>
+              )}
+            </div>
+          </TabsContent>
 
           <TabsContent value="chart" className="mt-4">
             <ResponsiveContainer width="100%" height={300}>
