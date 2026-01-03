@@ -217,6 +217,7 @@ export default function SeedsReportPage() {
     interested: filteredSeeds.filter((s) => s.interestStatus === "interested").length,
     notInterested: filteredSeeds.filter((s) => s.interestStatus === "not_interested").length,
     undecided: filteredSeeds.filter((s) => !s.interestStatus).length,
+    existingCustomers: filteredSeeds.filter((s) => s.isExistingCustomer === true).length,
     upcomingFollowups: followupReminders.length,
   }), [filteredSeeds, followupReminders]);
 
@@ -243,7 +244,7 @@ export default function SeedsReportPage() {
     searchQuery !== "",
   ].filter(Boolean).length;
 
-  const exportToExcel = async (type: "all" | "not_interested" | "interested" | "followups") => {
+  const exportToExcel = async (type: "all" | "not_interested" | "interested" | "followups" | "existing_customers") => {
     setIsExporting(true);
     try {
       let dataToExport: SeedWithDetails[] = [];
@@ -257,6 +258,10 @@ export default function SeedsReportPage() {
         case "interested":
           dataToExport = filteredSeeds.filter((s) => s.interestStatus === "interested");
           filename = `interested_seeds_${format(new Date(), "yyyy-MM-dd")}.csv`;
+          break;
+        case "existing_customers":
+          dataToExport = filteredSeeds.filter((s) => s.isExistingCustomer === true);
+          filename = `existing_customers_${format(new Date(), "yyyy-MM-dd")}.csv`;
           break;
         case "followups":
           dataToExport = followupReminders;
@@ -679,6 +684,9 @@ export default function SeedsReportPage() {
             <TabsTrigger value="undecided" data-testid="tab-undecided">
               Undecided ({stats.undecided})
             </TabsTrigger>
+            <TabsTrigger value="existing_customers" data-testid="tab-existing-customers">
+              Existing Customers ({stats.existingCustomers})
+            </TabsTrigger>
             <TabsTrigger value="followups" data-testid="tab-followups">
               Followups ({stats.upcomingFollowups})
             </TabsTrigger>
@@ -727,6 +735,21 @@ export default function SeedsReportPage() {
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                 )}
                 Export Followups
+              </Button>
+            )}
+            {activeTab === "existing_customers" && (
+              <Button
+                variant="outline"
+                onClick={() => exportToExcel("existing_customers")}
+                disabled={isExporting}
+                data-testid="button-export-existing-customers"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                )}
+                Export Existing Customers
               </Button>
             )}
             {activeTab === "all" && (
@@ -796,6 +819,28 @@ export default function SeedsReportPage() {
             getInterestBadge={getInterestBadge}
             onSeedClick={setSelectedSeed}
           />
+        </TabsContent>
+
+        <TabsContent value="existing_customers" className="mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-blue-600" />
+                Existing Customers
+              </CardTitle>
+              <CardDescription>
+                Seeds marked as existing customers - already in Customer Master
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SeedsTable
+                seeds={filteredSeeds.filter((s) => s.isExistingCustomer === true)}
+                isLoading={isLoading}
+                getInterestBadge={getInterestBadge}
+                onSeedClick={setSelectedSeed}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="followups" className="mt-0">
