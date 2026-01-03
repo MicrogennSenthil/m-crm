@@ -6350,8 +6350,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalUsers: filteredAnalytics.length
       };
       
+      // Build day-wise analytics (last 30 days)
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      // Get filtered user IDs for day-wise data
+      const filteredUserIds = new Set(filteredAnalytics.map(u => u.userId));
+      
+      // Create a map of date -> user -> {coldCalls, followupCalls}
+      const dailyData = new Map<string, Map<string, { coldCalls: number; followupCalls: number; userName: string }>>();
+      
+      // Initialize last 30 days
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateKey = date.toISOString().split('T')[0];
+        dailyData.set(dateKey, new Map());
+      }
+      
+      // Count cold calls (seeds) per day per user
+      allLeads.forEach(lead => {
+        if (!filteredUserIds.has(lead.salesExecutiveId || '')) return;
+        if (lead.stage !== 'seed') return;
+        
+        const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+        if (!leadDate || leadDate < thirtyDaysAgo) return;
+        
+        const dateKey = leadDate.toISOString().split('T')[0];
+        const userMap = dailyData.get(dateKey);
+        if (!userMap) return;
+        
+        const user = activeUsers.find(u => u.id === lead.salesExecutiveId);
+        const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
+        
+        if (!userMap.has(lead.salesExecutiveId || '')) {
+          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, userName });
+        }
+        userMap.get(lead.salesExecutiveId || '')!.coldCalls++;
+      });
+      
+      // Count followups per day per user
+      allFollowups.forEach((followup: any) => {
+        const lead = allLeads.find(l => l.id === followup.leadId);
+        if (!lead || !filteredUserIds.has(lead.salesExecutiveId || '')) return;
+        
+        const followupDate = followup.followUpDate ? new Date(followup.followUpDate) : null;
+        if (!followupDate || followupDate < thirtyDaysAgo) return;
+        
+        const dateKey = followupDate.toISOString().split('T')[0];
+        const userMap = dailyData.get(dateKey);
+        if (!userMap) return;
+        
+        const user = activeUsers.find(u => u.id === lead.salesExecutiveId);
+        const userName = user ? `${user.firstName} ${user.lastName}` : 'Unknown';
+        
+        if (!userMap.has(lead.salesExecutiveId || '')) {
+          userMap.set(lead.salesExecutiveId || '', { coldCalls: 0, followupCalls: 0, userName });
+        }
+        userMap.get(lead.salesExecutiveId || '')!.followupCalls++;
+      });
+      
+      // Convert to array format for frontend
+      const dailyAnalytics = Array.from(dailyData.entries())
+        .map(([date, userMap]) => ({
+          date,
+          dateLabel: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          totalColdCalls: Array.from(userMap.values()).reduce((sum, u) => sum + u.coldCalls, 0),
+          totalFollowupCalls: Array.from(userMap.values()).reduce((sum, u) => sum + u.followupCalls, 0),
+          users: Array.from(userMap.entries()).map(([userId, data]) => ({
+            userId,
+            userName: data.userName,
+            coldCalls: data.coldCalls,
+            followupCalls: data.followupCalls
+          })).filter(u => u.coldCalls > 0 || u.followupCalls > 0)
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      
       res.json({
         userAnalytics: filteredAnalytics,
+        dailyAnalytics,
         totals,
         isAdmin
       });
