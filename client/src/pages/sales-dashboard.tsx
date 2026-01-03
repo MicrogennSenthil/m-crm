@@ -33,6 +33,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Lead, FollowUp, LeadComment, Task, User } from "@shared/schema";
 import { SalesStageAnalytics } from "@/components/sales-stage-analytics";
+import { CallAnalytics } from "@/components/call-analytics";
 
 interface LeadWithSalesExec extends Lead {
   salesExecutiveName: string | null;
@@ -803,6 +804,9 @@ export default function SalesDashboard() {
       {canViewAnalytics && (
         <SalesStageAnalytics />
       )}
+
+      {/* Call Analytics - User-wise Cold Calls vs Followups */}
+      <CallAnalytics compact={!isAdmin && !isSuperAdmin} />
 
       {/* Content Area */}
       <Card>
