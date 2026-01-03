@@ -56,6 +56,33 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { handleAssignment, handleCompletion } from "./pointsService";
 
+// Simple in-memory cache with TTL for expensive analytics computations
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const analyticsCache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache TTL
+
+function getCachedData<T>(key: string): T | null {
+  const entry = analyticsCache.get(key);
+  if (entry && Date.now() < entry.expiresAt) {
+    return entry.data as T;
+  }
+  if (entry) {
+    analyticsCache.delete(key); // Clean up expired entry
+  }
+  return null;
+}
+
+function setCachedData<T>(key: string, data: T, ttlMs: number = CACHE_TTL_MS): void {
+  analyticsCache.set(key, {
+    data,
+    expiresAt: Date.now() + ttlMs
+  });
+}
+
 // Generate 6-digit OTP
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -6264,6 +6291,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isSuperAdmin = currentUser?.email === "senthil@microgenn.com";
       const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
       
+      // User-specific cache key (each user gets their own cached view)
+      const cacheKey = `call-analytics-${userId}`;
+      const cachedData = getCachedData<any>(cacheKey);
+      if (cachedData) {
+        console.log(`[Analytics] Serving cached call analytics for user ${userId}`);
+        return res.json(cachedData);
+      }
+      
       // Get all users for the analytics
       const allUsers = await storage.getUsers();
       const activeUsers = allUsers.filter(u => u.isActive);
@@ -6470,12 +6505,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
       
-      res.json({
+      const responseData = {
         userAnalytics: filteredAnalytics,
         dailyAnalytics,
         totals,
         isAdmin
-      });
+      };
+      
+      // Cache the result for 2 minutes
+      setCachedData(cacheKey, responseData);
+      console.log(`[Analytics] Computed and cached call analytics for ${isAdmin ? 'admin' : 'user'}`);
+      
+      res.json(responseData);
     } catch (error) {
       console.error("Error fetching call analytics:", error);
       res.status(500).json({ message: "Failed to fetch call analytics" });
@@ -9262,6 +9303,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isSuperAdmin && !isAdminRole && !isDeptHead) {
         return res.status(403).json({ message: "Access denied. Admin or department head privileges required." });
       }
+      
+      // User-specific cache key to prevent data leakage between different access levels
+      const cacheKey = `sales-stage-analytics-${userId}`;
+      const cachedData = getCachedData<any>(cacheKey);
+      if (cachedData) {
+        console.log(`[Analytics] Serving cached sales stage analytics for user ${userId}`);
+        return res.json(cachedData);
+      }
+      
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth();
@@ -9501,7 +9551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
       
-      res.json({
+      const responseData = {
         stages: STAGES,
         weekly: {
           data: weeklyDataReversed,
@@ -9519,7 +9569,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? Math.round((allLeads.filter(l => l.stage === 'closed_won').length / allLeads.length) * 100) 
             : 0,
         },
-      });
+      };
+      
+      // Cache the result for 2 minutes
+      setCachedData(cacheKey, responseData);
+      console.log(`[Analytics] Computed and cached sales stage analytics`);
+      
+      res.json(responseData);
     } catch (error) {
       console.error("Error fetching sales stage analytics:", error);
       res.status(500).json({ message: "Failed to fetch sales stage analytics" });
