@@ -6799,6 +6799,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Stage drill-down endpoint for call analytics table
+  app.get("/api/analytics/stage-drilldown", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { date, stageType, salesExecutiveId } = req.query;
+      
+      if (!date || !stageType) {
+        return res.status(400).json({ message: "Date and stageType are required" });
+      }
+      
+      const validStageTypes = ['cold_call', 'followup', 'conversion', 'demo'];
+      if (!validStageTypes.includes(stageType as string)) {
+        return res.status(400).json({ message: "Invalid stageType" });
+      }
+      
+      // Parse date range for the specific day
+      const dateFrom = new Date(date as string);
+      dateFrom.setHours(0, 0, 0, 0);
+      const dateTo = new Date(date as string);
+      dateTo.setHours(23, 59, 59, 999);
+      
+      // Check permissions
+      const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
+      const isSuperAdmin = userEmail === SUPER_ADMIN_EMAIL;
+      
+      const currentUser = await storage.getUser(userId);
+      const isAdmin = isSuperAdmin || currentUser?.role === 'admin';
+      
+      const headDepartments = await storage.getDepartmentsByHead(userId);
+      const isDepartmentHead = headDepartments.length > 0;
+      
+      const allUsers = await storage.getUsers();
+      const activeUsers = allUsers.filter((u: any) => u.isActive !== false && u.isApproved !== false);
+      
+      // Get team member IDs if department head
+      const teamMemberIds = new Set<string>();
+      if (isDepartmentHead) {
+        const deptIds = headDepartments.map(d => d.id);
+        activeUsers.forEach((u: any) => {
+          if (u.departmentId && deptIds.includes(u.departmentId)) {
+            teamMemberIds.add(u.id);
+          }
+        });
+        teamMemberIds.add(userId);
+      }
+      
+      // Determine which users to include
+      let targetUserIds: Set<string>;
+      
+      if (isAdmin) {
+        targetUserIds = new Set(activeUsers.map((u: any) => u.id));
+      } else if (isDepartmentHead && teamMemberIds.size > 0) {
+        targetUserIds = teamMemberIds;
+      } else {
+        targetUserIds = new Set([userId]);
+      }
+      
+      // Filter by specific sales executive if provided
+      if (salesExecutiveId && typeof salesExecutiveId === 'string') {
+        const authorizedUserIds = isAdmin 
+          ? new Set(activeUsers.map((u: any) => u.id))
+          : isDepartmentHead && teamMemberIds.size > 0
+            ? teamMemberIds
+            : new Set([userId]);
+        
+        if (!authorizedUserIds.has(salesExecutiveId)) {
+          return res.status(403).json({ message: "Not authorized to view this user's data" });
+        }
+        targetUserIds = new Set([salesExecutiveId]);
+      }
+      
+      const userLookup = new Map(activeUsers.map((u: any) => [u.id, u]));
+      const allLeads = await storage.getLeads();
+      const allFollowups = await storage.getAllFollowUps();
+      const leadLookup = new Map(allLeads.map((l: any) => [l.id, l]));
+      
+      let records: any[] = [];
+      const stageTypeStr = stageType as string;
+      
+      if (stageTypeStr === 'cold_call') {
+        // Get cold calls for the date
+        records = allLeads
+          .filter((lead: any) => {
+            if (!lead.salesExecutiveId || !targetUserIds.has(lead.salesExecutiveId)) return false;
+            const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+            if (!leadDate) return false;
+            return leadDate >= dateFrom && leadDate <= dateTo;
+          })
+          .map((lead: any) => {
+            const user: any = userLookup.get(lead.salesExecutiveId || '');
+            return {
+              id: lead.id,
+              type: 'cold_call',
+              time: lead.createdAt,
+              companyName: lead.companyName,
+              contactPerson: lead.contactPerson,
+              contactPhone: lead.contactPhone,
+              contactEmail: lead.contactEmail,
+              stage: lead.stage,
+              source: lead.source,
+              city: lead.city,
+              area: lead.area,
+              isExistingCustomer: lead.isExistingCustomer || false,
+              salesExecutiveId: lead.salesExecutiveId,
+              salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown'
+            };
+          });
+      } else if (stageTypeStr === 'followup') {
+        // Get followups for the date
+        const leadIds = new Set(allLeads.filter((l: any) => l.salesExecutiveId && targetUserIds.has(l.salesExecutiveId)).map((l: any) => l.id));
+        
+        records = allFollowups
+          .filter((followup: any) => {
+            if (!leadIds.has(followup.leadId)) return false;
+            const followupDate = followup.createdAt 
+              ? new Date(followup.createdAt) 
+              : (followup.followUpDate ? new Date(followup.followUpDate) : null);
+            if (!followupDate) return false;
+            return followupDate >= dateFrom && followupDate <= dateTo;
+          })
+          .map((followup: any) => {
+            const lead: any = leadLookup.get(followup.leadId);
+            const user: any = lead ? userLookup.get(lead.salesExecutiveId || '') : null;
+            return {
+              id: followup.id,
+              type: 'followup',
+              time: followup.createdAt || followup.followUpDate,
+              companyName: lead?.companyName || 'Unknown',
+              contactPerson: lead?.contactPerson || 'Unknown',
+              contactPhone: lead?.contactPhone || '',
+              contactEmail: lead?.contactEmail || '',
+              stage: lead?.stage,
+              source: lead?.source,
+              city: lead?.city,
+              area: lead?.area,
+              isExistingCustomer: lead?.isExistingCustomer || false,
+              notes: followup.notes,
+              completed: followup.completed,
+              salesExecutiveId: lead?.salesExecutiveId,
+              salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown'
+            };
+          });
+      } else if (stageTypeStr === 'conversion') {
+        // Get leads that were converted (stage changed to qualified stages)
+        const qualifiedStages = ['qualified', 'proposal', 'negotiation', 'won'];
+        records = allLeads
+          .filter((lead: any) => {
+            if (!lead.salesExecutiveId || !targetUserIds.has(lead.salesExecutiveId)) return false;
+            if (!qualifiedStages.includes(lead.stage?.toLowerCase())) return false;
+            const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+            if (!leadDate) return false;
+            return leadDate >= dateFrom && leadDate <= dateTo;
+          })
+          .map((lead: any) => {
+            const user: any = userLookup.get(lead.salesExecutiveId || '');
+            return {
+              id: lead.id,
+              type: 'conversion',
+              time: lead.createdAt,
+              companyName: lead.companyName,
+              contactPerson: lead.contactPerson,
+              contactPhone: lead.contactPhone,
+              contactEmail: lead.contactEmail,
+              stage: lead.stage,
+              source: lead.source,
+              city: lead.city,
+              area: lead.area,
+              isExistingCustomer: lead.isExistingCustomer || false,
+              salesExecutiveId: lead.salesExecutiveId,
+              salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown'
+            };
+          });
+      } else if (stageTypeStr === 'demo') {
+        // Get leads that are in demo stage
+        records = allLeads
+          .filter((lead: any) => {
+            if (!lead.salesExecutiveId || !targetUserIds.has(lead.salesExecutiveId)) return false;
+            if (lead.stage?.toLowerCase() !== 'demo') return false;
+            const leadDate = lead.createdAt ? new Date(lead.createdAt) : null;
+            if (!leadDate) return false;
+            return leadDate >= dateFrom && leadDate <= dateTo;
+          })
+          .map((lead: any) => {
+            const user: any = userLookup.get(lead.salesExecutiveId || '');
+            return {
+              id: lead.id,
+              type: 'demo',
+              time: lead.createdAt,
+              companyName: lead.companyName,
+              contactPerson: lead.contactPerson,
+              contactPhone: lead.contactPhone,
+              contactEmail: lead.contactEmail,
+              stage: lead.stage,
+              source: lead.source,
+              city: lead.city,
+              area: lead.area,
+              isExistingCustomer: lead.isExistingCustomer || false,
+              salesExecutiveId: lead.salesExecutiveId,
+              salesExecutiveName: user ? `${user.firstName} ${user.lastName}` : 'Unknown'
+            };
+          });
+      }
+      
+      // Sort by time (newest first)
+      records.sort((a, b) => {
+        const timeA = a.time ? new Date(a.time).getTime() : 0;
+        const timeB = b.time ? new Date(b.time).getTime() : 0;
+        return timeB - timeA;
+      });
+      
+      res.json({
+        date: date,
+        stageType,
+        count: records.length,
+        records
+      });
+    } catch (error) {
+      console.error("Error fetching stage drilldown:", error);
+      res.status(500).json({ message: "Failed to fetch stage drilldown" });
+    }
+  });
+
   // Reports routes (real analytics)
   app.get("/api/reports/sales", isAuthenticated, async (req, res) => {
     try {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -5,11 +6,39 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
-import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp, ArrowRightLeft, Presentation } from "lucide-react";
+import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp, ArrowRightLeft, Presentation, X, MapPin, Mail, Clock, Loader2 } from "lucide-react";
+
+interface DrilldownRecord {
+  id: string | number;
+  type: string;
+  time: string;
+  companyName: string;
+  contactPerson: string;
+  contactPhone: string;
+  contactEmail: string;
+  stage: string;
+  source: string;
+  city: string;
+  area: string;
+  isExistingCustomer: boolean;
+  salesExecutiveId: string;
+  salesExecutiveName: string;
+  notes?: string;
+  completed?: boolean;
+}
+
+interface DrilldownData {
+  date: string;
+  stageType: string;
+  count: number;
+  records: DrilldownRecord[];
+}
 
 interface CustomerData {
   customerId: string;
@@ -69,10 +98,47 @@ interface CallAnalyticsData {
 
 const COLORS = ['#1a2b6d', '#f5a623', '#4ade80', '#f87171', '#60a5fa', '#a78bfa', '#fb923c', '#22d3ee'];
 
+const STAGE_TYPE_LABELS: Record<string, string> = {
+  cold_call: 'Cold Calls',
+  followup: 'Follow-ups',
+  conversion: 'Conversions',
+  demo: 'Demos'
+};
+
+const STAGE_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  cold_call: { bg: 'bg-blue-50 dark:bg-blue-950/50', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200' },
+  followup: { bg: 'bg-amber-50 dark:bg-amber-950/50', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200' },
+  conversion: { bg: 'bg-green-50 dark:bg-green-950/50', text: 'text-green-600 dark:text-green-400', border: 'border-green-200' },
+  demo: { bg: 'bg-pink-50 dark:bg-pink-950/50', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-200' }
+};
+
 export function CallAnalytics({ compact = false }: { compact?: boolean }) {
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [drilldownParams, setDrilldownParams] = useState<{ date: string; stageType: string; dateLabel: string } | null>(null);
+  
   const { data, isLoading, error } = useQuery<CallAnalyticsData>({
     queryKey: ["/api/analytics/calls"],
   });
+  
+  // Drilldown query - only runs when dialog is open and params are set
+  const drilldownQueryKey = drilldownParams 
+    ? `/api/analytics/stage-drilldown?date=${drilldownParams.date}&stageType=${drilldownParams.stageType}`
+    : null;
+    
+  const { data: drilldownData, isLoading: drilldownLoading } = useQuery<DrilldownData>({
+    queryKey: [drilldownQueryKey],
+    enabled: !!drilldownParams && drilldownOpen && !!drilldownQueryKey
+  });
+  
+  const handleStageClick = (date: string, stageType: string, dateLabel: string) => {
+    setDrilldownParams({ date, stageType, dateLabel });
+    setDrilldownOpen(true);
+  };
+  
+  const closeDrilldown = () => {
+    setDrilldownOpen(false);
+    setDrilldownParams(null);
+  };
 
   if (isLoading) {
     return (
@@ -399,22 +465,46 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                           <TableRow key={day.date} data-testid={`row-daily-${day.date}`}>
                             <TableCell className="font-medium">{day.dateLabel}</TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400">
+                              <Badge 
+                                variant="outline" 
+                                className="bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400 cursor-pointer hover-elevate"
+                                onClick={() => day.coldCalls > 0 && handleStageClick(day.date, 'cold_call', day.dateLabel)}
+                                data-testid={`drilldown-cold-${day.date}`}
+                                title="Click to see details"
+                              >
                                 {day.coldCalls}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400">
+                              <Badge 
+                                variant="outline" 
+                                className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 cursor-pointer hover-elevate"
+                                onClick={() => day.followupCalls > 0 && handleStageClick(day.date, 'followup', day.dateLabel)}
+                                data-testid={`drilldown-followup-${day.date}`}
+                                title="Click to see details"
+                              >
                                 {day.followupCalls}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                              <Badge 
+                                variant="outline" 
+                                className="bg-green-50 text-green-600 border-green-200 dark:bg-green-950/50 dark:text-green-400 cursor-pointer hover-elevate"
+                                onClick={() => day.leadConversions > 0 && handleStageClick(day.date, 'conversion', day.dateLabel)}
+                                data-testid={`drilldown-conversion-${day.date}`}
+                                title="Click to see details"
+                              >
                                 {day.leadConversions}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-pink-50 text-pink-600 border-pink-200 dark:bg-pink-950/50 dark:text-pink-400">
+                              <Badge 
+                                variant="outline" 
+                                className="bg-pink-50 text-pink-600 border-pink-200 dark:bg-pink-950/50 dark:text-pink-400 cursor-pointer hover-elevate"
+                                onClick={() => day.demoCount > 0 && handleStageClick(day.date, 'demo', day.dateLabel)}
+                                data-testid={`drilldown-demo-${day.date}`}
+                                title="Click to see details"
+                              >
                                 {day.demoCount}
                               </Badge>
                             </TableCell>
@@ -628,6 +718,102 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
           </TabsContent>
         </Tabs>
       </CardContent>
+      
+      {/* Drilldown Dialog */}
+      <Dialog open={drilldownOpen} onOpenChange={setDrilldownOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {drilldownParams?.stageType && (
+                <Badge 
+                  variant="outline" 
+                  className={`${STAGE_TYPE_COLORS[drilldownParams.stageType]?.bg} ${STAGE_TYPE_COLORS[drilldownParams.stageType]?.text} ${STAGE_TYPE_COLORS[drilldownParams.stageType]?.border}`}
+                >
+                  {STAGE_TYPE_LABELS[drilldownParams.stageType] || drilldownParams.stageType}
+                </Badge>
+              )}
+              <span>{drilldownParams?.dateLabel}</span>
+            </DialogTitle>
+            <DialogDescription>
+              {drilldownData?.count || 0} records found
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 pr-4" data-testid="drilldown-content">
+            {drilldownLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : drilldownData?.records && drilldownData.records.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead className="hidden md:table-cell">Contact</TableHead>
+                    <TableHead className="hidden lg:table-cell">Location</TableHead>
+                    <TableHead className="hidden md:table-cell">Executive</TableHead>
+                    <TableHead className="hidden xl:table-cell">Stage</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {drilldownData.records.map((record) => (
+                    <TableRow key={record.id} data-testid={`drilldown-row-${record.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Clock className="h-3 w-3 text-muted-foreground" />
+                          {record.time ? new Date(record.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Building2 className="h-3 w-3 text-muted-foreground" />
+                          <span className="font-medium truncate max-w-[150px]">{record.companyName}</span>
+                          {record.isExistingCustomer && (
+                            <Badge variant="secondary" className="text-xs ml-1">Existing</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="text-sm">{record.contactPerson}</div>
+                        <div className="text-xs text-muted-foreground">{record.contactPhone}</div>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        {(record.city || record.area) && (
+                          <div className="flex items-center gap-1 text-sm">
+                            <MapPin className="h-3 w-3 text-muted-foreground" />
+                            {[record.area, record.city].filter(Boolean).join(', ')}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <span className="text-sm">{record.salesExecutiveName}</span>
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        {record.stage && (
+                          <Badge variant="outline" className="text-xs">
+                            {record.stage}
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                No records found for this date and stage
+              </div>
+            )}
+          </ScrollArea>
+          
+          <div className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={closeDrilldown} data-testid="button-close-drilldown">
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
