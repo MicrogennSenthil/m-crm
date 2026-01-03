@@ -63,6 +63,8 @@ interface CallAnalyticsData {
     totalUsers: number;
   };
   isAdmin: boolean;
+  isDepartmentHead?: boolean;
+  viewScope?: 'self' | 'team' | 'all';
 }
 
 const COLORS = ['#1a2b6d', '#f5a623', '#4ade80', '#f87171', '#60a5fa', '#a78bfa', '#fb923c', '#22d3ee'];
@@ -109,7 +111,14 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  const { userAnalytics, dailyAnalytics, totals, isAdmin } = data;
+  const { userAnalytics, dailyAnalytics, totals, isAdmin, isDepartmentHead, viewScope } = data;
+  
+  // Get scope description for display
+  const getScopeDescription = () => {
+    if (viewScope === 'all') return 'Organization-wide call analytics';
+    if (viewScope === 'team') return 'Team performance analytics';
+    return 'Your personal performance';
+  };
 
   const chartData = userAnalytics.map(user => ({
     name: user.userName.split(' ')[0],
@@ -191,9 +200,19 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
         <CardTitle className="flex items-center gap-2">
           <Phone className="h-5 w-5" />
           Call Analytics
+          {viewScope === 'team' && (
+            <Badge variant="outline" className="ml-2 bg-indigo-50 text-indigo-600 border-indigo-200">
+              Team View
+            </Badge>
+          )}
+          {viewScope === 'self' && (
+            <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-600 border-emerald-200">
+              My Performance
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          User-wise breakdown of cold calls vs follow-up calls
+          {getScopeDescription()}
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -6282,6 +6282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User-wise Call Analytics API - Cold Calls vs Followups
+  // Accessible to all users - they see their own data, heads see their team, admins see all
   app.get("/api/analytics/calls", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -6290,6 +6291,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user is admin/super admin
       const isSuperAdmin = currentUser?.email === "senthil@microgenn.com";
       const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+      
+      // Check if user is a department head
+      const headDepartments = await storage.getDepartmentsByHead(userId);
+      const isDepartmentHead = headDepartments.length > 0;
       
       // User-specific cache key (each user gets their own cached view)
       const cacheKey = `call-analytics-${userId}`;
@@ -6302,6 +6307,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all users for the analytics
       const allUsers = await storage.getUsers();
       const activeUsers = allUsers.filter(u => u.isActive);
+      
+      // Get team member IDs if user is department head
+      let teamMemberIds = new Set<string>();
+      if (isDepartmentHead) {
+        // Get all users who belong to the same departments
+        for (const dept of headDepartments) {
+          const deptUsers = activeUsers.filter(u => u.departmentId === dept.id);
+          deptUsers.forEach(u => teamMemberIds.add(u.id));
+        }
+      }
       
       // Get all leads (seeds count as cold calls)
       const allLeads = await storage.getLeads({});
@@ -6385,9 +6400,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }).filter(u => u.totalCalls > 0 || isAdmin).sort((a, b) => b.totalCalls - a.totalCalls);
       
-      // Filter based on role - sales exec only sees their own data, admin/superadmin sees all
+      // Filter based on role:
+      // - Admin/Super admin: sees all users
+      // - Department head: sees their team members
+      // - Regular user: sees only their own data
       let filteredAnalytics = userAnalytics;
-      if (!isAdmin) {
+      let viewScope = 'self'; // 'self', 'team', or 'all'
+      
+      if (isAdmin) {
+        viewScope = 'all';
+        // Admin sees all - no filtering needed
+      } else if (isDepartmentHead && teamMemberIds.size > 0) {
+        viewScope = 'team';
+        // Department head sees their team
+        filteredAnalytics = userAnalytics.filter(u => teamMemberIds.has(u.userId));
+      } else {
+        viewScope = 'self';
+        // Regular user sees only their own data
         filteredAnalytics = userAnalytics.filter(u => u.userId === userId);
       }
       
@@ -6509,12 +6538,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAnalytics: filteredAnalytics,
         dailyAnalytics,
         totals,
-        isAdmin
+        isAdmin,
+        isDepartmentHead,
+        viewScope // 'self', 'team', or 'all'
       };
       
       // Cache the result for 2 minutes
       setCachedData(cacheKey, responseData);
-      console.log(`[Analytics] Computed and cached call analytics for ${isAdmin ? 'admin' : 'user'}`);
+      console.log(`[Analytics] Computed and cached call analytics for user ${userId} (scope: ${viewScope})`);
       
       res.json(responseData);
     } catch (error) {

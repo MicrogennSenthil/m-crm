@@ -90,6 +90,14 @@ const menuGroups = [
         bgColor: "bg-blue-500/10",
         module: "dashboard",
       },
+      {
+        title: "My Performance",
+        url: "/my-performance",
+        icon: BarChart3,
+        color: "text-emerald-500",
+        bgColor: "bg-emerald-500/10",
+        module: "my_performance", // Available to all authenticated users
+      },
     ],
   },
   {
@@ -507,6 +515,9 @@ export function AppSidebar({ isPinned, onPinChange }: AppSidebarProps) {
     const visibleItems = items.filter((item) => {
       if (!user) return false;
       if (isSuperAdmin) return true;
+      
+      // My Performance is always visible to all authenticated users
+      if (item.module === "my_performance") return true;
       
       // Check module permission from database
       if (item.module && canView(item.module)) return true;
