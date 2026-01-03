@@ -6277,12 +6277,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all customers for customer breakdown
       const allCustomers = await storage.getCustomers();
       
+      // Define valid stages for analytics (centralized for consistency)
+      const VALID_STAGES = ["seed", "qualified", "demo", "proposal", "negotiation", "won", "lost"];
+      const CONVERTED_STAGES = ["qualified", "demo", "proposal", "negotiation", "won", "lost"];
+      const DEMO_STAGES = ["demo", "proposal", "negotiation", "won"];
+      
       // Build user-wise analytics
       const userAnalytics = activeUsers.map(user => {
         // Cold calls = All leads/seeds created by this user (initial contact at creation time)
         // This counts all leads created, regardless of current stage
         const userLeads = allLeads.filter(l => l.salesExecutiveId === user.id);
         const coldCalls = userLeads.length; // All leads represent cold calls (initial contact)
+        
+        // Lead conversions = Leads that progressed past "seed" stage (became qualified leads)
+        // Only count leads with valid post-seed stages, ignore null/undefined/empty stages
+        const leadConversions = userLeads.filter(l => l.stage && CONVERTED_STAGES.includes(l.stage)).length;
+        
+        // Demo count = Leads that reached "demo" stage (including those that moved past demo)
+        // Only count leads with valid demo+ stages
+        const demoCount = userLeads.filter(l => l.stage && DEMO_STAGES.includes(l.stage)).length;
         
         // Followup calls = Followups linked to leads assigned to this user
         const userLeadIds = new Set(userLeads.map(l => l.id));
@@ -6325,6 +6338,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           coldCalls,
           followupCalls,
           totalCalls,
+          leadConversions,
+          demoCount,
           customers: Array.from(customerBreakdown.entries()).map(([id, data]) => ({
             customerId: id,
             customerName: data.customerName,
@@ -6346,6 +6361,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coldCalls: filteredAnalytics.reduce((sum, u) => sum + u.coldCalls, 0),
         followupCalls: filteredAnalytics.reduce((sum, u) => sum + u.followupCalls, 0),
         totalCalls: filteredAnalytics.reduce((sum, u) => sum + u.totalCalls, 0),
+        leadConversions: filteredAnalytics.reduce((sum, u) => sum + u.leadConversions, 0),
+        demoCount: filteredAnalytics.reduce((sum, u) => sum + u.demoCount, 0),
         totalUsers: filteredAnalytics.length
       };
       

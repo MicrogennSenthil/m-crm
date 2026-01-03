@@ -9,7 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
-import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp } from "lucide-react";
+import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp, ArrowRightLeft, Presentation } from "lucide-react";
 
 interface CustomerData {
   customerId: string;
@@ -27,6 +27,8 @@ interface UserAnalytics {
   coldCalls: number;
   followupCalls: number;
   totalCalls: number;
+  leadConversions: number;
+  demoCount: number;
   customers: CustomerData[];
 }
 
@@ -52,6 +54,8 @@ interface CallAnalyticsData {
     coldCalls: number;
     followupCalls: number;
     totalCalls: number;
+    leadConversions: number;
+    demoCount: number;
     totalUsers: number;
   };
   isAdmin: boolean;
@@ -108,6 +112,8 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     fullName: user.userName,
     coldCalls: user.coldCalls,
     followupCalls: user.followupCalls,
+    leadConversions: user.leadConversions,
+    demoCount: user.demoCount,
     total: user.totalCalls
   }));
 
@@ -185,25 +191,35 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
             <PhoneCall className="h-6 w-6 mx-auto mb-2 text-blue-600" />
-            <div className="text-2xl font-bold text-blue-600">{totals.coldCalls}</div>
+            <div className="text-2xl font-bold text-blue-600" data-testid="text-total-cold-calls">{totals.coldCalls}</div>
             <div className="text-sm text-muted-foreground">Cold Calls</div>
           </div>
           <div className="text-center p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
             <Phone className="h-6 w-6 mx-auto mb-2 text-amber-600" />
-            <div className="text-2xl font-bold text-amber-600">{totals.followupCalls}</div>
+            <div className="text-2xl font-bold text-amber-600" data-testid="text-total-followups">{totals.followupCalls}</div>
             <div className="text-sm text-muted-foreground">Follow-up Calls</div>
           </div>
           <div className="text-center p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-            <Phone className="h-6 w-6 mx-auto mb-2 text-green-600" />
-            <div className="text-2xl font-bold text-green-600">{totals.totalCalls}</div>
+            <ArrowRightLeft className="h-6 w-6 mx-auto mb-2 text-green-600" />
+            <div className="text-2xl font-bold text-green-600" data-testid="text-total-conversions">{totals.leadConversions}</div>
+            <div className="text-sm text-muted-foreground">Lead Conversions</div>
+          </div>
+          <div className="text-center p-4 bg-pink-50 dark:bg-pink-950/30 rounded-lg border border-pink-200 dark:border-pink-800">
+            <Presentation className="h-6 w-6 mx-auto mb-2 text-pink-600" />
+            <div className="text-2xl font-bold text-pink-600" data-testid="text-total-demos">{totals.demoCount}</div>
+            <div className="text-sm text-muted-foreground">Demos</div>
+          </div>
+          <div className="text-center p-4 bg-slate-50 dark:bg-slate-950/30 rounded-lg border border-slate-200 dark:border-slate-800">
+            <Phone className="h-6 w-6 mx-auto mb-2 text-slate-600" />
+            <div className="text-2xl font-bold text-slate-600" data-testid="text-total-calls">{totals.totalCalls}</div>
             <div className="text-sm text-muted-foreground">Total Calls</div>
           </div>
           <div className="text-center p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
             <Users className="h-6 w-6 mx-auto mb-2 text-purple-600" />
-            <div className="text-2xl font-bold text-purple-600">{totals.totalUsers}</div>
+            <div className="text-2xl font-bold text-purple-600" data-testid="text-total-users">{totals.totalUsers}</div>
             <div className="text-sm text-muted-foreground">Active Users</div>
           </div>
         </div>
@@ -361,18 +377,47 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
           </TabsContent>
 
           <TabsContent value="chart" className="mt-4">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip 
-                  formatter={(value: any, name: any) => [value, String(name) === 'coldCalls' ? 'Cold Calls' : 'Follow-ups']}
-                  labelFormatter={(label: any, payload: any) => payload?.[0]?.payload?.fullName || label}
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0]?.payload;
+                      return (
+                        <div className="bg-background border rounded-lg shadow-lg p-3">
+                          <p className="font-medium mb-2">{data?.fullName || label}</p>
+                          <div className="space-y-1 text-sm">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-[#1a2b6d]" />
+                              <span>Cold Calls: {data?.coldCalls || 0}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-[#f5a623]" />
+                              <span>Follow-ups: {data?.followupCalls || 0}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-[#4ade80]" />
+                              <span>Conversions: {data?.leadConversions || 0}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-[#ec4899]" />
+                              <span>Demos: {data?.demoCount || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
                 />
                 <Legend />
                 <Bar dataKey="coldCalls" name="Cold Calls" fill="#1a2b6d" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="followupCalls" name="Follow-ups" fill="#f5a623" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="leadConversions" name="Conversions" fill="#4ade80" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="demoCount" name="Demos" fill="#ec4899" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </TabsContent>
@@ -438,8 +483,10 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                     <TableHead>User</TableHead>
                     <TableHead className="text-center">Cold Calls</TableHead>
                     <TableHead className="text-center">Follow-ups</TableHead>
+                    <TableHead className="text-center">Conversions</TableHead>
+                    <TableHead className="text-center">Demos</TableHead>
                     <TableHead className="text-center">Total</TableHead>
-                    <TableHead className="hidden md:table-cell">Top Customers</TableHead>
+                    <TableHead className="hidden lg:table-cell">Top Customers</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -452,21 +499,31 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/50 dark:text-blue-400">
                           {user.coldCalls}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400">
                           {user.followupCalls}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge className="bg-green-500">
+                        <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 dark:bg-green-950/50 dark:text-green-400">
+                          {user.leadConversions}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-pink-50 text-pink-600 border-pink-200 dark:bg-pink-950/50 dark:text-pink-400">
+                          {user.demoCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className="bg-slate-500">
                           {user.totalCalls}
                         </Badge>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {user.customers.slice(0, 3).map((customer, idx) => (
                             <Badge 
