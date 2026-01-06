@@ -151,6 +151,11 @@ export default function SalesReports() {
     if (!leads) return [];
     
     return leads.filter(lead => {
+      // Exclude "not interested" leads from reports
+      if ((lead as any).interestStatus === "not_interested") {
+        return false;
+      }
+      
       if (fromDate && toDate && lead.createdAt) {
         const leadDate = new Date(lead.createdAt);
         if (!isWithinInterval(leadDate, { start: fromDate, end: toDate })) {
