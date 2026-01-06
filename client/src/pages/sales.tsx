@@ -274,12 +274,13 @@ export default function Sales() {
     return filteredLeads?.filter((lead) => {
       if (lead.stage !== stageId) return false;
       
-      // For seeds stage, hide "not interested" and "existing customer" seeds
+      const leadAny = lead as any;
+      
+      // Hide "not interested" leads from ALL stages (they only show in reports)
+      if (leadAny.interestStatus === "not_interested") return false;
+      
+      // For seeds stage, also hide "existing customer" seeds
       if (stageId === "seed") {
-        const leadAny = lead as any;
-        // Hide not interested seeds
-        if (leadAny.interestStatus === "not_interested") return false;
-        // Hide existing customer seeds
         if (leadAny.isExistingCustomer === true) return false;
       }
       

@@ -2361,6 +2361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           FROM follow_ups f
           LEFT JOIN leads l ON f.lead_id = l.id
           WHERE (l.stage NOT IN ('closed_won', 'closed_lost') OR l.stage IS NULL)
+            AND (l.interest_status IS NULL OR l.interest_status != 'not_interested')
         )
         SELECT id, "leadId", notes, "followUpDate", completed, "createdAt",
                "leadCompanyName", "leadContactPerson", "leadContactPhone", "leadStage", "salesExecutiveId"
