@@ -58,6 +58,9 @@ import {
   type LeadStageHistory,
   type InsertLeadStageHistory,
   leadStageHistory,
+  leadAssignmentHistory,
+  type LeadAssignmentHistory,
+  type InsertLeadAssignmentHistory,
   type Quote,
   type InsertQuote,
   type Project,
@@ -242,6 +245,11 @@ export interface IStorage {
   // Negotiation Date History operations
   getNegotiationDateHistory(leadId: string): Promise<NegotiationDateHistory[]>;
   createNegotiationDateHistory(history: InsertNegotiationDateHistory): Promise<NegotiationDateHistory>;
+
+  // Lead Assignment History operations
+  getLeadAssignmentHistory(leadId: string): Promise<LeadAssignmentHistory[]>;
+  createLeadAssignmentHistory(history: InsertLeadAssignmentHistory): Promise<LeadAssignmentHistory>;
+  reassignLead(leadId: string, newSalesExecutiveId: string, reassignedById: string, reason?: string): Promise<Lead>;
 
   // Quote operations
   getQuotesByLead(leadId: string): Promise<Quote[]>;
@@ -1233,6 +1241,46 @@ export class DatabaseStorage implements IStorage {
   async createNegotiationDateHistory(history: InsertNegotiationDateHistory): Promise<NegotiationDateHistory> {
     const [newHistory] = await db.insert(negotiationDateHistory).values(history).returning();
     return newHistory;
+  }
+
+  // Lead Assignment History operations
+  async getLeadAssignmentHistory(leadId: string): Promise<LeadAssignmentHistory[]> {
+    return await db
+      .select()
+      .from(leadAssignmentHistory)
+      .where(eq(leadAssignmentHistory.leadId, leadId))
+      .orderBy(desc(leadAssignmentHistory.createdAt));
+  }
+
+  async createLeadAssignmentHistory(history: InsertLeadAssignmentHistory): Promise<LeadAssignmentHistory> {
+    const [newHistory] = await db.insert(leadAssignmentHistory).values(history).returning();
+    return newHistory;
+  }
+
+  async reassignLead(leadId: string, newSalesExecutiveId: string, reassignedById: string, reason?: string): Promise<Lead> {
+    // Get the current lead to get the old sales executive
+    const lead = await this.getLead(leadId);
+    if (!lead) {
+      throw new Error("Lead not found");
+    }
+
+    const oldSalesExecutiveId = lead.salesExecutiveId;
+
+    // Create assignment history record
+    await this.createLeadAssignmentHistory({
+      leadId,
+      fromUserId: oldSalesExecutiveId || undefined,
+      toUserId: newSalesExecutiveId,
+      reassignedById,
+      reason: reason || undefined,
+    });
+
+    // Update the lead with new sales executive
+    const updatedLead = await this.updateLead(leadId, {
+      salesExecutiveId: newSalesExecutiveId,
+    });
+
+    return updatedLead;
   }
 
   // Quote operations

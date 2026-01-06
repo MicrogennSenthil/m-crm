@@ -315,6 +315,25 @@ export const insertLeadStageHistorySchema = createInsertSchema(leadStageHistory)
 export type InsertLeadStageHistory = z.infer<typeof insertLeadStageHistorySchema>;
 export type LeadStageHistory = typeof leadStageHistory.$inferSelect;
 
+// Lead Assignment History table - Track all sales executive reassignments
+export const leadAssignmentHistory = pgTable("lead_assignment_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  fromUserId: varchar("from_user_id").references(() => users.id), // Previous sales executive (null for initial assignment)
+  toUserId: varchar("to_user_id").notNull().references(() => users.id), // New sales executive
+  reassignedById: varchar("reassigned_by_id").references(() => users.id), // User who performed the reassignment
+  reason: text("reason"), // Optional reason for reassignment
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLeadAssignmentHistorySchema = createInsertSchema(leadAssignmentHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLeadAssignmentHistory = z.infer<typeof insertLeadAssignmentHistorySchema>;
+export type LeadAssignmentHistory = typeof leadAssignmentHistory.$inferSelect;
+
 // Quotes table - Sales quotes sent to leads
 export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
