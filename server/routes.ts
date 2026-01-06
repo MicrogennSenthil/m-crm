@@ -11656,9 +11656,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Generate contract number
   async function generateContractNumber(): Promise<string> {
-    const result = await db.select({ count: sql<number>`count(*)` }).from(customerContracts);
-    const count = Number(result[0]?.count || 0) + 1;
-    return `CON-${String(count).padStart(6, '0')}`;
+    // Find the maximum contract number to avoid duplicates after deletions
+    const result = await db.select({ 
+      maxNum: sql<string>`MAX(CAST(SUBSTRING(contract_number FROM 5) AS INTEGER))` 
+    }).from(customerContracts);
+    const maxNum = Number(result[0]?.maxNum || 0) + 1;
+    return `CON-${String(maxNum).padStart(6, '0')}`;
   }
 
   // Get all customer contracts with customer and type details
