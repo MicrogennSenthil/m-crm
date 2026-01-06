@@ -233,6 +233,7 @@ export default function SalesReports() {
       "Contact Name": lead.contactPerson,
       "Email": lead.contactEmail,
       "Phone": lead.contactPhone,
+      "Location": lead.city || "",
       "Stage": lead.stage?.replace("_", " ").toUpperCase(),
       "Source": lead.leadSource,
       "Expected Value": lead.estimatedValue,
@@ -509,6 +510,7 @@ export default function SalesReports() {
                         <TableHead>Contact</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Phone</TableHead>
+                        <TableHead>Location</TableHead>
                         <TableHead>Stage</TableHead>
                         <TableHead>Source</TableHead>
                         <TableHead className="text-right">Value</TableHead>
@@ -522,6 +524,7 @@ export default function SalesReports() {
                           <TableCell>{lead.contactPerson}</TableCell>
                           <TableCell>{lead.contactEmail}</TableCell>
                           <TableCell>{lead.contactPhone}</TableCell>
+                          <TableCell>{lead.city || "-"}</TableCell>
                           <TableCell>
                             <Badge className={getStageColor(lead.stage || "")}>
                               {lead.stage?.replace("_", " ").toUpperCase()}
