@@ -4004,6 +4004,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Lead Assignment History routes
+  app.get("/api/leads/:id/assignment-history", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const authId = req.user?.claims?.sub || (req.session as any)?.userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Get the lead to check visibility
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ message: "Lead not found" });
+      }
+
+      // Fetch assignment history once for both authorization and response
+      const history = await storage.getLeadAssignmentHistory(req.params.id);
+      
+      // Check if user has access to this lead using access control
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const allowedIds = accessControl.allowedUserIds || [];
+      
+      // If not admin with full access, verify user can access this lead
+      if (!accessControl.hasFullAccess) {
+        // User can access if they are the current assignee
+        const isCurrentAssignee = lead.salesExecutiveId === currentUser.id;
+        
+        // Or if they were ever directly assigned to this lead (fromUserId or toUserId)
+        const wasDirectlyAssigned = history.some(h => 
+          h.fromUserId === currentUser.id || h.toUserId === currentUser.id
+        );
+        
+        // Or if the lead is currently assigned to someone in their allowed list
+        const isInAllowedScope = lead.salesExecutiveId && allowedIds.includes(lead.salesExecutiveId);
+        
+        if (!isCurrentAssignee && !wasDirectlyAssigned && !isInAllowedScope) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching lead assignment history:", error);
+      res.status(500).json({ message: "Failed to fetch lead assignment history" });
+    }
+  });
+
+  // Reassign lead to another sales executive
+  app.post("/api/leads/:id/reassign", isAuthenticated, requirePermission('leads', 'edit'), async (req: any, res) => {
+    try {
+      const { newSalesExecutiveId, reason } = req.body;
+      
+      if (!newSalesExecutiveId) {
+        return res.status(400).json({ message: "New sales executive ID is required" });
+      }
+
+      const authId = req.user?.claims?.sub || (req.session as any)?.userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Verify the new sales executive exists
+      const newSalesExec = await storage.getUser(newSalesExecutiveId);
+      if (!newSalesExec) {
+        return res.status(400).json({ message: "New sales executive not found" });
+      }
+
+      // Perform the reassignment
+      const updatedLead = await storage.reassignLead(
+        req.params.id,
+        newSalesExecutiveId,
+        currentUser.id,
+        reason
+      );
+
+      // Log activity
+      await storage.logActivity({
+        entityType: "lead",
+        entityId: req.params.id,
+        action: "reassigned",
+        description: `Lead reassigned to ${newSalesExec.firstName} ${newSalesExec.lastName}${reason ? `: ${reason}` : ""}`,
+        userId: currentUser.id,
+      });
+
+      res.json(updatedLead);
+    } catch (error) {
+      console.error("Error reassigning lead:", error);
+      res.status(500).json({ message: "Failed to reassign lead" });
+    }
+  });
+
   // Quote routes
   app.get("/api/leads/:id/quotes", isAuthenticated, async (req, res) => {
     try {

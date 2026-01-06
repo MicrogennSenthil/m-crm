@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2, Camera, Trash2 } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle, Mail, Phone, DollarSign, Pencil, X, Save, Clock, Video, FileText, Handshake, Trophy, XCircle, Package, History, MapPin, Loader2, Camera, Trash2, UserPlus } from "lucide-react";
 import { format, startOfDay, isToday } from "date-fns";
 import type { Lead, FollowUp, Quote, User, InsertLead, Module } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -92,6 +92,11 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
 
   // Location state
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+
+  // Reassign state
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [reassignToUserId, setReassignToUserId] = useState<string>("");
+  const [reassignReason, setReassignReason] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -239,6 +244,19 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
     enabled: open,
   });
 
+  const { data: assignmentHistory } = useQuery<Array<{
+    id: string;
+    leadId: string;
+    fromUserId: string | null;
+    toUserId: string;
+    reassignedById: string | null;
+    reason: string | null;
+    createdAt: string;
+  }>>({
+    queryKey: ["/api/leads", lead.id, "assignment-history"],
+    enabled: open,
+  });
+
   const updateLeadMutation = useMutation({
     mutationFn: async (data: Partial<InsertLead>) => {
       await apiRequest("PATCH", `/api/leads/${lead.id}`, data);
@@ -342,6 +360,49 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       toast({
         title: "Error",
         description: "Failed to delete seed",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reassign lead to another sales executive mutation
+  const reassignLeadMutation = useMutation({
+    mutationFn: async () => {
+      if (!reassignToUserId) return;
+      await apiRequest("POST", `/api/leads/${lead.id}/reassign`, {
+        newSalesExecutiveId: reassignToUserId,
+        reason: reassignReason || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "assignment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activities"] });
+      setIsReassignDialogOpen(false);
+      setReassignToUserId("");
+      setReassignReason("");
+      toast({
+        title: "Lead Reassigned",
+        description: "Lead has been successfully reassigned to the new sales executive",
+      });
+      onClose();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to reassign lead",
         variant: "destructive",
       });
     },
@@ -737,6 +798,15 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <Pencil className="h-4 w-4 mr-1" />
                     Edit
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsReassignDialogOpen(true)}
+                    data-testid="button-reassign-lead"
+                  >
+                    <UserPlus className="h-4 w-4 mr-1" />
+                    Reassign
+                  </Button>
                   {lead.stage === "seed" && (
                     <>
                       {/* Only show Convert to Lead for interested seeds */}
@@ -1011,6 +1081,58 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 </div>
               )}
             </div>
+
+            {/* Assignment History Section */}
+            {!isEditing && assignmentHistory && assignmentHistory.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Assignment History
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {assignmentHistory.map((history) => {
+                      const fromUser = allUsers?.find(u => u.id === history.fromUserId);
+                      const toUser = allUsers?.find(u => u.id === history.toUserId);
+                      const reassignedBy = allUsers?.find(u => u.id === history.reassignedById);
+                      
+                      return (
+                        <div
+                          key={history.id}
+                          className="p-2 border rounded-md bg-muted/30 text-sm"
+                          data-testid={`history-assignment-${history.id}`}
+                        >
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <UserPlus className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-muted-foreground">
+                              {fromUser ? (
+                                <>
+                                  <span className="font-medium text-foreground">{fromUser.firstName} {fromUser.lastName}</span>
+                                  {" → "}
+                                </>
+                              ) : (
+                                "Initial: "
+                              )}
+                              <span className="font-medium text-foreground">{toUser?.firstName} {toUser?.lastName}</span>
+                            </span>
+                          </div>
+                          {history.reason && (
+                            <p className="text-xs text-muted-foreground mt-1 pl-4">
+                              Reason: {history.reason}
+                            </p>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-1 pl-4">
+                            {history.createdAt && format(new Date(history.createdAt), "PPP 'at' h:mm a")}
+                            {reassignedBy && ` by ${reassignedBy.firstName} ${reassignedBy.lastName}`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Seed Interest Tracking Section - Only show for seeds */}
             {!isEditing && lead.stage === "seed" && (
@@ -1881,6 +2003,78 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
           )}
         </div>
       </DialogContent>
+
+      {/* Reassign Dialog */}
+      <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Reassign Lead
+            </DialogTitle>
+            <DialogDescription>
+              Transfer this lead to another sales executive. The new executive will see this lead, and the current one will lose access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="reassign-to">Assign To</Label>
+              <Select
+                value={reassignToUserId}
+                onValueChange={setReassignToUserId}
+              >
+                <SelectTrigger data-testid="select-reassign-to">
+                  <SelectValue placeholder="Select sales executive" />
+                </SelectTrigger>
+                <SelectContent>
+                  {salesExecutives?.filter(exec => exec.id !== lead.salesExecutiveId).map((exec) => (
+                    <SelectItem key={exec.id} value={exec.id}>
+                      {exec.firstName} {exec.lastName} ({exec.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reassign-reason">Reason (Optional)</Label>
+              <Textarea
+                id="reassign-reason"
+                placeholder="Enter reason for reassignment..."
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                data-testid="input-reassign-reason"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsReassignDialogOpen(false);
+                setReassignToUserId("");
+                setReassignReason("");
+              }}
+              data-testid="button-cancel-reassign"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => reassignLeadMutation.mutate()}
+              disabled={!reassignToUserId || reassignLeadMutation.isPending}
+              data-testid="button-confirm-reassign"
+            >
+              {reassignLeadMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reassigning...
+                </>
+              ) : (
+                "Reassign"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
