@@ -1344,10 +1344,12 @@ export default function DevelopmentTasks() {
                             <span className="text-xs text-muted-foreground">Ticket #{sourceTicket.ticketNumber}</span>
                             <Badge variant="outline" className="text-xs">{sourceTicket.status}</Badge>
                           </div>
-                          <p className="text-sm font-medium">{sourceTicket.subject}</p>
-                          <p className="text-sm text-muted-foreground line-clamp-3">{sourceTicket.description}</p>
-                          {sourceTicket.contactPerson && (
-                            <p className="text-xs text-muted-foreground">Contact: {sourceTicket.contactPerson}</p>
+                          <p className="text-sm font-medium">{sourceTicket.issueSummary}</p>
+                          {sourceTicket.issueDescription && (
+                            <p className="text-sm text-muted-foreground line-clamp-3">{sourceTicket.issueDescription}</p>
+                          )}
+                          {sourceTicket.customerName && (
+                            <p className="text-xs text-muted-foreground">Customer: {sourceTicket.customerName}</p>
                           )}
                         </div>
                       </div>
