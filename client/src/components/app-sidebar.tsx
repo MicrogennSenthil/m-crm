@@ -362,7 +362,31 @@ const reportsSubItems = [
     icon: MessageSquareHeart,
     color: "text-pink-500",
     bgColor: "bg-pink-500/10",
-    module: "hr_feedback", // Use hr_feedback module for permission
+    module: "hr_feedback",
+  },
+  {
+    title: "Accounts Reports",
+    url: "/reports/accounts",
+    icon: Wallet,
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
+    module: "contracts",
+  },
+  {
+    title: "Tasks Reports",
+    url: "/reports/tasks",
+    icon: ListTodo,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
+    module: "tasks",
+  },
+  {
+    title: "Marketing Reports",
+    url: "/reports/marketing",
+    icon: Megaphone,
+    color: "text-fuchsia-500",
+    bgColor: "bg-fuchsia-500/10",
+    module: "digital_marketing",
   },
 ];
 

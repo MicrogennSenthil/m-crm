@@ -28,6 +28,9 @@ import ImplementationReports from "@/pages/reports-implementation";
 import SupportReports from "@/pages/reports-support";
 import DevelopmentReports from "@/pages/reports-development";
 import FeedbackReports from "@/pages/reports-feedback";
+import AccountsReports from "@/pages/reports-accounts";
+import TasksReports from "@/pages/reports-tasks";
+import MarketingReports from "@/pages/reports-marketing";
 import SeedsReport from "@/pages/seeds-report";
 import Masters from "@/pages/masters";
 import Settings from "@/pages/settings";
@@ -110,6 +113,9 @@ function AuthenticatedLayout() {
               <Route path="/reports/support" component={SupportReports} />
               <Route path="/reports/development" component={DevelopmentReports} />
               <Route path="/reports/feedback" component={FeedbackReports} />
+              <Route path="/reports/accounts" component={AccountsReports} />
+              <Route path="/reports/tasks" component={TasksReports} />
+              <Route path="/reports/marketing" component={MarketingReports} />
               <Route path="/masters" component={Masters} />
               <Route path="/settings" component={Settings} />
               <Route path="/admin/users" component={UserMaster} />

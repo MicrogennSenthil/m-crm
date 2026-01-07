@@ -2258,6 +2258,315 @@ function MarketingDrilldown({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
+// Accounts Drilldown Component
+function AccountsDrilldown({ viewMode }: { viewMode: ViewMode }) {
+  const { data, isLoading } = useQuery<any[]>({
+    queryKey: ['/api/reports/accounts'],
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  }
+
+  const contracts = data || [];
+  const now = new Date();
+  
+  const getStatus = (contract: any) => {
+    const endDate = new Date(contract.endDate);
+    const daysUntil = Math.floor((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysUntil < 0) return 'expired';
+    if (daysUntil <= 30) return 'expiring';
+    return 'active';
+  };
+
+  const stats = {
+    total: contracts.length,
+    active: contracts.filter((c: any) => getStatus(c) === 'active').length,
+    expiring: contracts.filter((c: any) => getStatus(c) === 'expiring').length,
+    expired: contracts.filter((c: any) => getStatus(c) === 'expired').length,
+    totalValue: contracts.reduce((sum: number, c: any) => sum + (c.amount || 0), 0),
+  };
+
+  const pieData = [
+    { name: 'Active', value: stats.active, color: CHART_COLORS.success },
+    { name: 'Expiring', value: stats.expiring, color: CHART_COLORS.accent },
+    { name: 'Expired', value: stats.expired, color: CHART_COLORS.danger },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{stats.total}</div><div className="text-sm text-muted-foreground">Total Contracts</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-green-500">{stats.active}</div><div className="text-sm text-muted-foreground">Active</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-yellow-500">{stats.expiring}</div><div className="text-sm text-muted-foreground">Expiring Soon</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-red-500">{stats.expired}</div><div className="text-sm text-muted-foreground">Expired</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-emerald-500">{formatCurrency(stats.totalValue)}</div><div className="text-sm text-muted-foreground">Total Value</div></CardContent></Card>
+      </div>
+
+      {viewMode === 'graphical' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Contract Status Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {pieData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Recent Contracts</CardTitle></CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[250px]">
+                <div className="space-y-2">
+                  {contracts.slice(0, 10).map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between p-2 border rounded">
+                      <div>
+                        <div className="font-medium">{c.contractNumber}</div>
+                        <div className="text-sm text-muted-foreground">{c.customer?.name || 'N/A'}</div>
+                      </div>
+                      <Badge className={getStatus(c) === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30' : getStatus(c) === 'expiring' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30' : 'bg-red-100 text-red-800 dark:bg-red-900/30'}>{getStatus(c)}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Contract Statistics</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Contract</TableHead><TableHead>Customer</TableHead><TableHead>Type</TableHead><TableHead>Amount</TableHead><TableHead>Status</TableHead><TableHead>End Date</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {contracts.slice(0, 20).map((c: any) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium">{c.contractNumber}</TableCell>
+                    <TableCell>{c.customer?.name || 'N/A'}</TableCell>
+                    <TableCell>{c.contractType?.name || 'N/A'}</TableCell>
+                    <TableCell>{formatCurrency(c.amount)}</TableCell>
+                    <TableCell><Badge variant="outline" className={getStatus(c) === 'active' ? 'text-green-600' : getStatus(c) === 'expiring' ? 'text-yellow-600' : 'text-red-600'}>{getStatus(c)}</Badge></TableCell>
+                    <TableCell>{new Date(c.endDate).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Tasks Drilldown Component
+function TasksDrilldown({ viewMode }: { viewMode: ViewMode }) {
+  const { data, isLoading } = useQuery<any[]>({
+    queryKey: ['/api/reports/tasks'],
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  }
+
+  const tasksList = data || [];
+  const now = new Date();
+  
+  const isOverdue = (task: any) => task.status !== 'completed' && task.dueDate && new Date(task.dueDate) < now;
+
+  const stats = {
+    total: tasksList.length,
+    pending: tasksList.filter((t: any) => t.status === 'pending' || t.status === 'followup').length,
+    completed: tasksList.filter((t: any) => t.status === 'completed').length,
+    overdue: tasksList.filter(isOverdue).length,
+    highPriority: tasksList.filter((t: any) => t.priority === 'high' || t.priority === 'urgent').length,
+  };
+
+  const pieData = [
+    { name: 'Pending', value: stats.pending, color: CHART_COLORS.accent },
+    { name: 'Completed', value: stats.completed, color: CHART_COLORS.success },
+    { name: 'Overdue', value: stats.overdue, color: CHART_COLORS.danger },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{stats.total}</div><div className="text-sm text-muted-foreground">Total Tasks</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-yellow-500">{stats.pending}</div><div className="text-sm text-muted-foreground">Pending</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-green-500">{stats.completed}</div><div className="text-sm text-muted-foreground">Completed</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-red-500">{stats.overdue}</div><div className="text-sm text-muted-foreground">Overdue</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-orange-500">{stats.highPriority}</div><div className="text-sm text-muted-foreground">High Priority</div></CardContent></Card>
+      </div>
+
+      {viewMode === 'graphical' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Task Status Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {pieData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Recent Tasks</CardTitle></CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[250px]">
+                <div className="space-y-2">
+                  {tasksList.slice(0, 10).map((t: any) => (
+                    <div key={t.id} className="flex items-center justify-between p-2 border rounded">
+                      <div>
+                        <div className="font-medium line-clamp-1">{t.title}</div>
+                        <div className="text-sm text-muted-foreground">{t.assignedToUser ? `${t.assignedToUser.firstName || ''} ${t.assignedToUser.lastName || ''}` : 'Unassigned'}</div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Badge variant="outline" className={t.status === 'completed' ? 'text-green-600' : t.status === 'pending' ? 'text-yellow-600' : 'text-blue-600'}>{t.status}</Badge>
+                        {isOverdue(t) && <Badge variant="destructive">Overdue</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Task Statistics</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Assigned To</TableHead><TableHead>Due Date</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {tasksList.slice(0, 20).map((t: any) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-medium max-w-[200px] truncate">{t.title}</TableCell>
+                    <TableCell><Badge variant="outline" className={t.status === 'completed' ? 'text-green-600' : 'text-yellow-600'}>{t.status}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={t.priority === 'urgent' || t.priority === 'high' ? 'text-red-600' : 'text-gray-600'}>{t.priority || 'medium'}</Badge></TableCell>
+                    <TableCell>{t.assignedToUser ? `${t.assignedToUser.firstName || ''} ${t.assignedToUser.lastName || ''}` : 'Unassigned'}</TableCell>
+                    <TableCell>{t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// Feedback Drilldown Component  
+function FeedbackDrilldown({ viewMode }: { viewMode: ViewMode }) {
+  const { data, isLoading } = useQuery<any[]>({
+    queryKey: ['/api/feedback/all'],
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  }
+
+  const feedbackList = data || [];
+
+  const stats = {
+    total: feedbackList.length,
+    satisfied: feedbackList.filter((f: any) => f.satisfactionStatus === 'satisfied').length,
+    unsatisfied: feedbackList.filter((f: any) => f.satisfactionStatus === 'unsatisfied').length,
+    reopened: feedbackList.filter((f: any) => f.reopenedByHR).length,
+    avgRating: feedbackList.length > 0 ? (feedbackList.reduce((sum: number, f: any) => sum + (f.rating || 0), 0) / feedbackList.length).toFixed(1) : '0',
+  };
+
+  const pieData = [
+    { name: 'Satisfied', value: stats.satisfied, color: CHART_COLORS.success },
+    { name: 'Unsatisfied', value: stats.unsatisfied, color: CHART_COLORS.danger },
+    { name: 'Pending', value: stats.total - stats.satisfied - stats.unsatisfied, color: CHART_COLORS.accent },
+  ];
+
+  const ratingData = [1, 2, 3, 4, 5].map(r => ({
+    rating: `${r} Star`,
+    count: feedbackList.filter((f: any) => f.rating === r).length,
+    color: ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'][r - 1],
+  }));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold">{stats.total}</div><div className="text-sm text-muted-foreground">Total Feedback</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-green-500">{stats.satisfied}</div><div className="text-sm text-muted-foreground">Satisfied</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-red-500">{stats.unsatisfied}</div><div className="text-sm text-muted-foreground">Unsatisfied</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-orange-500">{stats.reopened}</div><div className="text-sm text-muted-foreground">Reopened</div></CardContent></Card>
+        <Card><CardContent className="pt-6"><div className="text-2xl font-bold text-purple-500 flex items-center gap-1"><Star className="h-5 w-5" />{stats.avgRating}</div><div className="text-sm text-muted-foreground">Avg Rating</div></CardContent></Card>
+      </div>
+
+      {viewMode === 'graphical' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Satisfaction Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {pieData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Rating Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={ratingData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="rating" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Count">
+                    {ratingData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Feedback Statistics</CardTitle></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow><TableHead>Ticket</TableHead><TableHead>Customer</TableHead><TableHead>Rating</TableHead><TableHead>Status</TableHead><TableHead>Work Status</TableHead><TableHead>Submitted</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {feedbackList.slice(0, 20).map((f: any) => (
+                  <TableRow key={f.id}>
+                    <TableCell className="font-medium">{f.ticket?.ticketNumber || 'N/A'}</TableCell>
+                    <TableCell>{f.ticket?.customer?.name || 'N/A'}</TableCell>
+                    <TableCell><div className="flex">{[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < (f.rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />)}</div></TableCell>
+                    <TableCell><Badge variant="outline" className={f.satisfactionStatus === 'satisfied' ? 'text-green-600' : f.satisfactionStatus === 'unsatisfied' ? 'text-red-600' : 'text-yellow-600'}>{f.satisfactionStatus || 'pending'}</Badge></TableCell>
+                    <TableCell>{f.workStatus || '-'}</TableCell>
+                    <TableCell>{f.submittedAt ? new Date(f.submittedAt).toLocaleDateString() : '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function PerformanceTab({ viewMode }: { viewMode: ViewMode }) {
   const [period, setPeriod] = useState('month');
   
@@ -3468,15 +3777,18 @@ export default function SuperAdminDashboard() {
       
       {/* Main Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full max-w-[960px] grid-cols-8">
+        <TabsList className="grid w-full max-w-[1200px] grid-cols-11">
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
-          <TabsTrigger value="implementation" data-testid="tab-implementation">Implementation</TabsTrigger>
+          <TabsTrigger value="implementation" data-testid="tab-implementation">Impl.</TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">Support</TabsTrigger>
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
-          <TabsTrigger value="development" data-testid="tab-development">Development</TabsTrigger>
+          <TabsTrigger value="development" data-testid="tab-development">Dev</TabsTrigger>
           <TabsTrigger value="marketing" data-testid="tab-marketing">Marketing</TabsTrigger>
-          <TabsTrigger value="performance" data-testid="tab-performance">Performance</TabsTrigger>
+          <TabsTrigger value="accounts" data-testid="tab-accounts">Accounts</TabsTrigger>
+          <TabsTrigger value="tasks" data-testid="tab-tasks">Tasks</TabsTrigger>
+          <TabsTrigger value="feedback" data-testid="tab-feedback">Feedback</TabsTrigger>
+          <TabsTrigger value="performance" data-testid="tab-performance">Perf.</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview">
@@ -3520,6 +3832,18 @@ export default function SuperAdminDashboard() {
         
         <TabsContent value="marketing">
           <MarketingDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="accounts">
+          <AccountsDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="tasks">
+          <TasksDrilldown viewMode={viewMode} />
+        </TabsContent>
+        
+        <TabsContent value="feedback">
+          <FeedbackDrilldown viewMode={viewMode} />
         </TabsContent>
         
         <TabsContent value="performance">

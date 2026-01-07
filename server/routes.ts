@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -7228,6 +7228,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error exporting data:", error);
       res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
+  // Accounts Reports - Get all contracts with customer and contract type details
+  app.get("/api/reports/accounts", isAuthenticated, async (req, res) => {
+    try {
+      const allContracts = await db
+        .select()
+        .from(customerContracts)
+        .orderBy(desc(customerContracts.createdAt));
+      
+      // Enrich with customer and contract type details
+      const enrichedContracts = await Promise.all(allContracts.map(async (contract) => {
+        let customer, contractType, createdByUser;
+        
+        if (contract.customerId) {
+          customer = await db.select().from(customers).where(eq(customers.id, contract.customerId)).limit(1);
+        }
+        if (contract.contractTypeId) {
+          contractType = await db.select().from(contractTypes).where(eq(contractTypes.id, contract.contractTypeId)).limit(1);
+        }
+        if (contract.createdBy) {
+          createdByUser = await db.select().from(users).where(eq(users.id, contract.createdBy)).limit(1);
+        }
+        
+        return {
+          ...contract,
+          customer: customer?.[0] || null,
+          contractType: contractType?.[0] || null,
+          createdByUser: createdByUser?.[0] || null,
+        };
+      }));
+      
+      res.json(enrichedContracts);
+    } catch (error) {
+      console.error("Error fetching accounts reports:", error);
+      res.status(500).json({ message: "Failed to fetch accounts reports" });
+    }
+  });
+
+  // Tasks Reports - Get all tasks with user details
+  app.get("/api/reports/tasks", isAuthenticated, async (req, res) => {
+    try {
+      const allTasks = await db
+        .select()
+        .from(tasks)
+        .orderBy(desc(tasks.createdAt));
+      
+      // Enrich with user details
+      const enrichedTasks = await Promise.all(allTasks.map(async (task) => {
+        let createdByUser, assignedToUser;
+        
+        if (task.createdBy) {
+          createdByUser = await db.select().from(users).where(eq(users.id, task.createdBy)).limit(1);
+        }
+        if (task.assignedTo) {
+          assignedToUser = await db.select().from(users).where(eq(users.id, task.assignedTo)).limit(1);
+        }
+        
+        return {
+          ...task,
+          createdByUser: createdByUser?.[0] || null,
+          assignedToUser: assignedToUser?.[0] || null,
+        };
+      }));
+      
+      res.json(enrichedTasks);
+    } catch (error) {
+      console.error("Error fetching tasks reports:", error);
+      res.status(500).json({ message: "Failed to fetch tasks reports" });
+    }
+  });
+
+  // Marketing Reports - Get all marketing daily reports with user details
+  app.get("/api/reports/marketing", isAuthenticated, async (req, res) => {
+    try {
+      const allReports = await db
+        .select()
+        .from(marketingDailyReports)
+        .orderBy(desc(marketingDailyReports.reportDate));
+      
+      // Enrich with user details
+      const enrichedReports = await Promise.all(allReports.map(async (report) => {
+        let user, approvedByUser;
+        
+        if (report.userId) {
+          user = await db.select().from(users).where(eq(users.id, report.userId)).limit(1);
+        }
+        if (report.approvedBy) {
+          approvedByUser = await db.select().from(users).where(eq(users.id, report.approvedBy)).limit(1);
+        }
+        
+        return {
+          ...report,
+          user: user?.[0] || null,
+          approvedByUser: approvedByUser?.[0] || null,
+        };
+      }));
+      
+      res.json(enrichedReports);
+    } catch (error) {
+      console.error("Error fetching marketing reports:", error);
+      res.status(500).json({ message: "Failed to fetch marketing reports" });
     }
   });
 
