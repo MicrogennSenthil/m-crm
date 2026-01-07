@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench, Bell, Calendar, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
 import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask, DevelopmentSupportMessage } from "@shared/schema";
@@ -47,6 +48,9 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   const [showAssignDevDialog, setShowAssignDevDialog] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closingNotes, setClosingNotes] = useState("");
+  const [showReminderForm, setShowReminderForm] = useState(false);
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminderNotes, setReminderNotes] = useState("");
   const { toast } = useToast();
 
   const { data: comments } = useQuery<(TicketComment & { user?: User })[]>({
@@ -106,12 +110,15 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   });
 
   const updateTicketMutation = useMutation({
-    mutationFn: async (data: { status?: string; assignedEngineerId?: string }) => {
+    mutationFn: async (data: { status?: string; assignedEngineerId?: string; reminderDate?: Date | null; reminderNotes?: string | null }) => {
       await apiRequest("PATCH", `/api/tickets/${ticket.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setShowReminderForm(false);
+      setReminderDate("");
+      setReminderNotes("");
       toast({
         title: "Success",
         description: "Ticket updated successfully",
@@ -628,6 +635,115 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                 <p className="text-sm">
                   {ticket.createdAt && formatDistanceToNow(new Date(ticket.createdAt))}
                 </p>
+              </div>
+
+              {/* Reminder Date Section */}
+              <Separator />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-amber-600" />
+                    <p className="text-xs text-muted-foreground">Follow-up Reminder</p>
+                  </div>
+                  {ticket.status !== "closed" && !showReminderForm && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setShowReminderForm(true)}
+                      data-testid="button-set-reminder"
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {ticket.reminderDate ? "Edit" : "Set Reminder"}
+                    </Button>
+                  )}
+                </div>
+
+                {ticket.reminderDate && !showReminderForm && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          {format(new Date(ticket.reminderDate), "PPP")}
+                        </p>
+                        {ticket.reminderNotes && (
+                          <p className="text-xs text-muted-foreground mt-1">{ticket.reminderNotes}</p>
+                        )}
+                      </div>
+                      {ticket.status !== "closed" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => updateTicketMutation.mutate({ reminderDate: null, reminderNotes: null })}
+                          data-testid="button-clear-reminder"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                    {new Date(ticket.reminderDate).toDateString() === new Date().toDateString() && (
+                      <Badge className="mt-2 bg-amber-600">Follow up Today!</Badge>
+                    )}
+                  </div>
+                )}
+
+                {showReminderForm && (
+                  <div className="space-y-3 p-3 border rounded-lg bg-muted/50">
+                    <div>
+                      <Label className="text-xs">Reminder Date</Label>
+                      <Input
+                        type="date"
+                        value={reminderDate}
+                        onChange={(e) => setReminderDate(e.target.value)}
+                        min={format(new Date(), "yyyy-MM-dd")}
+                        className="h-8"
+                        data-testid="input-reminder-date"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Notes (optional)</Label>
+                      <Textarea
+                        value={reminderNotes}
+                        onChange={(e) => setReminderNotes(e.target.value)}
+                        placeholder="Why is this reminder set? e.g., Client not available until this date"
+                        className="min-h-[60px] text-sm"
+                        data-testid="input-reminder-notes"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (reminderDate) {
+                            updateTicketMutation.mutate({
+                              reminderDate: new Date(reminderDate),
+                              reminderNotes: reminderNotes || null,
+                            });
+                          }
+                        }}
+                        disabled={!reminderDate || updateTicketMutation.isPending}
+                        data-testid="button-save-reminder"
+                      >
+                        {updateTicketMutation.isPending ? "Saving..." : "Save Reminder"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setShowReminderForm(false);
+                          setReminderDate("");
+                          setReminderNotes("");
+                        }}
+                        data-testid="button-cancel-reminder"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {!ticket.reminderDate && !showReminderForm && (
+                  <p className="text-xs text-muted-foreground">No reminder set</p>
+                )}
               </div>
             </div>
 

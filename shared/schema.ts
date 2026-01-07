@@ -602,6 +602,9 @@ export const tickets = pgTable("tickets", {
   // Feedback tracking
   feedbackStatus: text("feedback_status").default("pending"), // pending, sent, responded
   feedbackSentAt: timestamp("feedback_sent_at"),
+  // Follow-up reminder - for when client is not available, set a date to follow up
+  reminderDate: timestamp("reminder_date"), // Date to follow up with client
+  reminderNotes: text("reminder_notes"), // Notes about why reminder was set
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

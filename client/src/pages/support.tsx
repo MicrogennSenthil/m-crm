@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell } from "lucide-react";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,6 +115,11 @@ export default function Support() {
   const openCount = categoryFilteredTickets.filter(t => t.status === "open").length;
   const inProgressCount = categoryFilteredTickets.filter(t => t.status === "in_progress" || t.status === "escalated" || t.status === "pending_customer").length;
   const completedCount = categoryFilteredTickets.filter(t => RESOLVED_STATUSES.includes(t.status)).length;
+  // Reminders due today - tickets with reminder date matching today
+  const today = new Date().toDateString();
+  const remindersDueCount = categoryFilteredTickets.filter(t => 
+    t.reminderDate && new Date(t.reminderDate).toDateString() === today && !RESOLVED_STATUSES.includes(t.status)
+  ).length;
 
   // Status order for sorting: in_progress first, then open, then others, closed last
   const STATUS_ORDER: Record<string, number> = {
@@ -136,6 +141,7 @@ export default function Support() {
     if (activeTab === "open" && ticket.status !== "open") return false;
     if (activeTab === "in_progress" && !["in_progress", "escalated", "pending_customer"].includes(ticket.status)) return false;
     if (activeTab === "completed" && !RESOLVED_STATUSES.includes(ticket.status)) return false;
+    if (activeTab === "reminders_due" && (!ticket.reminderDate || new Date(ticket.reminderDate).toDateString() !== today || RESOLVED_STATUSES.includes(ticket.status))) return false;
     
     // Search filtering
     if (!searchQuery) return true;
@@ -234,6 +240,16 @@ export default function Support() {
               <TabsTrigger value="completed" data-testid="tab-completed">
                 Completed ({completedCount})
               </TabsTrigger>
+              {remindersDueCount > 0 && (
+                <TabsTrigger 
+                  value="reminders_due" 
+                  data-testid="tab-reminders-due"
+                  className="text-amber-600 dark:text-amber-400"
+                >
+                  <Bell className="h-3 w-3 mr-1" />
+                  Follow-up Today ({remindersDueCount})
+                </TabsTrigger>
+              )}
             </TabsList>
 
         <div className="flex flex-col sm:flex-row gap-3">
