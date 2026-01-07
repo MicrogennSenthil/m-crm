@@ -11202,7 +11202,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add comment to development task
   app.post("/api/development/tasks/:id/comments", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       const { id } = req.params;
       
       const comment = await storage.createDevelopmentTaskComment({
@@ -11221,9 +11223,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get development-support messages for a task
   app.get("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
-      const userEmail = req.user?.email;
-      const userRole = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
+      const userEmail = currentUser?.email || req.user?.email;
+      const userRole = currentUser?.role || req.user?.role;
       const { id } = req.params;
       
       // Verify task exists
@@ -11252,9 +11256,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send message from development to support
   app.post("/api/development/tasks/:id/support-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
-      const userEmail = req.user?.email;
-      const userRole = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
+      const userEmail = currentUser?.email || req.user?.email;
+      const userRole = currentUser?.role || req.user?.role;
       const { id } = req.params;
       const { message } = req.body;
       
@@ -11309,9 +11315,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get development-support messages for a ticket
   app.get("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
-      const userEmail = req.user?.email;
-      const userRole = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
+      const userEmail = currentUser?.email || req.user?.email;
+      const userRole = currentUser?.role || req.user?.role;
       const { id } = req.params;
       
       // Verify ticket exists
@@ -11340,9 +11348,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send message from support to development (from ticket context)
   app.post("/api/tickets/:id/dev-messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
-      const userEmail = req.user?.email;
-      const userRole = req.user?.role;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
+      const userEmail = currentUser?.email || req.user?.email;
+      const userRole = currentUser?.role || req.user?.role;
       const { id: ticketId } = req.params;
       const { message, developmentTaskId } = req.body;
       
@@ -11408,7 +11418,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete development task with mandatory image and description
   app.post("/api/development/tasks/:id/complete", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       const { id } = req.params;
       const { completionStatus, completionDescription, completionImageUrl } = req.body;
       
@@ -11502,7 +11514,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reassign incomplete development task to another engineer
   app.post("/api/development/tasks/:id/reassign", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       const { id } = req.params;
       const { assignedTo, deadline, notes } = req.body;
       
