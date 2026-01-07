@@ -11274,15 +11274,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Development task not found" });
       }
       
-      // Authorization: Allow if user is assigned, is admin, or has super admin email
-      const isSuperAdmin = userEmail === "senthil@microgenn.com";
-      const isAssigned = task.assignedTo === userId || task.assignedBy === userId;
-      const isAdminRole = userRole === "admin";
-      
-      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
-        return res.status(403).json({ message: "Not authorized to send messages for this task" });
-      }
-      
       // Ensure task is linked to a support ticket
       if (task.sourceType !== 'support' || !task.sourceId) {
         return res.status(400).json({ message: "Task is not linked to a support ticket" });
