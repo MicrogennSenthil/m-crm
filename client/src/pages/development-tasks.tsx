@@ -491,7 +491,8 @@ export default function DevelopmentTasks() {
     if (searchTerm && !task.title.toLowerCase().includes(searchTerm.toLowerCase()) && 
         !task.taskNumber.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !(task.assignee?.firstName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        !(task.assignee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()))) {
+        !(task.assignee?.lastName?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        !((task as any).customerName?.toLowerCase().includes(searchTerm.toLowerCase()))) {
       return false;
     }
     // Status tab filtering
@@ -649,7 +650,7 @@ export default function DevelopmentTasks() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by task#, title, or engineer..."
+              placeholder="Search by task#, title, client, or engineer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8"
