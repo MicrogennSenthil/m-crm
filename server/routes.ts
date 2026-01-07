@@ -11123,6 +11123,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: newStatus === 'completed' ? new Date() : existingTask.completedAt,
       });
       
+      // If dev task is being started (in_progress) and linked to a support ticket, update ticket status
+      if (newStatus === 'in_progress' && previousStatus !== 'in_progress' && existingTask.sourceType === 'support' && existingTask.sourceId) {
+        try {
+          await storage.updateTicket(existingTask.sourceId, { status: 'in_development' });
+          console.log(`Updated linked ticket ${existingTask.sourceId} to in_development status`);
+        } catch (err) {
+          console.error('Failed to update linked ticket status:', err);
+        }
+      }
+      
       // If task is being completed, log activity
       if (newStatus === 'completed' && previousStatus !== 'completed') {
         // Log activity

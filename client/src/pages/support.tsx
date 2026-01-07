@@ -40,6 +40,7 @@ const PRIORITY_CONFIG: Record<string, { variant: "secondary" | "default" | "outl
 const STATUS_CONFIG: Record<string, { variant: "secondary" | "default" | "outline" | "destructive"; label: string; className?: string }> = {
   open: { variant: "default", label: "Open" },
   in_progress: { variant: "secondary", label: "In Progress" },
+  in_development: { variant: "secondary", label: "In Development", className: "bg-purple-600/20 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400" },
   pending_customer: { variant: "outline", label: "Pending Customer" },
   escalated: { variant: "destructive", label: "Escalated" },
   closed: { variant: "outline", label: "Closed", className: "bg-green-600/10 text-green-700" },
@@ -49,6 +50,7 @@ const STATUS_CONFIG: Record<string, { variant: "secondary" | "default" | "outlin
 const TICKET_STAGES = [
   { id: "open", title: "Open", color: "bg-blue-600" },
   { id: "in_progress", title: "In Progress", color: "bg-yellow-600" },
+  { id: "in_development", title: "In Development", color: "bg-purple-600" },
   { id: "pending_customer", title: "Pending Customer", color: "bg-orange-500" },
   { id: "escalated", title: "Escalated", color: "bg-red-600" },
   { id: "closed", title: "Closed", color: "bg-green-600" },
@@ -295,7 +297,7 @@ export default function Support() {
         <TabsContent value={activeTab} className="space-y-4">
           {/* Kanban View */}
           {layout === "kanban" && (
-            <div className="grid grid-cols-5 gap-3 pb-4 overflow-x-auto">
+            <div className="grid grid-cols-6 gap-3 pb-4 overflow-x-auto">
               {TICKET_STAGES.map((stage) => {
                 const stageTickets = getTicketsByStatus(stage.id);
                 return (
