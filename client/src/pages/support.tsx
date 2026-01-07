@@ -48,6 +48,7 @@ const STATUS_CONFIG: Record<string, { variant: "secondary" | "default" | "outlin
 };
 
 const TICKET_STAGES = [
+  { id: "followup_due", title: "Follow-up Due", color: "bg-amber-600" },
   { id: "open", title: "Open", color: "bg-blue-600" },
   { id: "in_progress", title: "In Progress", color: "bg-yellow-600" },
   { id: "in_development", title: "In Development", color: "bg-purple-600" },
@@ -86,7 +87,39 @@ export default function Support() {
   }, [layout]);
 
   const getTicketsByStatus = (status: string) => {
-    return categoryFilteredTickets?.filter(t => t.status === status) || [];
+    const todayStr = new Date().toDateString();
+    const RESOLVED = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
+    
+    // Special handling for followup_due stage - show tickets with reminder due today
+    if (status === "followup_due") {
+      return categoryFilteredTickets?.filter(t => 
+        t.reminderDate && 
+        new Date(t.reminderDate).toDateString() === todayStr && 
+        !RESOLVED.includes(t.status)
+      ) || [];
+    }
+    
+    // For in_development, check hasActiveDevelopmentTask
+    if (status === "in_development") {
+      return categoryFilteredTickets?.filter(t => 
+        (t as any).hasActiveDevelopmentTask && 
+        !RESOLVED.includes(t.status) &&
+        !(t.reminderDate && new Date(t.reminderDate).toDateString() === todayStr)
+      ) || [];
+    }
+    
+    // For other stages, exclude tickets that have reminders due today (they go to followup_due)
+    return categoryFilteredTickets?.filter(t => {
+      // Skip if has reminder due today (goes to followup_due stage)
+      if (t.reminderDate && new Date(t.reminderDate).toDateString() === todayStr && !RESOLVED.includes(t.status)) {
+        return false;
+      }
+      // Skip if has active dev task and status is not in_development (those go to in_development stage)
+      if ((t as any).hasActiveDevelopmentTask && status !== "in_development" && !RESOLVED.includes(status)) {
+        return false;
+      }
+      return t.status === status;
+    }) || [];
   };
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
@@ -313,7 +346,7 @@ export default function Support() {
         <TabsContent value={activeTab} className="space-y-4">
           {/* Kanban View */}
           {layout === "kanban" && (
-            <div className="grid grid-cols-6 gap-3 pb-4 overflow-x-auto">
+            <div className="grid grid-cols-7 gap-3 pb-4 overflow-x-auto">
               {TICKET_STAGES.map((stage) => {
                 const stageTickets = getTicketsByStatus(stage.id);
                 return (
