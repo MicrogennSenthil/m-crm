@@ -356,6 +356,14 @@ const reportsSubItems = [
     bgColor: "bg-amber-500/10",
     module: "leads", // Use leads module for permission since seeds are leads
   },
+  {
+    title: "Feedback Reports",
+    url: "/reports/feedback",
+    icon: MessageSquareHeart,
+    color: "text-pink-500",
+    bgColor: "bg-pink-500/10",
+    module: "hr_feedback", // Use hr_feedback module for permission
+  },
 ];
 
 // User Management sub-menu items - with module permissions

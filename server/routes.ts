@@ -5934,6 +5934,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all feedback for reports (with ticket and user details)
+  app.get("/api/feedback/all", isAuthenticated, async (req, res) => {
+    try {
+      const allFeedback = await db
+        .select()
+        .from(feedback)
+        .orderBy(desc(feedback.submittedAt));
+      
+      // Enrich with user and ticket details
+      const enrichedFeedback = await Promise.all(allFeedback.map(async (fb) => {
+        let submittedBy, completedBy, ticket;
+        
+        if (fb.submittedById) {
+          submittedBy = await storage.getUser(fb.submittedById);
+        }
+        if (fb.completedById) {
+          completedBy = await storage.getUser(fb.completedById);
+        }
+        if (fb.ticketId) {
+          const ticketData = await storage.getTicket(fb.ticketId);
+          if (ticketData) {
+            const customer = ticketData.customerId ? await storage.getCustomer(ticketData.customerId) : undefined;
+            ticket = { ...ticketData, customer };
+          }
+        }
+        
+        return { ...fb, submittedBy, completedBy, ticket };
+      }));
+      
+      res.json(enrichedFeedback);
+    } catch (error) {
+      console.error("Error fetching all feedback:", error);
+      res.status(500).json({ message: "Failed to fetch feedback" });
+    }
+  });
+
   app.post("/api/tickets/:id/escalate", isAuthenticated, async (req: any, res) => {
     try {
       const ticket = await storage.getTicket(req.params.id);
