@@ -524,6 +524,15 @@ export default function DevelopmentTasks() {
       toast({ title: "Permission Denied", description: "You don't have permission to update tasks", variant: "destructive" });
       return;
     }
+    // Prevent closing a task that hasn't been started - must go through "in_progress" first
+    if ((newStatus === "completed" || newStatus === "incomplete") && task.status === "pending") {
+      toast({ 
+        title: "Cannot Close Task", 
+        description: "You must start work on the task before marking it as completed or incomplete. Click 'Start Work' first.", 
+        variant: "destructive" 
+      });
+      return;
+    }
     updateTaskMutation.mutate({ id: task.id, data: { status: newStatus } }, {
       onSuccess: () => {
         if (closeDialog) {
@@ -1123,9 +1132,20 @@ export default function DevelopmentTasks() {
                       <SelectContent>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem 
+                          value="completed" 
+                          disabled={selectedTask.status === "pending"}
+                          className={selectedTask.status === "pending" ? "opacity-50 cursor-not-allowed" : ""}
+                        >
+                          Completed {selectedTask.status === "pending" && "(Start work first)"}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                    {selectedTask.status === "pending" && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Click "Start Work" before marking as completed
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Priority</Label>
