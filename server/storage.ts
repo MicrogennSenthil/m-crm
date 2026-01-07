@@ -3547,7 +3547,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(developmentTasks.createdAt))
       .limit(maxLimit);
 
-    // Enrich with user details
+    // Enrich with user details and customer name
     const enrichedTasks = await Promise.all(
       taskList.map(async (task) => {
         const [assignee] = task.assignedTo 
@@ -3558,10 +3558,46 @@ export class DatabaseStorage implements IStorage {
           ? await db.select().from(users).where(eq(users.id, task.assignedBy))
           : [undefined];
 
+        // Fetch customer name based on source type
+        let customerName: string | null = null;
+        try {
+          if (task.sourceType === 'support' && task.sourceId) {
+            // Get customer from ticket
+            const ticketResult = await db.execute(sql`
+              SELECT c.name 
+              FROM tickets t 
+              LEFT JOIN customers c ON t.customer_id = c.id 
+              WHERE t.id = ${task.sourceId}
+            `);
+            customerName = (ticketResult.rows[0] as any)?.name || null;
+          } else if (task.sourceType === 'implementation' && task.sourceId) {
+            // Get customer from implementation project
+            const projectResult = await db.execute(sql`
+              SELECT c.name 
+              FROM implementation_projects p 
+              LEFT JOIN customers c ON p.customer_id = c.id 
+              WHERE p.id = ${task.sourceId}
+            `);
+            customerName = (projectResult.rows[0] as any)?.name || null;
+          } else if (task.sourceType === 'task' && task.sourceId) {
+            // Get customer from task if it has customerId
+            const taskResult = await db.execute(sql`
+              SELECT c.name 
+              FROM tasks t 
+              LEFT JOIN customers c ON t.customer_id = c.id 
+              WHERE t.id = ${task.sourceId}
+            `);
+            customerName = (taskResult.rows[0] as any)?.name || null;
+          }
+        } catch (e) {
+          // If customer lookup fails, continue without it
+        }
+
         return {
           ...task,
           assignee,
           assignedByUser,
+          customerName,
         };
       })
     );

@@ -44,6 +44,7 @@ import {
   List,
   MessageSquare,
   Send,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -790,7 +791,13 @@ export default function DevelopmentTasks() {
                                       <span className="font-mono text-xs text-muted-foreground">{task.taskNumber}</span>
                                       {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
                                     </div>
-                                    <h4 className="font-medium text-sm truncate mb-2">{task.title}</h4>
+                                    <h4 className="font-medium text-sm truncate mb-1">{task.title}</h4>
+                                    {(task as any).customerName && (
+                                      <p className="text-xs text-muted-foreground truncate mb-2" title={(task as any).customerName}>
+                                        <Building2 className="h-3 w-3 inline mr-1" />
+                                        {(task as any).customerName}
+                                      </p>
+                                    )}
                                     <div className="flex flex-wrap gap-1 mb-2">
                                       <Badge variant="outline" className={`${PRIORITY_CONFIG[task.priority]?.color || ""} text-xs`}>
                                         {PRIORITY_CONFIG[task.priority]?.label || task.priority}
@@ -855,6 +862,12 @@ export default function DevelopmentTasks() {
                                   {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
                                 </div>
                                 <CardTitle className="text-sm font-medium truncate">{task.title}</CardTitle>
+                                {(task as any).customerName && (
+                                  <p className="text-xs text-muted-foreground truncate mt-1" title={(task as any).customerName}>
+                                    <Building2 className="h-3 w-3 inline mr-1" />
+                                    {(task as any).customerName}
+                                  </p>
+                                )}
                               </div>
                               <Badge className={`${statusConfig.color} text-xs flex-shrink-0`}>
                                 {statusConfig.label}
@@ -919,6 +932,7 @@ export default function DevelopmentTasks() {
                       <TableRow className="bg-muted/50">
                         <TableHead className="w-[100px]">Task #</TableHead>
                         <TableHead className="min-w-[200px]">Title</TableHead>
+                        <TableHead className="w-[150px]">Client</TableHead>
                         <TableHead className="w-[100px]">Status</TableHead>
                         <TableHead className="w-[150px]">Engineer</TableHead>
                         <TableHead className="w-[100px]">Priority</TableHead>
@@ -959,6 +973,16 @@ export default function DevelopmentTasks() {
                                 <div className="text-xs text-muted-foreground truncate" title={task.sourceReference}>
                                   Ref: {task.sourceReference}
                                 </div>
+                              )}
+                            </TableCell>
+                            <TableCell data-testid={`text-client-${task.id}`}>
+                              {(task as any).customerName ? (
+                                <div className="flex items-center gap-1 text-sm truncate max-w-[140px]" title={(task as any).customerName}>
+                                  <Building2 className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">{(task as any).customerName}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </TableCell>
                             <TableCell>
