@@ -367,11 +367,31 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                   </div>
                 </div>
 
-                {/* Closing Notes / Solution Provided */}
-                {ticket.closingNotes && (
+                {/* Closing Notes / Solution Provided - Always show for closed tickets */}
+                {ticket.status === "closed" && (
                   <div className="mb-4">
                     <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">
-                      Solution Provided:
+                      Closing Notes / Resolution:
+                    </p>
+                    <div className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-900 p-3 rounded-md border">
+                      {ticket.closingNotes ? (
+                        <p>{ticket.closingNotes}</p>
+                      ) : (
+                        <p className="text-muted-foreground italic">No closing notes were provided</p>
+                      )}
+                    </div>
+                    {ticket.closedAt && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                        Closed on: {format(new Date(ticket.closedAt), "PPP p")}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {/* Show previous closing notes for reopened tickets */}
+                {ticket.status !== "closed" && ticket.closingNotes && (
+                  <div className="mb-4">
+                    <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">
+                      Previous Resolution Notes:
                     </p>
                     <p className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-900 p-3 rounded-md border">
                       {ticket.closingNotes}
@@ -471,12 +491,6 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                   </div>
                 )}
 
-                {/* Closed At timestamp */}
-                {ticket.closedAt && (
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-3">
-                    Closed on: {format(new Date(ticket.closedAt), "PPP p")}
-                  </p>
-                )}
               </div>
             )}
 
