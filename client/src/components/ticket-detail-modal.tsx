@@ -8,11 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench, Bell, Calendar, X } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench, Bell, Calendar, X, Star, MessageCircle, User as UserIcon, Phone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
-import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask, DevelopmentSupportMessage } from "@shared/schema";
+import type { Ticket, TicketComment, User, EscalationHistory, DevelopmentTask, DevelopmentSupportMessage, Feedback } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,12 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
 
   const { data: supportEngineers } = useQuery<User[]>({
     queryKey: ["/api/users?role=support"],
+    enabled: open,
+  });
+
+  // Fetch HR feedback for this ticket
+  const { data: hrFeedback } = useQuery<(Feedback & { submittedBy?: User; completedBy?: User })[]>({
+    queryKey: ["/api/tickets", ticket.id, "feedback"],
     enabled: open,
   });
 
@@ -485,6 +491,145 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
                             </span>
                           </div>
                           <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* HR Feedback Section */}
+                {hrFeedback && hrFeedback.length > 0 && (
+                  <div className="mt-4 pt-4 border-t" data-testid="hr-feedback-section">
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4" />
+                      Client Feedback (HR) ({hrFeedback.length}):
+                    </p>
+                    <div className="space-y-3 max-h-[250px] overflow-y-auto">
+                      {hrFeedback.map((fb) => (
+                        <div 
+                          key={fb.id} 
+                          className={cn(
+                            "p-3 rounded-md border",
+                            fb.satisfied === true 
+                              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800"
+                              : fb.satisfied === false
+                              ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                              : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700"
+                          )}
+                          data-testid={`hr-feedback-${fb.id}`}
+                        >
+                          {/* Rating and Satisfaction */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {fb.rating && (
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star 
+                                      key={star} 
+                                      className={cn(
+                                        "h-4 w-4",
+                                        star <= fb.rating! 
+                                          ? "fill-yellow-400 text-yellow-400" 
+                                          : "text-gray-300 dark:text-gray-600"
+                                      )} 
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              <Badge 
+                                variant={fb.satisfied === true ? "default" : fb.satisfied === false ? "destructive" : "secondary"}
+                                className="text-xs"
+                              >
+                                {fb.satisfied === true ? "Satisfied" : fb.satisfied === false ? "Not Satisfied" : "Pending"}
+                              </Badge>
+                              {fb.reopenedByHr && (
+                                <Badge variant="outline" className="text-xs text-orange-600 border-orange-600">
+                                  Reopened by HR
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {fb.submittedAt ? format(new Date(fb.submittedAt), "MMM d, yyyy HH:mm") : ''}
+                            </span>
+                          </div>
+
+                          {/* Work Status */}
+                          {fb.workStatus && (
+                            <div className="mb-2">
+                              <span className="text-xs text-muted-foreground">Work Status: </span>
+                              <Badge variant="outline" className="text-xs">
+                                {fb.workStatus === 'completed' ? 'Completed' : 
+                                 fb.workStatus === 'partial' ? 'Partially Completed' : 
+                                 fb.workStatus === 'not_completed' ? 'Not Completed' : fb.workStatus}
+                              </Badge>
+                            </div>
+                          )}
+
+                          {/* Comments */}
+                          {fb.comments && (
+                            <div className="mb-2">
+                              <p className="text-xs text-muted-foreground mb-1">Feedback Comments:</p>
+                              <p className="text-sm whitespace-pre-wrap bg-white/50 dark:bg-black/20 p-2 rounded">
+                                {fb.comments}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Work Description */}
+                          {fb.workDescription && (
+                            <div className="mb-2">
+                              <p className="text-xs text-muted-foreground mb-1">Work Description:</p>
+                              <p className="text-sm whitespace-pre-wrap bg-white/50 dark:bg-black/20 p-2 rounded">
+                                {fb.workDescription}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Client Contact Details */}
+                          {(fb.clientContactPerson || fb.clientContactPhone) && (
+                            <div className="mb-2 flex items-center gap-4 text-xs">
+                              {fb.clientContactPerson && (
+                                <span className="flex items-center gap-1">
+                                  <UserIcon className="h-3 w-3" />
+                                  {fb.clientContactPerson}
+                                </span>
+                              )}
+                              {fb.clientContactPhone && (
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {fb.clientContactPhone}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Reopen Reason */}
+                          {fb.reopenedByHr && fb.reopenReason && (
+                            <div className="mb-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded">
+                              <p className="text-xs text-orange-700 dark:text-orange-300 font-medium">Reopen Reason:</p>
+                              <p className="text-sm text-orange-800 dark:text-orange-200">{fb.reopenReason}</p>
+                            </div>
+                          )}
+
+                          {/* Submitted By & Completed By */}
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            {fb.submittedBy && (
+                              <span className="flex items-center gap-1">
+                                <Avatar className="h-4 w-4">
+                                  <AvatarFallback className="text-[10px]">
+                                    {fb.submittedBy.firstName?.[0]}{fb.submittedBy.lastName?.[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                                Submitted by: {fb.submittedBy.firstName} {fb.submittedBy.lastName}
+                              </span>
+                            )}
+                            {fb.completedBy && (
+                              <span className="flex items-center gap-1">
+                                <Wrench className="h-3 w-3" />
+                                Completed by: {fb.completedBy.firstName} {fb.completedBy.lastName}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

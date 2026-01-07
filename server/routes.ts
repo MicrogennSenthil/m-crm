@@ -5923,6 +5923,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get HR feedback for a ticket
+  app.get("/api/tickets/:id/feedback", isAuthenticated, async (req, res) => {
+    try {
+      const feedbackList = await storage.getFeedbackListByTicket(req.params.id);
+      res.json(feedbackList);
+    } catch (error) {
+      console.error("Error fetching ticket feedback:", error);
+      res.status(500).json({ message: "Failed to fetch feedback" });
+    }
+  });
+
   app.post("/api/tickets/:id/escalate", isAuthenticated, async (req: any, res) => {
     try {
       const ticket = await storage.getTicket(req.params.id);

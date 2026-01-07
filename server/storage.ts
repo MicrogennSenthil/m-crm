@@ -320,6 +320,7 @@ export interface IStorage {
   // Feedback operations
   createFeedback(feedbackData: InsertFeedback): Promise<Feedback>;
   getFeedbackByTicket(ticketId: string): Promise<Feedback | undefined>;
+  getFeedbackListByTicket(ticketId: string): Promise<(Feedback & { submittedBy?: User; completedBy?: User })[]>;
   updateFeedback(id: string, data: Partial<InsertFeedback>): Promise<Feedback>;
 
   // Activity Log operations
@@ -1745,6 +1746,27 @@ export class DatabaseStorage implements IStorage {
   async getFeedbackByTicket(ticketId: string): Promise<Feedback | undefined> {
     const [feedbackEntry] = await db.select().from(feedback).where(eq(feedback.ticketId, ticketId));
     return feedbackEntry;
+  }
+
+  async getFeedbackListByTicket(ticketId: string): Promise<(Feedback & { submittedBy?: User; completedBy?: User })[]> {
+    const feedbackEntries = await db.select().from(feedback).where(eq(feedback.ticketId, ticketId)).orderBy(desc(feedback.submittedAt));
+    
+    // Enrich with user details
+    const enrichedFeedback = await Promise.all(feedbackEntries.map(async (fb) => {
+      let submittedBy: User | undefined;
+      let completedBy: User | undefined;
+      
+      if (fb.submittedById) {
+        submittedBy = await this.getUser(fb.submittedById);
+      }
+      if (fb.completedById) {
+        completedBy = await this.getUser(fb.completedById);
+      }
+      
+      return { ...fb, submittedBy, completedBy };
+    }));
+    
+    return enrichedFeedback;
   }
 
   async updateFeedback(id: string, data: Partial<InsertFeedback>): Promise<Feedback> {
