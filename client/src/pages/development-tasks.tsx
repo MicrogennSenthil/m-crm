@@ -1077,11 +1077,30 @@ export default function DevelopmentTasks() {
           {selectedTask && (
             <>
               <DialogHeader>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground" data-testid="text-detail-task-number">{selectedTask.taskNumber}</span>
-                  <Badge variant="outline" className={SOURCE_CONFIG[selectedTask.sourceType]?.color || ""} data-testid="badge-detail-source">
-                    {SOURCE_CONFIG[selectedTask.sourceType]?.label || selectedTask.sourceType}
-                  </Badge>
+                {/* Prominent Task Number Display */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800 mb-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-purple-700 dark:text-purple-300" data-testid="text-detail-task-number">
+                        {selectedTask.taskNumber}
+                      </span>
+                      <Badge variant="outline" className={SOURCE_CONFIG[selectedTask.sourceType]?.color || ""} data-testid="badge-detail-source">
+                        {SOURCE_CONFIG[selectedTask.sourceType]?.label || selectedTask.sourceType}
+                      </Badge>
+                    </div>
+                    <Badge 
+                      variant={selectedTask.status === "completed" ? "default" : "outline"}
+                      className={STATUS_CONFIG[selectedTask.status]?.color || ""}
+                      data-testid="badge-detail-status"
+                    >
+                      {STATUS_CONFIG[selectedTask.status]?.label || selectedTask.status}
+                    </Badge>
+                  </div>
+                  {selectedTask.sourceReference && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Source Reference: <span className="font-medium">{selectedTask.sourceReference}</span>
+                    </div>
+                  )}
                 </div>
                 <DialogTitle className="text-xl" data-testid="text-detail-title">{selectedTask.title}</DialogTitle>
                 <DialogDescription data-testid="text-detail-description">
