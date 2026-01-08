@@ -11202,7 +11202,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create development task (from Implementation, Support, Tasks, or Manual)
   app.post("/api/development/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       
       // Parse deadline string to Date if provided
       const deadline = req.body.deadline ? new Date(req.body.deadline) : null;
@@ -11246,7 +11248,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update development task
   app.patch("/api/development/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       const { id } = req.params;
       
       const existingTask = await storage.getDevelopmentTask(id);
@@ -11313,7 +11317,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete development task (admin only)
   app.delete("/api/development/tasks/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const userId = req.user?.id;
+      const authId = req.user?.claims?.sub || req.user?.id;
+      const currentUser = await storage.getUser(authId);
+      const userId = currentUser?.id || authId;
       const { id } = req.params;
       
       const task = await storage.getDevelopmentTask(id);
