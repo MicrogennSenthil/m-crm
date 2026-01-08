@@ -11392,12 +11392,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Development task not found" });
       }
       
-      // Authorization: Allow if user is assigned, is admin, or has super admin email
+      // Authorization: Allow if user is assigned, is admin, is super admin, or is any developer
       const isSuperAdmin = userEmail === "senthil@microgenn.com";
       const isAssigned = task.assignedTo === userId || task.assignedBy === userId;
       const isAdminRole = userRole === "admin";
       
-      if (!isAssigned && !isAdminRole && !isSuperAdmin) {
+      // Check if user is in development department by looking up their department
+      let isDeveloper = currentUser?.role?.toLowerCase().includes('development') ||
+                        currentUser?.role?.toLowerCase().includes('engineer');
+      if (!isDeveloper && currentUser?.departmentId) {
+        const dept = await storage.getDepartment(currentUser.departmentId);
+        isDeveloper = dept?.name?.toLowerCase().includes('development') || false;
+      }
+      
+      // Be more permissive - allow any authenticated user from development team
+      if (!isAssigned && !isAdminRole && !isSuperAdmin && !isDeveloper) {
+        console.log(`[Support Message Auth GET] User ${userEmail} (id: ${userId}) tried to view messages for task ${id}. assignedTo: ${task.assignedTo}, assignedBy: ${task.assignedBy}`);
         return res.status(403).json({ message: "Not authorized to view messages for this task" });
       }
       
@@ -11428,6 +11438,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.getDevelopmentTask(id);
       if (!task) {
         return res.status(404).json({ message: "Development task not found" });
+      }
+      
+      // Authorization: Allow if user is assigned, is admin, is super admin, or is any developer
+      const isSuperAdmin = userEmail === "senthil@microgenn.com";
+      const isAssigned = task.assignedTo === userId || task.assignedBy === userId;
+      const isAdminRole = userRole === "admin";
+      
+      // Check if user is in development department by looking up their department
+      let isDeveloper = currentUser?.role?.toLowerCase().includes('development') ||
+                        currentUser?.role?.toLowerCase().includes('engineer');
+      if (!isDeveloper && currentUser?.departmentId) {
+        const dept = await storage.getDepartment(currentUser.departmentId);
+        isDeveloper = dept?.name?.toLowerCase().includes('development') || false;
+      }
+      
+      // Be more permissive - allow any authenticated user from development team
+      if (!isAssigned && !isAdminRole && !isSuperAdmin && !isDeveloper) {
+        console.log(`[Support Message Auth] User ${userEmail} (id: ${userId}) tried to send message for task ${id}. assignedTo: ${task.assignedTo}, assignedBy: ${task.assignedBy}`);
+        return res.status(403).json({ message: "Not authorized to send messages for this task" });
       }
       
       // Ensure task is linked to a support ticket
