@@ -11618,9 +11618,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Development task not found" });
       }
       
-      // Task must be in_progress to be completed
-      if (existingTask.status !== 'in_progress') {
-        return res.status(400).json({ message: "Only tasks in progress can be marked as complete or incomplete" });
+      // Task must be in_progress to be completed (check multiple formats)
+      const taskStatus = existingTask.status?.toLowerCase().replace(/\s+/g, '_');
+      console.log(`[Task Complete] Task ${id} status: "${existingTask.status}" (normalized: "${taskStatus}")`);
+      
+      if (taskStatus !== 'in_progress' && taskStatus !== 'inprogress' && existingTask.status !== 'In Progress') {
+        return res.status(400).json({ message: `Only tasks in progress can be marked as complete or incomplete. Current status: ${existingTask.status}` });
       }
       
       // Determine final status
