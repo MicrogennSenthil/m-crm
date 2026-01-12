@@ -189,10 +189,20 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         if (customer) {
           form.setValue("relatedEntityType", "customer");
           form.setValue("relatedEntityId", customerId);
+          // Auto-fill contact details from customer
+          if (customer.contactPerson) {
+            form.setValue("contactName", customer.contactPerson);
+          }
+          if (customer.phone) {
+            form.setValue("contactPhone", customer.phone);
+          }
         }
       } else {
         form.setValue("relatedEntityType", undefined);
         form.setValue("relatedEntityId", undefined);
+        // Clear contact details when unlinking customer
+        form.setValue("contactName", "");
+        form.setValue("contactPhone", "");
       }
     }
     setCustomerOpen(false);
@@ -255,6 +265,24 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   // Reset form when task changes
   useEffect(() => {
     if (task) {
+      // Get contact info from linked customer if available
+      let contactName = task.contactName || "";
+      let contactPhone = task.contactPhone || "";
+      
+      if (task.relatedEntityType === "customer" && task.relatedEntityId) {
+        const linkedCustomer = activeCustomers.find(c => c.id === task.relatedEntityId);
+        if (linkedCustomer) {
+          // Use customer contact info if task doesn't have its own
+          if (!contactName && linkedCustomer.contactPerson) {
+            contactName = linkedCustomer.contactPerson;
+          }
+          if (!contactPhone && linkedCustomer.phone) {
+            contactPhone = linkedCustomer.phone;
+          }
+          setSelectedCustomerId(linkedCustomer.id);
+        }
+      }
+      
       form.reset({
         title: task.title,
         description: task.description || "",
@@ -266,8 +294,8 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         dueDate: task.dueDate ? new Date(task.dueDate) : null,
         relatedEntityType: task.relatedEntityType || undefined,
         relatedEntityId: task.relatedEntityId || undefined,
-        contactName: task.contactName || "",
-        contactPhone: task.contactPhone || "",
+        contactName,
+        contactPhone,
       });
       if (task.voiceNoteUrl) {
         setAudioUrl(task.voiceNoteUrl);
@@ -316,7 +344,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
     if (task?.attachments) {
       setAttachments(task.attachments);
     }
-  }, [task, form, open]);
+  }, [task, form, open, activeCustomers]);
 
   // Create customer mutation
   const createCustomerMutation = useMutation({
