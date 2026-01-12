@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, Globe, CheckCircle2, MessageCircle, Monitor, Lock, Eye, EyeOff, Loader2, Key, Camera, Pencil, Save, X } from "lucide-react";
+import { Copy, ExternalLink, Globe, CheckCircle2, MessageCircle, Monitor, Lock, Eye, EyeOff, Loader2, Key, Camera, Pencil, Save, X, Volume2, VolumeX } from "lucide-react";
 import { SiFacebook, SiLinkedin, SiInstagram, SiX, SiGoogle, SiYoutube, SiTiktok, SiPinterest, SiSnapchat, SiWhatsapp } from "react-icons/si";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useSpeech } from "@/hooks/use-speech";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SelfieCaptureDialog } from "@/components/selfie-capture";
 
@@ -126,6 +129,155 @@ function IntegrationCard({
         </Button>
       )}
     </div>
+  );
+}
+
+function VoiceAlertsCard({ user }: { user: any }) {
+  const { toast } = useToast();
+  const [voicePreference, setVoicePreference] = useState<"male" | "female">(
+    user?.voicePreference || "female"
+  );
+  const [voiceAlertsEnabled, setVoiceAlertsEnabled] = useState(
+    user?.voiceAlertsEnabled !== false
+  );
+  const { speak, isSupported, isSpeaking } = useSpeech({ voicePreference });
+
+  useEffect(() => {
+    if (user) {
+      setVoicePreference(user.voicePreference || "female");
+      setVoiceAlertsEnabled(user.voiceAlertsEnabled !== false);
+    }
+  }, [user]);
+
+  const updateVoicePreferenceMutation = useMutation({
+    mutationFn: async (data: { voicePreference?: string; voiceAlertsEnabled?: boolean }) => {
+      const response = await apiRequest("PATCH", "/api/profile/voice-preferences", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Voice Preferences Updated",
+        description: "Your voice alert settings have been saved",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update voice preferences",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleVoicePreferenceChange = (value: "male" | "female") => {
+    setVoicePreference(value);
+    updateVoicePreferenceMutation.mutate({ voicePreference: value });
+  };
+
+  const handleVoiceAlertsToggle = (enabled: boolean) => {
+    setVoiceAlertsEnabled(enabled);
+    updateVoicePreferenceMutation.mutate({ voiceAlertsEnabled: enabled });
+  };
+
+  const handleTestVoice = () => {
+    if (!isSupported) {
+      toast({
+        title: "Not Supported",
+        description: "Voice alerts are not supported in your browser",
+        variant: "destructive",
+      });
+      return;
+    }
+    speak("Boss, you have an appointment. You have to call Microgenn Software Solutions");
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+          <Volume2 className="h-5 w-5" />
+          Voice Alerts
+        </CardTitle>
+        <CardDescription>Configure voice reminders for your sales followups</CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0 space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
+            <Label htmlFor="voice-alerts-toggle" className="text-sm sm:text-base">Enable Voice Alerts</Label>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Receive spoken reminders for your pending followups
+            </p>
+          </div>
+          <Switch
+            id="voice-alerts-toggle"
+            checked={voiceAlertsEnabled}
+            onCheckedChange={handleVoiceAlertsToggle}
+            disabled={updateVoicePreferenceMutation.isPending}
+            data-testid="switch-voice-alerts"
+          />
+        </div>
+
+        {voiceAlertsEnabled && (
+          <>
+            <Separator />
+
+            <div className="space-y-3">
+              <Label className="text-sm sm:text-base">Voice Gender</Label>
+              <p className="text-xs sm:text-sm text-muted-foreground mb-2">
+                Choose the voice for your alerts
+              </p>
+              <RadioGroup
+                value={voicePreference}
+                onValueChange={(value) => handleVoicePreferenceChange(value as "male" | "female")}
+                className="flex flex-col sm:flex-row gap-4"
+                disabled={updateVoicePreferenceMutation.isPending}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="female" id="voice-female" data-testid="radio-voice-female" />
+                  <Label htmlFor="voice-female" className="cursor-pointer">Female Voice</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="male" id="voice-male" data-testid="radio-voice-male" />
+                  <Label htmlFor="voice-male" className="cursor-pointer">Male Voice</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestVoice}
+                disabled={isSpeaking || !isSupported}
+                data-testid="button-test-voice"
+              >
+                {isSpeaking ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Volume2 className="h-4 w-4 mr-2" />
+                )}
+                Test Voice
+              </Button>
+              {!isSupported && (
+                <p className="text-xs text-destructive">
+                  Voice alerts are not supported in your browser
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="p-3 rounded-lg bg-muted/50 border">
+          <p className="text-xs text-muted-foreground">
+            Voice alerts will remind you when you have pending or overdue followups while you're using the application. 
+            Example: "Boss, you have an appointment. You have to call [Property Name]"
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -594,6 +746,8 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <VoiceAlertsCard user={user} />
 
           <PasswordChangeCard user={user} />
         </TabsContent>
