@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX } from "lucide-react";
+import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,17 @@ export default function Support() {
     return "table";
   });
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+
+  // Voice alerts for support department
+  const {
+    alerts: voiceAlerts,
+    alertCounts,
+    voiceAlertsEnabled,
+    isSpeaking,
+    isSupported: voiceSupported,
+    announceAllPending,
+    stopSpeaking,
+  } = useUnifiedVoiceAlerts('support', 120000);
 
   useEffect(() => {
     localStorage.setItem("support-layout", layout);
@@ -224,12 +236,35 @@ export default function Support() {
             Manage and track customer support requests
           </p>
         </div>
-        <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-ticket" className="min-h-[44px] w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              New Ticket
+        <div className="flex items-center gap-2">
+          {voiceSupported && voiceAlertsEnabled && (
+            <Button
+              variant={isSpeaking ? "destructive" : "outline"}
+              size="icon"
+              onClick={() => isSpeaking ? stopSpeaking() : announceAllPending()}
+              title={isSpeaking ? "Stop speaking" : `Voice alerts (${alertCounts.total} pending)`}
+              data-testid="button-voice-alerts"
+            >
+              {isSpeaking ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <div className="relative">
+                  <Volume2 className="h-4 w-4" />
+                  {alertCounts.total > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                      {alertCounts.total > 9 ? "9+" : alertCounts.total}
+                    </span>
+                  )}
+                </div>
+              )}
             </Button>
+          )}
+          <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-ticket" className="min-h-[44px] w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                New Ticket
+              </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -241,6 +276,7 @@ export default function Support() {
             <TicketForm onSuccess={() => setNewTicketOpen(false)} />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Category Tabs - All, Support, Development */}
