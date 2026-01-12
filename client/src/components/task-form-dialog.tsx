@@ -64,6 +64,8 @@ const taskFormSchema = z.object({
   dueDate: z.date().optional().nullable(),
   relatedEntityType: z.string().optional(),
   relatedEntityId: z.string().optional(),
+  contactName: z.string().optional(),
+  contactPhone: z.string().optional(),
 });
 
 type TaskFormValues = z.infer<typeof taskFormSchema>;
@@ -168,6 +170,8 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       dueDate: null,
       relatedEntityType: undefined,
       relatedEntityId: undefined,
+      contactName: "",
+      contactPhone: "",
     },
   });
 
@@ -262,6 +266,8 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         dueDate: task.dueDate ? new Date(task.dueDate) : null,
         relatedEntityType: task.relatedEntityType || undefined,
         relatedEntityId: task.relatedEntityId || undefined,
+        contactName: task.contactName || "",
+        contactPhone: task.contactPhone || "",
       });
       if (task.voiceNoteUrl) {
         setAudioUrl(task.voiceNoteUrl);
@@ -284,6 +290,8 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
         dueDate: null,
         relatedEntityType: undefined,
         relatedEntityId: undefined,
+        contactName: "",
+        contactPhone: "",
       });
       setAudioBlob(null);
       setAudioUrl(null);
@@ -964,6 +972,44 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                 </FormItem>
               )}
             />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="contactName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Name</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Contact person name" 
+                        {...field} 
+                        data-testid="input-task-contact-name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="contactPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Phone</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Contact phone number" 
+                        {...field} 
+                        data-testid="input-task-contact-phone"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField

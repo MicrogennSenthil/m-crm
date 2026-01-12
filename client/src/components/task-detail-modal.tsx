@@ -606,6 +606,32 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                     <p className="text-sm text-muted-foreground">Unassigned</p>
                   )}
                 </div>
+                
+                {(task.contactName || task.contactPhone) && (
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-2">Contact Details</h4>
+                    <div className="space-y-2 text-sm">
+                      {task.contactName && (
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          <span data-testid="text-contact-name">{task.contactName}</span>
+                        </div>
+                      )}
+                      {task.contactPhone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <a 
+                            href={`tel:${task.contactPhone}`} 
+                            className="text-primary hover:underline"
+                            data-testid="link-contact-phone"
+                          >
+                            {task.contactPhone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-4">
