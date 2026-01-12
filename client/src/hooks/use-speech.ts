@@ -117,14 +117,16 @@ export function useFollowupVoiceAlerts(
   voiceAlertsEnabled: boolean
 ) {
   const { speak, isSupported, isSpeaking } = useSpeech({ voicePreference });
-  const announcedFollowupsRef = useRef<Set<string>>(new Set());
+  const announcedKeysRef = useRef<Set<string>>(new Set());
   const lastAnnouncementTimeRef = useRef<number>(0);
 
   const announceFollowup = useCallback(
     (followup: { id: string; companyName: string; isOverdue?: boolean }) => {
       if (!voiceAlertsEnabled || !isSupported) return;
 
-      if (announcedFollowupsRef.current.has(followup.id)) return;
+      // The id should already include the date for proper deduplication
+      // e.g., "leadId-2026-01-12" to allow re-announcement for new dates
+      if (announcedKeysRef.current.has(followup.id)) return;
 
       const now = Date.now();
       if (now - lastAnnouncementTimeRef.current < 3000) return;
@@ -137,14 +139,14 @@ export function useFollowupVoiceAlerts(
       }
 
       speak(message);
-      announcedFollowupsRef.current.add(followup.id);
+      announcedKeysRef.current.add(followup.id);
       lastAnnouncementTimeRef.current = now;
     },
     [voiceAlertsEnabled, isSupported, speak]
   );
 
   const resetAnnouncements = useCallback(() => {
-    announcedFollowupsRef.current.clear();
+    announcedKeysRef.current.clear();
   }, []);
 
   return {

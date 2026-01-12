@@ -160,6 +160,7 @@ function VoiceAlertsCard({ user }: { user: any }) {
         description: "Your voice alert settings have been saved",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/followups/alerts"] });
     },
     onError: (error: any) => {
       toast({

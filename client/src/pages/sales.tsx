@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2 } from "lucide-react";
+import { useFollowupVoiceAlerts } from "@/hooks/use-speech";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,6 +150,90 @@ export default function Sales() {
       }
     }
   }, [leads, selectedLead]);
+
+  // Fetch voice alerts data with automatic refetch every 2 minutes
+  const { data: voiceAlertData } = useQuery<{
+    followups: Array<{
+      id: string;
+      companyName: string;
+      contactPerson: string;
+      followUpDate: string;
+      notes: string | null;
+      stage: string;
+      isOverdue: boolean;
+    }>;
+    voicePreference: "male" | "female";
+    voiceAlertsEnabled: boolean;
+  }>({
+    queryKey: ["/api/followups/alerts"],
+    refetchInterval: 2 * 60 * 1000, // Refetch every 2 minutes
+    refetchIntervalInBackground: false, // Don't refetch when tab is not visible
+  });
+
+  // Voice alert system for pending followups
+  const voicePreference = voiceAlertData?.voicePreference || "female";
+  const voiceAlertsEnabled = voiceAlertData?.voiceAlertsEnabled !== false;
+  const voiceAlertFollowups = voiceAlertData?.followups || [];
+  const { announceFollowup, resetAnnouncements, isSupported: voiceSupported } = useFollowupVoiceAlerts(
+    voicePreference,
+    voiceAlertsEnabled
+  );
+  const lastAlertTimeRef = useRef<number>(0);
+  // Track announced followups with date to allow re-announcement for new dates
+  const announcedKeysRef = useRef<Set<string>>(new Set());
+
+  // Voice alert polling effect - announce followups when page is focused
+  useEffect(() => {
+    if (!voiceAlertsEnabled || !voiceSupported || !voiceAlertFollowups.length) return;
+
+    const checkAndAnnounce = () => {
+      // Only announce if page is visible and focused
+      if (document.hidden) return;
+      
+      // Rate limit: at least 30 seconds between announcements
+      const now = Date.now();
+      if (now - lastAlertTimeRef.current < 30000) return;
+
+      // Find unannounced followups (use id+date as key to allow re-announcement for new dates)
+      const unannouncedFollowups = voiceAlertFollowups.filter((f) => {
+        const key = `${f.id}-${f.followUpDate}`;
+        return !announcedKeysRef.current.has(key);
+      });
+
+      if (unannouncedFollowups.length > 0) {
+        // Announce the first unannounced followup
+        const followup = unannouncedFollowups[0];
+        const key = `${followup.id}-${followup.followUpDate}`;
+        announceFollowup({
+          id: key,
+          companyName: followup.companyName || "Unknown Company",
+          isOverdue: followup.isOverdue,
+        });
+        announcedKeysRef.current.add(key);
+        lastAlertTimeRef.current = now;
+      }
+    };
+
+    // Check on mount and when followups change
+    const timer = setTimeout(checkAndAnnounce, 2000);
+
+    // Set up periodic check (every 5 minutes)
+    const interval = setInterval(checkAndAnnounce, 5 * 60 * 1000);
+
+    // Also check when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setTimeout(checkAndAnnounce, 1000);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [voiceAlertsEnabled, voiceSupported, voiceAlertFollowups, announceFollowup]);
 
   const updateLeadMutation = useMutation({
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {

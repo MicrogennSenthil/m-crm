@@ -7689,12 +7689,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       tomorrow.setDate(tomorrow.getDate() + 1);
 
       // Get leads assigned to this user with pending followups
-      const leads = await storage.getLeads({ assignedTo: currentUser.id });
+      const leads = await storage.getLeads({ salesExecutiveId: currentUser.id });
       
       const alertFollowups = leads
         .filter(lead => {
-          if (!lead.followUpDate) return false;
-          const followUpDate = new Date(lead.followUpDate);
+          if (!lead.nextFollowupDate) return false;
+          const followUpDate = new Date(lead.nextFollowupDate);
           followUpDate.setHours(0, 0, 0, 0);
           return followUpDate <= today; // Due today or overdue
         })
@@ -7702,10 +7702,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: lead.id,
           companyName: lead.companyName,
           contactPerson: lead.contactPerson,
-          followUpDate: lead.followUpDate,
-          notes: lead.notes,
+          followUpDate: lead.nextFollowupDate,
+          notes: lead.specialInstructions || null,
           stage: lead.stage,
-          isOverdue: new Date(lead.followUpDate!) < today,
+          isOverdue: new Date(lead.nextFollowupDate!) < today,
         }));
 
       res.json({
