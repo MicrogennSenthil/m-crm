@@ -7635,6 +7635,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update voice preferences
+  app.patch("/api/profile/voice-preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { voicePreference, voiceAlertsEnabled } = req.body;
+
+      const updateData: Partial<{ voicePreference: string; voiceAlertsEnabled: boolean }> = {};
+      
+      if (voicePreference !== undefined) {
+        if (!['male', 'female'].includes(voicePreference)) {
+          return res.status(400).json({ message: "Voice preference must be 'male' or 'female'" });
+        }
+        updateData.voicePreference = voicePreference;
+      }
+      
+      if (voiceAlertsEnabled !== undefined) {
+        updateData.voiceAlertsEnabled = !!voiceAlertsEnabled;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+
+      const updatedUser = await storage.updateUser(userId, updateData);
+
+      res.json({
+        success: true,
+        voicePreference: updatedUser.voicePreference,
+        voiceAlertsEnabled: updatedUser.voiceAlertsEnabled,
+      });
+    } catch (error) {
+      console.error("Error updating voice preferences:", error);
+      res.status(500).json({ message: "Failed to update voice preferences" });
+    }
+  });
+
+  // Get user's pending followups for voice alerts
+  app.get("/api/followups/alerts", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Get followups that are due today or overdue
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Get leads assigned to this user with pending followups
+      const leads = await storage.getLeads({ assignedTo: currentUser.id });
+      
+      const alertFollowups = leads
+        .filter(lead => {
+          if (!lead.followUpDate) return false;
+          const followUpDate = new Date(lead.followUpDate);
+          followUpDate.setHours(0, 0, 0, 0);
+          return followUpDate <= today; // Due today or overdue
+        })
+        .map(lead => ({
+          id: lead.id,
+          companyName: lead.companyName,
+          contactPerson: lead.contactPerson,
+          followUpDate: lead.followUpDate,
+          notes: lead.notes,
+          stage: lead.stage,
+          isOverdue: new Date(lead.followUpDate!) < today,
+        }));
+
+      res.json({
+        followups: alertFollowups,
+        voicePreference: currentUser.voicePreference || 'female',
+        voiceAlertsEnabled: currentUser.voiceAlertsEnabled !== false,
+      });
+    } catch (error) {
+      console.error("Error fetching followup alerts:", error);
+      res.status(500).json({ message: "Failed to fetch followup alerts" });
+    }
+  });
+
   // =============================================
   // TASK/FOLLOWUP MANAGEMENT ROUTES
   // =============================================
