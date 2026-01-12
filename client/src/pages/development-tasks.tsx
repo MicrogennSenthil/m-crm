@@ -51,7 +51,7 @@ import {
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
+import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -140,12 +140,12 @@ export default function DevelopmentTasks() {
   const {
     alerts: voiceAlerts,
     alertCounts,
-    voiceAlertsEnabled,
+    isEnabled: voiceAlertsEnabled,
     isSpeaking,
     isSupported: voiceSupported,
     announceAllPending,
     stopSpeaking,
-  } = useUnifiedVoiceAlerts('development', 120000);
+  } = useVoiceAlerts('development');
 
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");

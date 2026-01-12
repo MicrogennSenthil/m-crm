@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, Columns3, LayoutGrid, List, Filter, Volume2, VolumeX } from "lucide-react";
-import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
+import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
@@ -56,12 +56,12 @@ export default function Implementations() {
   const {
     alerts: voiceAlerts,
     alertCounts,
-    voiceAlertsEnabled,
+    isEnabled: voiceAlertsEnabled,
     isSpeaking,
     isSupported: voiceSupported,
     announceAllPending,
     stopSpeaking,
-  } = useUnifiedVoiceAlerts('implementation', 120000);
+  } = useVoiceAlerts('implementation');
 
   useEffect(() => {
     localStorage.setItem("implementations-layout", layout);

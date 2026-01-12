@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX } from "lucide-react";
-import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
+import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,12 +87,12 @@ export default function Support() {
   const {
     alerts: voiceAlerts,
     alertCounts,
-    voiceAlertsEnabled,
+    isEnabled: voiceAlertsEnabled,
     isSpeaking,
     isSupported: voiceSupported,
     announceAllPending,
     stopSpeaking,
-  } = useUnifiedVoiceAlerts('support', 120000);
+  } = useVoiceAlerts('support');
 
   useEffect(() => {
     localStorage.setItem("support-layout", layout);

@@ -48,7 +48,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
+import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import TaskFormDialog from "@/components/task-form-dialog";
 import TaskDetailModal from "@/components/task-detail-modal";
 
@@ -105,12 +105,12 @@ export default function TasksPage() {
   const {
     alerts: voiceAlerts,
     alertCounts,
-    voiceAlertsEnabled,
+    isEnabled: voiceAlertsEnabled,
     isSpeaking,
     isSupported: voiceSupported,
     announceAllPending,
     stopSpeaking,
-  } = useUnifiedVoiceAlerts('tasks', 120000);
+  } = useVoiceAlerts('tasks');
 
   useEffect(() => {
     localStorage.setItem("tasks-layout", layout);
