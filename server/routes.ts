@@ -7719,6 +7719,366 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Unified voice alerts endpoint - aggregates alerts from all departments
+  app.get("/api/alerts/voice", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Check if voice alerts are enabled
+      if (currentUser.voiceAlertsEnabled === false) {
+        return res.json({
+          alerts: [],
+          voicePreference: currentUser.voicePreference || 'female',
+          voiceAlertsEnabled: false,
+        });
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const now = new Date();
+
+      interface VoiceAlert {
+        id: string;
+        department: 'sales' | 'support' | 'implementation' | 'tasks' | 'development';
+        type: 'new_lead' | 'followup_due' | 'overdue' | 'new_ticket' | 'ticket_escalated' | 'new_task' | 'task_due' | 'project_update' | 'dev_task_assigned';
+        entityId: string;
+        entityName: string;
+        message: string;
+        priority: 'high' | 'medium' | 'low';
+        dueDate?: string;
+        createdAt: string;
+      }
+
+      const alerts: VoiceAlert[] = [];
+
+      // 1. SALES ALERTS - New leads and followups
+      try {
+        const leads = await storage.getLeads({ salesExecutiveId: currentUser.id });
+        
+        for (const lead of leads) {
+          // New leads (created in last 24 hours)
+          if (lead.createdAt) {
+            const createdAt = new Date(lead.createdAt);
+            const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceCreation <= 24 && lead.stage === 'seed') {
+              alerts.push({
+                id: `sales-new-${lead.id}-${lead.createdAt}`,
+                department: 'sales',
+                type: 'new_lead',
+                entityId: lead.id,
+                entityName: lead.companyName,
+                message: `Boss, you have a new lead from ${lead.companyName}`,
+                priority: 'medium',
+                createdAt: lead.createdAt.toString(),
+              });
+            }
+          }
+
+          // Followup due today or overdue
+          if (lead.nextFollowupDate) {
+            const followUpDate = new Date(lead.nextFollowupDate);
+            followUpDate.setHours(0, 0, 0, 0);
+            
+            if (followUpDate <= today) {
+              const isOverdue = followUpDate < today;
+              alerts.push({
+                id: `sales-followup-${lead.id}-${lead.nextFollowupDate}`,
+                department: 'sales',
+                type: isOverdue ? 'overdue' : 'followup_due',
+                entityId: lead.id,
+                entityName: lead.companyName,
+                message: isOverdue 
+                  ? `Boss, you have an overdue followup. You have to call ${lead.companyName}`
+                  : `Boss, you have an appointment. You have to call ${lead.companyName}`,
+                priority: isOverdue ? 'high' : 'medium',
+                dueDate: lead.nextFollowupDate.toString(),
+                createdAt: lead.nextFollowupDate.toString(),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching sales alerts:", e);
+      }
+
+      // 2. SUPPORT ALERTS - New tickets and escalations
+      try {
+        const tickets = await storage.getTickets({ assignedEngineerIds: [currentUser.id] });
+        
+        for (const ticket of tickets) {
+          // New tickets assigned (in last 24 hours)
+          if (ticket.assignedAt && ticket.status !== 'closed' && ticket.status !== 'resolved') {
+            const assignedAt = new Date(ticket.assignedAt);
+            const hoursSinceAssignment = (now.getTime() - assignedAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceAssignment <= 24) {
+              alerts.push({
+                id: `support-new-${ticket.id}-${ticket.assignedAt}`,
+                department: 'support',
+                type: 'new_ticket',
+                entityId: ticket.id,
+                entityName: ticket.customerName,
+                message: `Boss, you have a new support ticket from ${ticket.customerName}. Issue: ${ticket.issueSummary.substring(0, 50)}`,
+                priority: ticket.priority === 'critical' || ticket.priority === 'high' ? 'high' : 'medium',
+                createdAt: ticket.assignedAt.toString(),
+              });
+            }
+          }
+
+          // Escalated tickets
+          if (ticket.escalatedAt && ticket.status === 'escalated') {
+            const escalatedAt = new Date(ticket.escalatedAt);
+            const hoursSinceEscalation = (now.getTime() - escalatedAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceEscalation <= 24) {
+              alerts.push({
+                id: `support-escalated-${ticket.id}-${ticket.escalatedAt}`,
+                department: 'support',
+                type: 'ticket_escalated',
+                entityId: ticket.id,
+                entityName: ticket.customerName,
+                message: `Boss, ticket ${ticket.ticketNumber} has been escalated. Customer: ${ticket.customerName}`,
+                priority: 'high',
+                createdAt: ticket.escalatedAt.toString(),
+              });
+            }
+          }
+
+          // Overdue tickets (due date passed)
+          if (ticket.dueDate && ticket.status !== 'closed' && ticket.status !== 'resolved') {
+            const dueDate = new Date(ticket.dueDate);
+            if (dueDate < now) {
+              alerts.push({
+                id: `support-overdue-${ticket.id}-${ticket.dueDate}`,
+                department: 'support',
+                type: 'overdue',
+                entityId: ticket.id,
+                entityName: ticket.customerName,
+                message: `Boss, ticket ${ticket.ticketNumber} is overdue. Customer: ${ticket.customerName}`,
+                priority: 'high',
+                dueDate: ticket.dueDate.toString(),
+                createdAt: ticket.dueDate.toString(),
+              });
+            }
+          }
+
+          // Reminder date alerts
+          if (ticket.reminderDate && ticket.status !== 'closed' && ticket.status !== 'resolved') {
+            const reminderDate = new Date(ticket.reminderDate);
+            reminderDate.setHours(0, 0, 0, 0);
+            if (reminderDate <= today) {
+              alerts.push({
+                id: `support-reminder-${ticket.id}-${ticket.reminderDate}`,
+                department: 'support',
+                type: 'followup_due',
+                entityId: ticket.id,
+                entityName: ticket.customerName,
+                message: `Boss, reminder to follow up on ticket ${ticket.ticketNumber} for ${ticket.customerName}`,
+                priority: 'medium',
+                dueDate: ticket.reminderDate.toString(),
+                createdAt: ticket.reminderDate.toString(),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching support alerts:", e);
+      }
+
+      // 3. TASK ALERTS - New tasks and due tasks
+      try {
+        const tasks = await storage.getTasks({ assignedTo: currentUser.id });
+        
+        for (const task of tasks) {
+          if (task.status === 'completed') continue;
+
+          // New tasks assigned (in last 24 hours)
+          if (task.assignedAt) {
+            const assignedAt = new Date(task.assignedAt);
+            const hoursSinceAssignment = (now.getTime() - assignedAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceAssignment <= 24) {
+              alerts.push({
+                id: `task-new-${task.id}-${task.assignedAt}`,
+                department: 'tasks',
+                type: 'new_task',
+                entityId: task.id,
+                entityName: task.title,
+                message: `Boss, you have a new task: ${task.title.substring(0, 50)}`,
+                priority: task.priority === 'urgent' || task.priority === 'high' ? 'high' : 'medium',
+                createdAt: task.assignedAt.toString(),
+              });
+            }
+          }
+
+          // Tasks due today or overdue
+          if (task.dueDate) {
+            const dueDate = new Date(task.dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            
+            if (dueDate <= today) {
+              const isOverdue = dueDate < today;
+              alerts.push({
+                id: `task-due-${task.id}-${task.dueDate}`,
+                department: 'tasks',
+                type: isOverdue ? 'overdue' : 'task_due',
+                entityId: task.id,
+                entityName: task.title,
+                message: isOverdue 
+                  ? `Boss, task is overdue: ${task.title.substring(0, 50)}`
+                  : `Boss, task is due today: ${task.title.substring(0, 50)}`,
+                priority: isOverdue ? 'high' : 'medium',
+                dueDate: task.dueDate.toString(),
+                createdAt: task.dueDate.toString(),
+              });
+            }
+          }
+
+          // Reminder date alerts
+          if (task.reminderDate) {
+            const reminderDate = new Date(task.reminderDate);
+            reminderDate.setHours(0, 0, 0, 0);
+            if (reminderDate <= today) {
+              alerts.push({
+                id: `task-reminder-${task.id}-${task.reminderDate}`,
+                department: 'tasks',
+                type: 'followup_due',
+                entityId: task.id,
+                entityName: task.title,
+                message: `Boss, reminder for task: ${task.title.substring(0, 50)}`,
+                priority: 'medium',
+                dueDate: task.reminderDate.toString(),
+                createdAt: task.reminderDate.toString(),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching task alerts:", e);
+      }
+
+      // 4. IMPLEMENTATION ALERTS - Project assignments
+      try {
+        // Get projects where user is assigned as engineer
+        const projectEngineers = await storage.getProjectEngineers(undefined);
+        const userProjectIds = projectEngineers
+          .filter(pe => pe.engineerId === currentUser.id)
+          .map(pe => pe.projectId);
+
+        if (userProjectIds.length > 0) {
+          // Get projects assigned to user
+          const allProjects = await storage.getProjects();
+          const userProjects = allProjects.filter(p => userProjectIds.includes(p.id));
+
+          for (const project of userProjects) {
+            if (project.status === 'completed') continue;
+
+            // Target go-live date alerts
+            if (project.targetGoLiveDate) {
+              const goLiveDate = new Date(project.targetGoLiveDate);
+              goLiveDate.setHours(0, 0, 0, 0);
+              
+              if (goLiveDate <= today) {
+                const isOverdue = goLiveDate < today;
+                alerts.push({
+                  id: `impl-golive-${project.id}-${project.targetGoLiveDate}`,
+                  department: 'implementation',
+                  type: isOverdue ? 'overdue' : 'project_update',
+                  entityId: project.id,
+                  entityName: project.clientName,
+                  message: isOverdue
+                    ? `Boss, project for ${project.clientName} is past go-live date`
+                    : `Boss, project for ${project.clientName} has go-live target today`,
+                  priority: isOverdue ? 'high' : 'medium',
+                  dueDate: project.targetGoLiveDate.toString(),
+                  createdAt: project.targetGoLiveDate.toString(),
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching implementation alerts:", e);
+      }
+
+      // 5. DEVELOPMENT TASK ALERTS
+      try {
+        const devTasks = await storage.getDevelopmentTasks({ assignedTo: currentUser.id });
+        
+        for (const devTask of devTasks) {
+          if (devTask.status === 'completed' || devTask.status === 'cancelled') continue;
+
+          // New dev tasks assigned (in last 24 hours)
+          if (devTask.createdAt) {
+            const createdAt = new Date(devTask.createdAt);
+            const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceCreation <= 24 && devTask.status === 'pending') {
+              alerts.push({
+                id: `dev-new-${devTask.id}-${devTask.createdAt}`,
+                department: 'development',
+                type: 'dev_task_assigned',
+                entityId: devTask.id,
+                entityName: devTask.title,
+                message: `Boss, you have a new development task: ${devTask.title.substring(0, 50)}`,
+                priority: devTask.priority === 'critical' || devTask.priority === 'high' ? 'high' : 'medium',
+                createdAt: devTask.createdAt.toString(),
+              });
+            }
+          }
+
+          // Deadline alerts
+          if (devTask.deadline) {
+            const deadline = new Date(devTask.deadline);
+            deadline.setHours(0, 0, 0, 0);
+            
+            if (deadline <= today) {
+              const isOverdue = deadline < today || devTask.isOverdue;
+              alerts.push({
+                id: `dev-due-${devTask.id}-${devTask.deadline}`,
+                department: 'development',
+                type: isOverdue ? 'overdue' : 'task_due',
+                entityId: devTask.id,
+                entityName: devTask.title,
+                message: isOverdue
+                  ? `Boss, development task is overdue: ${devTask.title.substring(0, 50)}`
+                  : `Boss, development task is due today: ${devTask.title.substring(0, 50)}`,
+                priority: 'high',
+                dueDate: devTask.deadline.toString(),
+                createdAt: devTask.deadline.toString(),
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching development alerts:", e);
+      }
+
+      // Sort alerts by priority (high first) and then by date
+      alerts.sort((a, b) => {
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
+      // Limit to top 20 alerts to prevent overwhelming
+      const limitedAlerts = alerts.slice(0, 20);
+
+      res.json({
+        alerts: limitedAlerts,
+        voicePreference: currentUser.voicePreference || 'female',
+        voiceAlertsEnabled: currentUser.voiceAlertsEnabled !== false,
+        totalAlerts: alerts.length,
+      });
+    } catch (error) {
+      console.error("Error fetching voice alerts:", error);
+      res.status(500).json({ message: "Failed to fetch voice alerts" });
+    }
+  });
+
   // =============================================
   // TASK/FOLLOWUP MANAGEMENT ROUTES
   // =============================================
