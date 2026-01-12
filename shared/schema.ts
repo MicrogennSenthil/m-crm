@@ -43,6 +43,9 @@ export const users = pgTable("users", {
   lastLoginAt: timestamp("last_login_at"),
   // Impersonation tracking
   impersonatedBy: varchar("impersonated_by"), // Super admin user ID when impersonating
+  // Voice alert preferences
+  voicePreference: varchar("voice_preference", { length: 10 }).default("female"), // male, female
+  voiceAlertsEnabled: boolean("voice_alerts_enabled").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
