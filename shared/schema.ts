@@ -769,6 +769,8 @@ export const tasks = pgTable("tasks", {
   attachments: jsonb("attachments").$type<TaskAttachment[]>(), // Video recordings, photos, and file attachments
   relatedEntityType: text("related_entity_type"), // lead, project, ticket, customer
   relatedEntityId: varchar("related_entity_id"),
+  contactName: text("contact_name"), // Contact person name for the task
+  contactPhone: text("contact_phone"), // Contact person phone number
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
