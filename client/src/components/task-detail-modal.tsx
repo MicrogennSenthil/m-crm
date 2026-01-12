@@ -174,6 +174,23 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     },
   });
 
+  // Fetch linked customer details if task is linked to a customer
+  const { data: linkedCustomer } = useQuery<{
+    id: string;
+    name: string;
+    contactPerson: string | null;
+    phone: string | null;
+    email: string | null;
+  }>({
+    queryKey: ["/api/customers", task.relatedEntityId],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${task.relatedEntityId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch customer");
+      return res.json();
+    },
+    enabled: task.relatedEntityType === "customer" && !!task.relatedEntityId,
+  });
+
   // Update task status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -607,25 +624,45 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                   )}
                 </div>
                 
-                {(task.contactName || task.contactPhone) && (
+                {(linkedCustomer || task.contactName || task.contactPhone) && (
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground mb-2">Contact Details</h4>
                     <div className="space-y-2 text-sm">
-                      {task.contactName && (
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="h-4 w-4 text-muted-foreground" />
-                          <span data-testid="text-contact-name">{task.contactName}</span>
+                      {linkedCustomer && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium" data-testid="text-customer-name">{linkedCustomer.name}</span>
                         </div>
                       )}
-                      {task.contactPhone && (
+                      {(linkedCustomer?.contactPerson || task.contactName) && (
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-muted-foreground" />
+                          <span data-testid="text-contact-name">
+                            {linkedCustomer?.contactPerson || task.contactName}
+                          </span>
+                        </div>
+                      )}
+                      {(linkedCustomer?.phone || task.contactPhone) && (
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           <a 
-                            href={`tel:${task.contactPhone}`} 
+                            href={`tel:${linkedCustomer?.phone || task.contactPhone}`} 
                             className="text-primary hover:underline"
                             data-testid="link-contact-phone"
                           >
-                            {task.contactPhone}
+                            {linkedCustomer?.phone || task.contactPhone}
+                          </a>
+                        </div>
+                      )}
+                      {linkedCustomer?.email && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <a 
+                            href={`mailto:${linkedCustomer.email}`} 
+                            className="text-primary hover:underline"
+                            data-testid="link-contact-email"
+                          >
+                            {linkedCustomer.email}
                           </a>
                         </div>
                       )}
