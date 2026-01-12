@@ -45,10 +45,13 @@ import {
   MessageSquare,
   Send,
   Building2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -132,6 +135,18 @@ export default function DevelopmentTasks() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { canView, canCreate, canEdit, canDelete, isLoading: permissionsLoading } = usePermissions();
+  
+  // Voice alerts for development department
+  const {
+    alerts: voiceAlerts,
+    alertCounts,
+    voiceAlertsEnabled,
+    isSpeaking,
+    isSupported: voiceSupported,
+    announceAllPending,
+    stopSpeaking,
+  } = useUnifiedVoiceAlerts('development', 120000);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -603,12 +618,36 @@ export default function DevelopmentTasks() {
             Manage development work from Implementation, Support, and Tasks
           </p>
         </div>
-        {(isAdmin || canCreate("development_tasks")) && (
-          <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-task">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Task
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {voiceSupported && voiceAlertsEnabled && (
+            <Button
+              variant={isSpeaking ? "destructive" : "outline"}
+              size="icon"
+              onClick={() => isSpeaking ? stopSpeaking() : announceAllPending()}
+              title={isSpeaking ? "Stop speaking" : `Voice alerts (${alertCounts.total} pending)`}
+              data-testid="button-voice-alerts"
+            >
+              {isSpeaking ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <div className="relative">
+                  <Volume2 className="h-4 w-4" />
+                  {alertCounts.total > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                      {alertCounts.total > 9 ? "9+" : alertCounts.total}
+                    </span>
+                  )}
+                </div>
+              )}
+            </Button>
+          )}
+          {(isAdmin || canCreate("development_tasks")) && (
+            <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-task">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Task
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Source Type Categorization Tabs */}
