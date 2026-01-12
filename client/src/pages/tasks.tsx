@@ -45,7 +45,10 @@ import {
   Columns3,
   LayoutGrid,
   List,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
 import TaskFormDialog from "@/components/task-form-dialog";
 import TaskDetailModal from "@/components/task-detail-modal";
 
@@ -97,6 +100,17 @@ export default function TasksPage() {
     return "card";
   });
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+
+  // Voice alerts for tasks department
+  const {
+    alerts: voiceAlerts,
+    alertCounts,
+    voiceAlertsEnabled,
+    isSpeaking,
+    isSupported: voiceSupported,
+    announceAllPending,
+    stopSpeaking,
+  } = useUnifiedVoiceAlerts('tasks', 120000);
 
   useEffect(() => {
     localStorage.setItem("tasks-layout", layout);
@@ -324,13 +338,37 @@ export default function TasksPage() {
           <p className="text-muted-foreground">Manage your tasks and follow-ups</p>
         </div>
         
-        <Button onClick={() => {
-          setEditingTask(null);
-          setShowCreateDialog(true);
-        }} data-testid="button-create-task">
-          <Plus className="h-4 w-4 mr-2" />
-          New Task
-        </Button>
+        <div className="flex items-center gap-2">
+          {voiceSupported && voiceAlertsEnabled && (
+            <Button
+              variant={isSpeaking ? "destructive" : "outline"}
+              size="icon"
+              onClick={() => isSpeaking ? stopSpeaking() : announceAllPending()}
+              title={isSpeaking ? "Stop speaking" : `Voice alerts (${alertCounts.total} pending)`}
+              data-testid="button-voice-alerts"
+            >
+              {isSpeaking ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <div className="relative">
+                  <Volume2 className="h-4 w-4" />
+                  {alertCounts.total > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                      {alertCounts.total > 9 ? "9+" : alertCounts.total}
+                    </span>
+                  )}
+                </div>
+              )}
+            </Button>
+          )}
+          <Button onClick={() => {
+            setEditingTask(null);
+            setShowCreateDialog(true);
+          }} data-testid="button-create-task">
+            <Plus className="h-4 w-4 mr-2" />
+            New Task
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">

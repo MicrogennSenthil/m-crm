@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, Columns3, LayoutGrid, List, Filter } from "lucide-react";
+import { Plus, Search, Columns3, LayoutGrid, List, Filter, Volume2, VolumeX } from "lucide-react";
+import { useUnifiedVoiceAlerts } from "@/hooks/use-speech";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
@@ -50,6 +51,17 @@ export default function Implementations() {
   });
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(9);
+
+  // Voice alerts for implementation department
+  const {
+    alerts: voiceAlerts,
+    alertCounts,
+    voiceAlertsEnabled,
+    isSpeaking,
+    isSupported: voiceSupported,
+    announceAllPending,
+    stopSpeaking,
+  } = useUnifiedVoiceAlerts('implementation', 120000);
 
   useEffect(() => {
     localStorage.setItem("implementations-layout", layout);
@@ -133,12 +145,35 @@ export default function Implementations() {
             Track project implementation progress and training
           </p>
         </div>
-        <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-project" className="min-h-[44px] w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
+        <div className="flex items-center gap-2">
+          {voiceSupported && voiceAlertsEnabled && (
+            <Button
+              variant={isSpeaking ? "destructive" : "outline"}
+              size="icon"
+              onClick={() => isSpeaking ? stopSpeaking() : announceAllPending()}
+              title={isSpeaking ? "Stop speaking" : `Voice alerts (${alertCounts.total} pending)`}
+              data-testid="button-voice-alerts"
+            >
+              {isSpeaking ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <div className="relative">
+                  <Volume2 className="h-4 w-4" />
+                  {alertCounts.total > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                      {alertCounts.total > 9 ? "9+" : alertCounts.total}
+                    </span>
+                  )}
+                </div>
+              )}
             </Button>
+          )}
+          <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-project" className="min-h-[44px] w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                New Project
+              </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -150,6 +185,7 @@ export default function Implementations() {
             <ProjectForm onSuccess={() => setNewProjectOpen(false)} />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Search and Layout Toggle */}
