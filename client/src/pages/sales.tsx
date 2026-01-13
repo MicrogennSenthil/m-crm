@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2 } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2, User } from "lucide-react";
 import { useFollowupVoiceAlerts } from "@/hooks/use-speech";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -56,8 +56,15 @@ interface ProcessedFollowUp {
   leadCompanyName: string | null;
   leadContactPerson: string | null;
   leadStage: string | null;
+  salesExecutiveId: string | null;
   isOverdue: boolean;
   daysOverdue: number;
+}
+
+// Type for department head check response
+interface DepartmentHeadInfo {
+  isDeptHead: boolean;
+  departments: Array<{ id: string; name: string }>;
 }
 
 const STAGES = [
@@ -104,6 +111,20 @@ export default function Sales() {
   const { data: users = [] } = useQuery<UserType[]>({
     queryKey: ["/api/users"],
   });
+
+  // Check if current user is a department head (sales head)
+  const { data: deptHeadInfo } = useQuery<DepartmentHeadInfo>({
+    queryKey: ["/api/auth/is-department-head"],
+  });
+  const isDepartmentHead = deptHeadInfo?.isDeptHead || false;
+
+  // Helper function to get sales executive name from user ID
+  const getSalesExecutiveName = useCallback((salesExecutiveId: string | null | undefined): string | null => {
+    if (!salesExecutiveId || !users.length) return null;
+    const user = users.find(u => u.id === salesExecutiveId);
+    if (!user) return null;
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || null;
+  }, [users]);
 
   // Fetch today's followups (pending followups with date <= today)
   const { data: todayFollowups = [], isLoading: followupsLoading } = useQuery<ProcessedFollowUp[]>({
@@ -783,6 +804,13 @@ export default function Sales() {
                              followup.leadStage}
                           </Badge>
                         )}
+                        {/* Sales Executive Badge for department heads */}
+                        {isDepartmentHead && followup.salesExecutiveId && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
+                            <User className="h-2.5 w-2.5 mr-0.5" />
+                            {getSalesExecutiveName(followup.salesExecutiveId)}
+                          </Badge>
+                        )}
                         {followup.notes && (
                           <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
                         )}
@@ -899,10 +927,16 @@ export default function Sales() {
                               </Button>
                             </div>
                           )}
-                          <div className="flex items-center justify-between gap-1 text-xs">
+                          <div className="flex items-center justify-between gap-1 text-xs flex-wrap">
                             <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
                               {lead.leadSource}
                             </Badge>
+                            {isDepartmentHead && lead.salesExecutiveId && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
+                                <User className="h-2.5 w-2.5 mr-0.5" />
+                                {getSalesExecutiveName(lead.salesExecutiveId)}
+                              </Badge>
+                            )}
                             <span className="text-muted-foreground whitespace-nowrap text-xs">
                               {lead.daysInStage}d
                             </span>
@@ -963,11 +997,17 @@ export default function Sales() {
                             <p className="text-sm text-muted-foreground">{followup.leadContactPerson}</p>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
                           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Calendar className="h-4 w-4" />
                             {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
                           </div>
+                          {isDepartmentHead && followup.salesExecutiveId && (
+                            <Badge variant="secondary" className="text-xs">
+                              <User className="h-3 w-3 mr-1" />
+                              {getSalesExecutiveName(followup.salesExecutiveId)}
+                            </Badge>
+                          )}
                           {followup.isOverdue && followup.daysOverdue > 0 && (
                             <Badge variant="destructive">{followup.daysOverdue}d overdue</Badge>
                           )}
@@ -1047,8 +1087,14 @@ export default function Sales() {
                             <span>{format(new Date(lead.demoDate), "MMM d, h:mm a")}</span>
                           </div>
                         )}
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                          {isDepartmentHead && lead.salesExecutiveId && (
+                            <Badge variant="secondary" className="text-xs">
+                              <User className="h-3 w-3 mr-1" />
+                              {getSalesExecutiveName(lead.salesExecutiveId)}
+                            </Badge>
+                          )}
                           <span className="text-sm text-muted-foreground">{lead.daysInStage}d in stage</span>
                         </div>
                       </CardContent>
@@ -1093,7 +1139,13 @@ export default function Sales() {
                         <p className="font-semibold">{followup.leadCompanyName || 'Unknown'}</p>
                         <p className="text-sm text-muted-foreground">{followup.leadContactPerson}</p>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                        {isDepartmentHead && followup.salesExecutiveId && (
+                          <Badge variant="secondary" className="text-xs">
+                            <User className="h-3 w-3 mr-1" />
+                            {getSalesExecutiveName(followup.salesExecutiveId)}
+                          </Badge>
+                        )}
                         <div className="text-sm text-muted-foreground">
                           {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
                         </div>
@@ -1174,6 +1226,12 @@ export default function Sales() {
                           </div>
                         )}
                         <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                        {isDepartmentHead && lead.salesExecutiveId && (
+                          <Badge variant="secondary" className="text-xs">
+                            <User className="h-3 w-3 mr-1" />
+                            {getSalesExecutiveName(lead.salesExecutiveId)}
+                          </Badge>
+                        )}
                         <span className="text-sm text-muted-foreground">{lead.daysInStage}d</span>
                       </div>
                     </div>
