@@ -1768,3 +1768,49 @@ export const insertExtractorOptionSchema = createInsertSchema(extractorOptions).
 
 export type InsertExtractorOption = z.infer<typeof insertExtractorOptionSchema>;
 export type ExtractorOption = typeof extractorOptions.$inferSelect;
+
+// Sales Plans - Weekly stage-wise targets for each sales executive
+export const salesPlans = pgTable("sales_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM format
+  weekNumber: integer("week_number").notNull(), // 1, 2, 3, 4
+  stage: varchar("stage", { length: 50 }).notNull(), // seed, lead, demo_scheduled, quote_sent, negotiation, closed_won
+  targetQty: integer("target_qty").default(0),
+  targetValue: integer("target_value").default(0), // In currency units
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSalesPlanSchema = createInsertSchema(salesPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSalesPlan = z.infer<typeof insertSalesPlanSchema>;
+export type SalesPlan = typeof salesPlans.$inferSelect;
+
+// Sales Monthly Targets - Overall monthly targets for each sales executive
+export const salesMonthlyTargets = pgTable("sales_monthly_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  month: varchar("month", { length: 7 }).notNull(), // YYYY-MM format
+  targetQtyTotal: integer("target_qty_total").default(0), // Total leads target
+  targetValueTotal: integer("target_value_total").default(0), // Total value target
+  closedWonQtyTarget: integer("closed_won_qty_target").default(0), // Closed deals target
+  closedWonValueTarget: integer("closed_won_value_target").default(0), // Closed deals value target
+  notes: text("notes"),
+  createdById: varchar("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSalesMonthlyTargetSchema = createInsertSchema(salesMonthlyTargets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSalesMonthlyTarget = z.infer<typeof insertSalesMonthlyTargetSchema>;
+export type SalesMonthlyTarget = typeof salesMonthlyTargets.$inferSelect;
