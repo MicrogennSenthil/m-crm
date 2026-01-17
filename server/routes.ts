@@ -2751,6 +2751,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check if user has completed monthly planning (mandatory check)
+  app.get("/api/sales-planning/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId, month } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const targetUserId = userId && accessControl.hasFullAccess ? userId as string : currentUser.id;
+      
+      const status = await storage.hasCompletedMonthlyPlanning(targetUserId, month as string);
+      res.json(status);
+    } catch (error) {
+      console.error("Error checking planning status:", error);
+      res.status(500).json({ message: "Failed to check planning status" });
+    }
+  });
+
+  // Get monthly comparison (individual or team)
+  app.get("/api/sales-performance/monthly-comparison", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId, monthCount } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const targetUserId = userId && accessControl.hasFullAccess ? userId as string : currentUser.id;
+      
+      // Generate last N months (default 6)
+      const count = parseInt(monthCount as string) || 6;
+      const months: string[] = [];
+      const now = new Date();
+      for (let i = 0; i < count; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(d.toISOString().substring(0, 7));
+      }
+      
+      const comparison = await storage.getMonthlyComparison({
+        userId: targetUserId,
+        months,
+      });
+      
+      res.json({ userId: targetUserId, comparison });
+    } catch (error) {
+      console.error("Error fetching monthly comparison:", error);
+      res.status(500).json({ message: "Failed to fetch monthly comparison" });
+    }
+  });
+
+  // Get team monthly comparison (for department heads and admins)
+  app.get("/api/sales-performance/team-monthly-comparison", isAuthenticated, async (req: any, res) => {
+    try {
+      const { monthCount } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      if (!accessControl.hasFullAccess) {
+        return res.status(403).json({ message: "Only department heads and admins can view team comparison" });
+      }
+      
+      // Generate last N months (default 6)
+      const count = parseInt(monthCount as string) || 6;
+      const months: string[] = [];
+      const now = new Date();
+      for (let i = 0; i < count; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(d.toISOString().substring(0, 7));
+      }
+      
+      // Get all sales users
+      const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser.role === "admin";
+      
+      let salesUsers: User[] = [];
+      if (isSuperAdmin || isAdmin) {
+        salesUsers = await storage.getUsersByRole("sales_executive");
+        const salesHeads = await storage.getUsersByRole("sales_head");
+        salesUsers = [...salesUsers, ...salesHeads];
+      } else {
+        const managedDepts = await storage.getDepartmentsByHead(currentUser.id);
+        for (const dept of managedDepts) {
+          const deptUsers = await storage.getUsersByDepartment(dept.id);
+          salesUsers = [...salesUsers, ...deptUsers];
+        }
+      }
+      
+      // Get monthly comparison for each user
+      const teamComparison = await Promise.all(
+        salesUsers.map(async (user) => {
+          const comparison = await storage.getMonthlyComparison({
+            userId: user.id,
+            months,
+          });
+          return {
+            userId: user.id,
+            userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            userEmail: user.email,
+            monthlyData: comparison,
+          };
+        })
+      );
+      
+      // Also get team totals for each month
+      const teamTotals = await Promise.all(
+        months.map(async (month) => {
+          let totalTargetQty = 0;
+          let totalTargetValue = 0;
+          let totalAchievedQty = 0;
+          let totalAchievedValue = 0;
+          
+          for (const user of salesUsers) {
+            const performance = await storage.getSalesPerformance({ userId: user.id, month });
+            const targetQty = performance.monthlyTarget?.targetQtyTotal || 
+              performance.plans.reduce((sum, p) => sum + (p.targetQty || 0), 0);
+            const targetValue = performance.monthlyTarget?.targetValueTotal || 
+              performance.plans.reduce((sum, p) => sum + (p.targetValue || 0), 0);
+            const achievedQty = performance.achievements.reduce((sum, a) => sum + a.qty, 0);
+            const achievedValue = performance.achievements.reduce((sum, a) => sum + a.value, 0);
+            
+            totalTargetQty += targetQty;
+            totalTargetValue += targetValue;
+            totalAchievedQty += achievedQty;
+            totalAchievedValue += achievedValue;
+          }
+          
+          return {
+            month,
+            targetQty: totalTargetQty,
+            targetValue: totalTargetValue,
+            achievedQty: totalAchievedQty,
+            achievedValue: totalAchievedValue,
+            achievementPercentQty: totalTargetQty > 0 ? Math.round((totalAchievedQty / totalTargetQty) * 100) : 0,
+            achievementPercentValue: totalTargetValue > 0 ? Math.round((totalAchievedValue / totalTargetValue) * 100) : 0,
+          };
+        })
+      );
+      
+      res.json({ 
+        months,
+        teamComparison,
+        teamTotals,
+      });
+    } catch (error) {
+      console.error("Error fetching team monthly comparison:", error);
+      res.status(500).json({ message: "Failed to fetch team monthly comparison" });
+    }
+  });
+
   // Lead routes
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
@@ -2844,6 +3006,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leads", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
     try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Check mandatory planning requirement for sales executives
+      if (currentUser.role === "sales_executive" || currentUser.role === "sales_head") {
+        const planningStatus = await storage.hasCompletedMonthlyPlanning(currentUser.id);
+        if (!planningStatus.hasPlanned) {
+          return res.status(403).json({ 
+            message: planningStatus.message,
+            code: "PLANNING_REQUIRED",
+            redirectTo: "/sales-planning"
+          });
+        }
+      }
+      
       let leadData = { ...req.body };
       
       // Auto-assignment if not specified - use configurable assignment settings
@@ -4255,6 +4436,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leads/:id/follow-ups", isAuthenticated, async (req: any, res) => {
     try {
       const currentUserId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(currentUserId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Check mandatory planning requirement for sales executives
+      if (currentUser.role === "sales_executive" || currentUser.role === "sales_head") {
+        const planningStatus = await storage.hasCompletedMonthlyPlanning(currentUser.id);
+        if (!planningStatus.hasPlanned) {
+          return res.status(403).json({ 
+            message: planningStatus.message,
+            code: "PLANNING_REQUIRED",
+            redirectTo: "/sales-planning"
+          });
+        }
+      }
       
       // Check if user has access to this lead
       const hasAccess = await userHasLeadAccess(currentUserId, req.params.id);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2, User } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2, User, Target } from "lucide-react";
+import { Link } from "wouter";
 import { useFollowupVoiceAlerts } from "@/hooks/use-speech";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,25 @@ export default function Sales() {
     queryKey: ["/api/auth/is-department-head"],
   });
   const isDepartmentHead = deptHeadInfo?.isDeptHead || false;
+
+  // Current user
+  const { data: currentUser } = useQuery<UserType>({
+    queryKey: ["/api/auth/user"],
+  });
+
+  // Check planning status for current month
+  const { data: planningStatus } = useQuery<{
+    hasPlanned: boolean;
+    message: string;
+  }>({
+    queryKey: ["/api/sales-planning/status"],
+    enabled: currentUser?.role === "sales_executive" || currentUser?.role === "sales_head",
+  });
+
+  const showPlanningWarning = 
+    (currentUser?.role === "sales_executive" || currentUser?.role === "sales_head") && 
+    planningStatus && 
+    !planningStatus.hasPlanned;
 
   // Helper function to get sales executive name from user ID
   const getSalesExecutiveName = useCallback((salesExecutiveId: string | null | undefined): string | null => {
@@ -450,6 +470,27 @@ export default function Sales() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {showPlanningWarning && (
+        <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-500/20">
+                <Target className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-200">Monthly Planning Required</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">{planningStatus?.message}</p>
+              </div>
+            </div>
+            <Link href="/sales-planning">
+              <Button variant="outline" size="sm" className="border-amber-500 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900" data-testid="button-complete-planning">
+                Complete Planning
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+      
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold mb-1">Sales Pipeline</h1>

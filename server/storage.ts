@@ -4652,6 +4652,98 @@ export class DatabaseStorage implements IStorage {
       prediction,
     };
   }
+
+  // Check if user has completed planning for the current month (mandatory planning check)
+  async hasCompletedMonthlyPlanning(userId: string, month?: string): Promise<{
+    hasPlanned: boolean;
+    planCount: number;
+    hasMonthlyTarget: boolean;
+    message: string;
+  }> {
+    const targetMonth = month || new Date().toISOString().substring(0, 7);
+    
+    // Get plans for the month
+    const userPlans = await this.getSalesPlans({ userId, month: targetMonth });
+    
+    // Get monthly target
+    const monthlyTargets = await this.getSalesMonthlyTargets({ userId, month: targetMonth });
+    
+    const planCount = userPlans.length;
+    const hasMonthlyTarget = monthlyTargets.length > 0;
+    
+    // Consider planning complete if user has at least 1 plan entry OR a monthly target set
+    const hasPlanned = planCount > 0 || hasMonthlyTarget;
+    
+    let message = "";
+    if (!hasPlanned) {
+      const [year, monthNum] = targetMonth.split('-').map(Number);
+      const monthName = new Date(year, monthNum - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+      message = `You must complete your sales planning for ${monthName} before performing any sales activities. Please set your weekly targets in the Sales Planning section.`;
+    }
+    
+    return {
+      hasPlanned,
+      planCount,
+      hasMonthlyTarget,
+      message,
+    };
+  }
+
+  // Get monthly comparison data for individual or team
+  async getMonthlyComparison(filters: {
+    userId?: string;
+    userIds?: string[];
+    months: string[]; // Array of months to compare (e.g., ["2026-01", "2025-12", "2025-11"])
+  }): Promise<Array<{
+    month: string;
+    userId: string;
+    targetQty: number;
+    targetValue: number;
+    achievedQty: number;
+    achievedValue: number;
+    achievementPercentQty: number;
+    achievementPercentValue: number;
+  }>> {
+    const results: Array<{
+      month: string;
+      userId: string;
+      targetQty: number;
+      targetValue: number;
+      achievedQty: number;
+      achievedValue: number;
+      achievementPercentQty: number;
+      achievementPercentValue: number;
+    }> = [];
+
+    for (const month of filters.months) {
+      // Get performance for this month
+      const performance = await this.getSalesPerformance({
+        userId: filters.userId,
+        userIds: filters.userIds,
+        month,
+      });
+      
+      const targetQty = performance.monthlyTarget?.targetQtyTotal || 
+        performance.plans.reduce((sum, p) => sum + (p.targetQty || 0), 0);
+      const targetValue = performance.monthlyTarget?.targetValueTotal || 
+        performance.plans.reduce((sum, p) => sum + (p.targetValue || 0), 0);
+      const achievedQty = performance.achievements.reduce((sum, a) => sum + a.qty, 0);
+      const achievedValue = performance.achievements.reduce((sum, a) => sum + a.value, 0);
+      
+      results.push({
+        month,
+        userId: filters.userId || 'all',
+        targetQty,
+        targetValue,
+        achievedQty,
+        achievedValue,
+        achievementPercentQty: targetQty > 0 ? Math.round((achievedQty / targetQty) * 100) : 0,
+        achievementPercentValue: targetValue > 0 ? Math.round((achievedValue / targetValue) * 100) : 0,
+      });
+    }
+    
+    return results;
+  }
 }
 
 export const storage = new DatabaseStorage();

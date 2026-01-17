@@ -90,6 +90,41 @@ interface DepartmentHeadInfo {
   departments: Array<{ id: string; name: string }>;
 }
 
+interface MonthlyComparisonData {
+  month: string;
+  targetQty: number;
+  targetValue: number;
+  achievedQty: number;
+  achievedValue: number;
+  achievementPercentQty: number;
+  achievementPercentValue: number;
+}
+
+interface MonthlyComparisonResponse {
+  userId: string;
+  comparison: MonthlyComparisonData[];
+}
+
+interface TeamMonthlyComparisonResponse {
+  months: string[];
+  teamComparison: Array<{
+    userId: string;
+    userName: string;
+    userEmail: string;
+    monthlyData: MonthlyComparisonData[];
+  }>;
+  teamTotals: MonthlyComparisonData[];
+}
+
+interface PlanningStatus {
+  hasPlanned: boolean;
+  hasPlanEntries: boolean;
+  hasMonthlyTarget: boolean;
+  planCount: number;
+  month: string;
+  message: string;
+}
+
 export default function SalesPlanning() {
   const { toast } = useToast();
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), "yyyy-MM"));
@@ -126,6 +161,21 @@ export default function SalesPlanning() {
 
   const { data: teamComparison, isLoading: comparisonLoading } = useQuery<TeamComparison>({
     queryKey: ["/api/sales-performance/compare", { month: selectedMonth }],
+    enabled: hasFullAccess,
+  });
+
+  const { data: planningStatus } = useQuery<PlanningStatus>({
+    queryKey: ["/api/sales-planning/status", { month: selectedMonth }],
+    enabled: !!currentUser,
+  });
+
+  const { data: monthlyComparison, isLoading: monthlyComparisonLoading } = useQuery<MonthlyComparisonResponse>({
+    queryKey: ["/api/sales-performance/monthly-comparison", { userId: effectiveUserId, monthCount: 6 }],
+    enabled: !!effectiveUserId,
+  });
+
+  const { data: teamMonthlyComparison, isLoading: teamMonthlyComparisonLoading } = useQuery<TeamMonthlyComparisonResponse>({
+    queryKey: ["/api/sales-performance/team-monthly-comparison", { monthCount: 6 }],
     enabled: hasFullAccess,
   });
 
@@ -334,6 +384,10 @@ export default function SalesPlanning() {
           <TabsTrigger value="performance" data-testid="tab-performance">
             <TrendingUp className="h-4 w-4 mr-2" />
             Performance
+          </TabsTrigger>
+          <TabsTrigger value="monthly-trends" data-testid="tab-monthly-trends">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Monthly Trends
           </TabsTrigger>
           {hasFullAccess && (
             <TabsTrigger value="comparison" data-testid="tab-comparison">
@@ -579,6 +633,167 @@ export default function SalesPlanning() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="monthly-trends" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Month-over-Month Performance</CardTitle>
+                <CardDescription>Your achievement trends over the last 6 months</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[350px]">
+                {monthlyComparisonLoading ? (
+                  <Skeleton className="h-full w-full" />
+                ) : monthlyComparison?.comparison && monthlyComparison.comparison.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={[...monthlyComparison.comparison].reverse()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="month" 
+                        fontSize={12}
+                        tickFormatter={(val) => format(parseISO(val + "-01"), "MMM yy")}
+                      />
+                      <YAxis fontSize={12} />
+                      <Tooltip 
+                        labelFormatter={(val) => format(parseISO(val + "-01"), "MMMM yyyy")}
+                        formatter={(value: number, name: string) => {
+                          if (name.includes("Value")) return formatCurrency(value);
+                          if (name.includes("%")) return `${value}%`;
+                          return value;
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="targetValue" name="Target Value" fill="#94A3B8" />
+                      <Bar dataKey="achievedValue" name="Achieved Value" fill="#22C55E" />
+                      <Line 
+                        type="monotone" 
+                        dataKey="achievementPercentValue" 
+                        name="Achievement %" 
+                        stroke="#3B82F6" 
+                        strokeWidth={2}
+                        yAxisId="right"
+                      />
+                      <YAxis yAxisId="right" orientation="right" fontSize={12} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No monthly data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Monthly Statistics</CardTitle>
+                <CardDescription>Detailed breakdown by month</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {monthlyComparisonLoading ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : monthlyComparison?.comparison && monthlyComparison.comparison.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Month</TableHead>
+                          <TableHead className="text-right">Target</TableHead>
+                          <TableHead className="text-right">Achieved</TableHead>
+                          <TableHead className="text-right">Achievement</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...monthlyComparison.comparison].reverse().map((data) => (
+                          <TableRow key={data.month}>
+                            <TableCell className="font-medium">
+                              {format(parseISO(data.month + "-01"), "MMMM yyyy")}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(data.targetValue)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(data.achievedValue)}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={data.achievementPercentValue >= 100 ? "default" : data.achievementPercentValue >= 50 ? "secondary" : "destructive"}>
+                                {data.achievementPercentValue}%
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No monthly data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {hasFullAccess && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Team Month-over-Month Comparison</CardTitle>
+                <CardDescription>Compare team performance across months</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[400px]">
+                {teamMonthlyComparisonLoading ? (
+                  <Skeleton className="h-full w-full" />
+                ) : teamMonthlyComparison?.teamTotals && teamMonthlyComparison.teamTotals.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={[...teamMonthlyComparison.teamTotals].reverse()}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="month" 
+                        fontSize={12}
+                        tickFormatter={(val) => format(parseISO(val + "-01"), "MMM yy")}
+                      />
+                      <YAxis fontSize={12} />
+                      <Tooltip 
+                        labelFormatter={(val) => format(parseISO(val + "-01"), "MMMM yyyy")}
+                        formatter={(value: number, name: string) => {
+                          if (name.includes("Value")) return formatCurrency(value);
+                          if (name.includes("%")) return `${value}%`;
+                          return value;
+                        }}
+                      />
+                      <Legend />
+                      <Area 
+                        type="monotone" 
+                        dataKey="targetValue" 
+                        name="Team Target" 
+                        fill="#94A3B8" 
+                        fillOpacity={0.3}
+                        stroke="#94A3B8"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="achievedValue" 
+                        name="Team Achieved" 
+                        fill="#22C55E" 
+                        fillOpacity={0.3}
+                        stroke="#22C55E"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="achievementPercentValue" 
+                        name="Achievement %" 
+                        stroke="#F97316" 
+                        strokeWidth={2}
+                        yAxisId="right"
+                      />
+                      <YAxis yAxisId="right" orientation="right" fontSize={12} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No team monthly data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {hasFullAccess && (
