@@ -146,6 +146,41 @@ export default function Sales() {
     return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || null;
   }, [users]);
 
+  // Helper function to get sales executive initials and color
+  const getSalesExecutiveInfo = useCallback((salesExecutiveId: string | null | undefined): { name: string; initials: string; color: string } | null => {
+    if (!salesExecutiveId || !users.length) return null;
+    const user = users.find(u => u.id === salesExecutiveId);
+    if (!user) return null;
+    
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    const name = fullName || user.email || 'Unknown';
+    
+    // Generate initials with fallback
+    let initials = '';
+    if (fullName) {
+      initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    } else if (user.email) {
+      initials = user.email.substring(0, 2).toUpperCase();
+    } else {
+      initials = '??';
+    }
+    
+    // Generate consistent color based on user ID - using theme-aware classes
+    const colors = [
+      'bg-blue-600 dark:bg-blue-500 text-white',
+      'bg-green-600 dark:bg-green-500 text-white',
+      'bg-purple-600 dark:bg-purple-500 text-white',
+      'bg-orange-600 dark:bg-orange-500 text-white',
+      'bg-pink-600 dark:bg-pink-500 text-white',
+      'bg-teal-600 dark:bg-teal-500 text-white',
+      'bg-indigo-600 dark:bg-indigo-500 text-white',
+      'bg-cyan-600 dark:bg-cyan-500 text-white',
+    ];
+    const colorIndex = salesExecutiveId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    
+    return { name, initials, color: colors[colorIndex] };
+  }, [users]);
+
   // Fetch today's followups (pending followups with date <= today)
   const { data: todayFollowups = [], isLoading: followupsLoading } = useQuery<ProcessedFollowUp[]>({
     queryKey: ["/api/sales-dashboard/stats"],
@@ -845,13 +880,19 @@ export default function Sales() {
                              followup.leadStage}
                           </Badge>
                         )}
-                        {/* Sales Executive Badge for department heads */}
-                        {isDepartmentHead && followup.salesExecutiveId && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
-                            <User className="h-2.5 w-2.5 mr-0.5" />
-                            {getSalesExecutiveName(followup.salesExecutiveId)}
-                          </Badge>
-                        )}
+                        {/* Sales Executive Badge */}
+                        {followup.salesExecutiveId && (() => {
+                          const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
+                          return execInfo ? (
+                            <Badge 
+                              className={`${execInfo.color} no-default-hover-elevate`}
+                              title={execInfo.name}
+                              data-testid={`badge-sales-exec-followup-${followup.id}`}
+                            >
+                              {execInfo.initials}
+                            </Badge>
+                          ) : null;
+                        })()}
                         {followup.notes && (
                           <p className="text-xs text-muted-foreground line-clamp-2">{followup.notes}</p>
                         )}
@@ -972,12 +1013,18 @@ export default function Sales() {
                             <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
                               {lead.leadSource}
                             </Badge>
-                            {isDepartmentHead && lead.salesExecutiveId && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 h-4">
-                                <User className="h-2.5 w-2.5 mr-0.5" />
-                                {getSalesExecutiveName(lead.salesExecutiveId)}
-                              </Badge>
-                            )}
+                            {lead.salesExecutiveId && (() => {
+                              const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                              return execInfo ? (
+                                <Badge 
+                                  className={`${execInfo.color} no-default-hover-elevate`}
+                                  title={execInfo.name}
+                                  data-testid={`badge-sales-exec-${lead.id}`}
+                                >
+                                  {execInfo.initials}
+                                </Badge>
+                              ) : null;
+                            })()}
                             <span className="text-muted-foreground whitespace-nowrap text-xs">
                               {lead.daysInStage}d
                             </span>
@@ -1043,12 +1090,18 @@ export default function Sales() {
                             <Calendar className="h-4 w-4" />
                             {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
                           </div>
-                          {isDepartmentHead && followup.salesExecutiveId && (
-                            <Badge variant="secondary" className="text-xs">
-                              <User className="h-3 w-3 mr-1" />
-                              {getSalesExecutiveName(followup.salesExecutiveId)}
-                            </Badge>
-                          )}
+                          {followup.salesExecutiveId && (() => {
+                            const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
+                            return execInfo ? (
+                              <Badge 
+                                className={`${execInfo.color} no-default-hover-elevate`}
+                                title={execInfo.name}
+                                data-testid={`badge-sales-exec-followup-compact-${followup.id}`}
+                              >
+                                {execInfo.initials}
+                              </Badge>
+                            ) : null;
+                          })()}
                           {followup.isOverdue && followup.daysOverdue > 0 && (
                             <Badge variant="destructive">{followup.daysOverdue}d overdue</Badge>
                           )}
@@ -1130,12 +1183,18 @@ export default function Sales() {
                         )}
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
-                          {isDepartmentHead && lead.salesExecutiveId && (
-                            <Badge variant="secondary" className="text-xs">
-                              <User className="h-3 w-3 mr-1" />
-                              {getSalesExecutiveName(lead.salesExecutiveId)}
-                            </Badge>
-                          )}
+                          {lead.salesExecutiveId && (() => {
+                            const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                            return execInfo ? (
+                              <Badge 
+                                className={`${execInfo.color} no-default-hover-elevate`}
+                                title={execInfo.name}
+                                data-testid={`badge-sales-exec-compact-${lead.id}`}
+                              >
+                                {execInfo.initials}
+                              </Badge>
+                            ) : null;
+                          })()}
                           <span className="text-sm text-muted-foreground">{lead.daysInStage}d in stage</span>
                         </div>
                       </CardContent>
@@ -1181,12 +1240,18 @@ export default function Sales() {
                         <p className="text-sm text-muted-foreground">{followup.leadContactPerson}</p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                        {isDepartmentHead && followup.salesExecutiveId && (
-                          <Badge variant="secondary" className="text-xs">
-                            <User className="h-3 w-3 mr-1" />
-                            {getSalesExecutiveName(followup.salesExecutiveId)}
-                          </Badge>
-                        )}
+                        {followup.salesExecutiveId && (() => {
+                          const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
+                          return execInfo ? (
+                            <Badge 
+                              className={`${execInfo.color} no-default-hover-elevate`}
+                              title={execInfo.name}
+                              data-testid={`badge-sales-exec-list-followup-${followup.id}`}
+                            >
+                              {execInfo.initials}
+                            </Badge>
+                          ) : null;
+                        })()}
                         <div className="text-sm text-muted-foreground">
                           {followup.followUpDate && format(new Date(followup.followUpDate), "MMM d")}
                         </div>
@@ -1267,12 +1332,18 @@ export default function Sales() {
                           </div>
                         )}
                         <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
-                        {isDepartmentHead && lead.salesExecutiveId && (
-                          <Badge variant="secondary" className="text-xs">
-                            <User className="h-3 w-3 mr-1" />
-                            {getSalesExecutiveName(lead.salesExecutiveId)}
-                          </Badge>
-                        )}
+                        {lead.salesExecutiveId && (() => {
+                          const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                          return execInfo ? (
+                            <Badge 
+                              className={`${execInfo.color} no-default-hover-elevate`}
+                              title={execInfo.name}
+                              data-testid={`badge-sales-exec-list-${lead.id}`}
+                            >
+                              {execInfo.initials}
+                            </Badge>
+                          ) : null;
+                        })()}
                         <span className="text-sm text-muted-foreground">{lead.daysInStage}d</span>
                       </div>
                     </div>
