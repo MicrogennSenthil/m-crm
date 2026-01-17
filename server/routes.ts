@@ -2372,7 +2372,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Filter by access control
       const enrichedFollowUps = (followUpsWithLeads.rows as any[]).filter(followUp => {
-        if (accessControl.isAdmin) return true;
+        // Super admin, admin, or department heads have full access
+        if (accessControl.hasFullAccess) return true;
         if (accessControl.allowedUserIds) {
           return accessControl.allowedUserIds.includes(followUp.salesExecutiveId || '');
         }
