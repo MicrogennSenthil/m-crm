@@ -885,11 +885,10 @@ export default function Sales() {
                           const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
                           return execInfo ? (
                             <Badge 
-                              className={`${execInfo.color} no-default-hover-elevate`}
-                              title={execInfo.name}
+                              className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                               data-testid={`badge-sales-exec-followup-${followup.id}`}
                             >
-                              {execInfo.initials}
+                              {execInfo.name}
                             </Badge>
                           ) : null;
                         })()}
@@ -1017,11 +1016,10 @@ export default function Sales() {
                               const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
                               return execInfo ? (
                                 <Badge 
-                                  className={`${execInfo.color} no-default-hover-elevate`}
-                                  title={execInfo.name}
+                                  className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                                   data-testid={`badge-sales-exec-${lead.id}`}
                                 >
-                                  {execInfo.initials}
+                                  {execInfo.name}
                                 </Badge>
                               ) : null;
                             })()}
@@ -1094,11 +1092,10 @@ export default function Sales() {
                             const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
                             return execInfo ? (
                               <Badge 
-                                className={`${execInfo.color} no-default-hover-elevate`}
-                                title={execInfo.name}
+                                className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                                 data-testid={`badge-sales-exec-followup-compact-${followup.id}`}
                               >
-                                {execInfo.initials}
+                                {execInfo.name}
                               </Badge>
                             ) : null;
                           })()}
@@ -1187,11 +1184,10 @@ export default function Sales() {
                             const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
                             return execInfo ? (
                               <Badge 
-                                className={`${execInfo.color} no-default-hover-elevate`}
-                                title={execInfo.name}
+                                className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                                 data-testid={`badge-sales-exec-compact-${lead.id}`}
                               >
-                                {execInfo.initials}
+                                {execInfo.name}
                               </Badge>
                             ) : null;
                           })()}
@@ -1244,11 +1240,10 @@ export default function Sales() {
                           const execInfo = getSalesExecutiveInfo(followup.salesExecutiveId);
                           return execInfo ? (
                             <Badge 
-                              className={`${execInfo.color} no-default-hover-elevate`}
-                              title={execInfo.name}
+                              className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                               data-testid={`badge-sales-exec-list-followup-${followup.id}`}
                             >
-                              {execInfo.initials}
+                              {execInfo.name}
                             </Badge>
                           ) : null;
                         })()}
@@ -1336,11 +1331,10 @@ export default function Sales() {
                           const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
                           return execInfo ? (
                             <Badge 
-                              className={`${execInfo.color} no-default-hover-elevate`}
-                              title={execInfo.name}
+                              className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
                               data-testid={`badge-sales-exec-list-${lead.id}`}
                             >
-                              {execInfo.initials}
+                              {execInfo.name}
                             </Badge>
                           ) : null;
                         })()}
