@@ -62,6 +62,7 @@ import MarketingDailyReport from "@/pages/marketing-daily-report";
 import MarketingDashboard from "@/pages/marketing-dashboard";
 import Extractor from "@/pages/extractor";
 import MyPerformance from "@/pages/my-performance";
+import SalesPlanning from "@/pages/sales-planning";
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -104,6 +105,7 @@ function AuthenticatedLayout() {
               <Route path="/extractor" component={Extractor} />
               <Route path="/sales" component={Sales} />
               <Route path="/sales-dashboard" component={SalesDashboard} />
+              <Route path="/sales-planning" component={SalesPlanning} />
               <Route path="/implementations" component={Implementations} />
               <Route path="/implementation-dashboard" component={ImplementationDashboard} />
               <Route path="/support" component={Support} />

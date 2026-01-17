@@ -18,6 +18,7 @@ M-CRM is a full-stack application. The **frontend** uses React 18, TypeScript, T
 The CRM includes:
 -   **Authentication**: Replit Auth with various providers and role-based access (Sales Executive, Engineer, Support, Admin).
 -   **Sales Management**: Kanban board for leads, tracking, follow-ups, and quote management.
+-   **Sales Planning & Performance**: Weekly stage-wise target setting, monthly goals, daily achievement tracking with graphs, run-rate prediction analytics, and team comparison for department heads/admins. Includes sales executive identification badges for hierarchical visibility.
 -   **Implementation Module**: Project cards with progress tracking, multi-engineer assignment, 8-module checklist, and training record logging.
 -   **Support Ticket System**: Priority-based ticket creation, assignment, multi-level escalation, conversation threading, and status management. Includes ticket assignment history tracking for all engineers who worked on a ticket.
 -   **HR Feedback Management**: Enhanced feedback collection with work completion details, call history timeline showing all engineers who worked on the ticket, client contact tracking, and Level 2 reopen capability for unsatisfied customers.

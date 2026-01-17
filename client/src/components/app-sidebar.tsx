@@ -42,6 +42,7 @@ import {
   CalendarDays,
   MapPinned,
   Sprout,
+  Target,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -130,6 +131,14 @@ const menuGroups = [
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
         module: "sales_dashboard",
+      },
+      {
+        title: "Sales Planning",
+        url: "/sales-planning",
+        icon: Target,
+        color: "text-lime-500",
+        bgColor: "bg-lime-500/10",
+        module: "sales_planning",
       },
     ],
   },

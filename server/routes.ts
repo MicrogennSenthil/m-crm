@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -50,6 +50,8 @@ import {
   customerContracts,
   contractFollowups,
   customerContractModules,
+  insertSalesPlanSchema,
+  insertSalesMonthlyTargetSchema,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -2386,6 +2388,366 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching sales dashboard stats:", error);
       res.status(500).json({ message: "Failed to fetch sales dashboard stats" });
+    }
+  });
+
+  // =============================================
+  // SALES PLANNING AND PERFORMANCE ROUTES
+  // =============================================
+
+  // Get sales plans (weekly stage targets)
+  app.get("/api/sales-plans", isAuthenticated, async (req: any, res) => {
+    try {
+      const { month, userId } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      // Build filters based on access control
+      const filters: { userId?: string; month?: string; userIds?: string[] } = {
+        month: month as string,
+      };
+      
+      if (userId && accessControl.hasFullAccess) {
+        filters.userId = userId as string;
+      } else if (!accessControl.hasFullAccess) {
+        filters.userId = currentUser.id;
+      }
+      
+      const plans = await storage.getSalesPlans(filters);
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching sales plans:", error);
+      res.status(500).json({ message: "Failed to fetch sales plans" });
+    }
+  });
+
+  // Upsert sales plan
+  app.post("/api/sales-plans", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Validate request body
+      const parseResult = insertSalesPlanSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: parseResult.error.errors });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const planData = parseResult.data;
+      
+      // Check if user can create plan for the target user
+      if (planData.userId !== currentUser.id && !accessControl.hasFullAccess) {
+        return res.status(403).json({ message: "You can only create plans for yourself" });
+      }
+      
+      // For department heads (not super admin), verify the target user is in their department
+      if (accessControl.hasFullAccess && accessControl.allowedUserIds && planData.userId !== currentUser.id) {
+        if (!accessControl.allowedUserIds.includes(planData.userId)) {
+          return res.status(403).json({ message: "You can only create plans for users in your department" });
+        }
+      }
+      
+      const plan = await storage.upsertSalesPlan(planData);
+      
+      await storage.logActivity({
+        entityType: "sales_plan",
+        entityId: plan.id,
+        action: "upserted",
+        description: `Sales plan updated for ${plan.month} week ${plan.weekNumber} stage ${plan.stage}`,
+        userId: currentUser.id,
+      });
+      
+      res.json(plan);
+    } catch (error) {
+      console.error("Error upserting sales plan:", error);
+      res.status(500).json({ message: "Failed to save sales plan" });
+    }
+  });
+
+  // Batch upsert sales plans
+  app.post("/api/sales-plans/batch", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const { plans } = req.body;
+      
+      if (!Array.isArray(plans)) {
+        return res.status(400).json({ message: "plans must be an array" });
+      }
+      
+      const results = [];
+      for (const planData of plans) {
+        // Validate each plan
+        const parseResult = insertSalesPlanSchema.safeParse(planData);
+        if (!parseResult.success) {
+          continue; // Skip invalid plans
+        }
+        
+        const validPlan = parseResult.data;
+        
+        // Check permission for each plan
+        if (validPlan.userId !== currentUser.id && !accessControl.hasFullAccess) {
+          continue;
+        }
+        
+        // For department heads, verify target user is in their department
+        if (accessControl.hasFullAccess && accessControl.allowedUserIds && validPlan.userId !== currentUser.id) {
+          if (!accessControl.allowedUserIds.includes(validPlan.userId)) {
+            continue;
+          }
+        }
+        
+        const plan = await storage.upsertSalesPlan(validPlan);
+        results.push(plan);
+      }
+      
+      await storage.logActivity({
+        entityType: "sales_plan",
+        entityId: "batch",
+        action: "batch_upserted",
+        description: `${results.length} sales plans updated`,
+        userId: currentUser.id,
+      });
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error batch upserting sales plans:", error);
+      res.status(500).json({ message: "Failed to save sales plans" });
+    }
+  });
+
+  // Delete sales plan
+  app.delete("/api/sales-plans/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const plan = await storage.getSalesPlan(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ message: "Sales plan not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      if (plan.userId !== currentUser.id && !accessControl.hasFullAccess) {
+        return res.status(403).json({ message: "You can only delete your own plans" });
+      }
+      
+      await storage.deleteSalesPlan(req.params.id);
+      res.json({ message: "Sales plan deleted" });
+    } catch (error) {
+      console.error("Error deleting sales plan:", error);
+      res.status(500).json({ message: "Failed to delete sales plan" });
+    }
+  });
+
+  // Get monthly targets
+  app.get("/api/sales-monthly-targets", isAuthenticated, async (req: any, res) => {
+    try {
+      const { month, userId } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      const filters: { userId?: string; month?: string; userIds?: string[] } = {
+        month: month as string,
+      };
+      
+      if (userId && accessControl.hasFullAccess) {
+        filters.userId = userId as string;
+      } else if (!accessControl.hasFullAccess) {
+        filters.userId = currentUser.id;
+      }
+      
+      const targets = await storage.getSalesMonthlyTargets(filters);
+      res.json(targets);
+    } catch (error) {
+      console.error("Error fetching monthly targets:", error);
+      res.status(500).json({ message: "Failed to fetch monthly targets" });
+    }
+  });
+
+  // Upsert monthly target
+  app.post("/api/sales-monthly-targets", isAuthenticated, async (req: any, res) => {
+    try {
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      // Validate request body
+      const parseResult = insertSalesMonthlyTargetSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: parseResult.error.errors });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const targetData = { ...parseResult.data, createdById: currentUser.id };
+      
+      if (targetData.userId !== currentUser.id && !accessControl.hasFullAccess) {
+        return res.status(403).json({ message: "You can only set targets for yourself" });
+      }
+      
+      // For department heads, verify target user is in their department
+      if (accessControl.hasFullAccess && accessControl.allowedUserIds && targetData.userId !== currentUser.id) {
+        if (!accessControl.allowedUserIds.includes(targetData.userId)) {
+          return res.status(403).json({ message: "You can only set targets for users in your department" });
+        }
+      }
+      
+      const target = await storage.upsertSalesMonthlyTarget(targetData);
+      
+      await storage.logActivity({
+        entityType: "sales_monthly_target",
+        entityId: target.id,
+        action: "upserted",
+        description: `Monthly target updated for ${target.month}`,
+        userId: currentUser.id,
+      });
+      
+      res.json(target);
+    } catch (error) {
+      console.error("Error upserting monthly target:", error);
+      res.status(500).json({ message: "Failed to save monthly target" });
+    }
+  });
+
+  // Get sales performance (achievements, comparison, prediction)
+  app.get("/api/sales-performance", isAuthenticated, async (req: any, res) => {
+    try {
+      const { month, userId } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      const filters: { userId?: string; userIds?: string[]; month?: string } = {
+        month: month as string || new Date().toISOString().substring(0, 7),
+      };
+      
+      if (userId && accessControl.hasFullAccess) {
+        filters.userId = userId as string;
+      } else if (!accessControl.hasFullAccess) {
+        filters.userId = currentUser.id;
+      }
+      
+      const performance = await storage.getSalesPerformance(filters);
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching sales performance:", error);
+      res.status(500).json({ message: "Failed to fetch sales performance" });
+    }
+  });
+
+  // Get team comparison (for department heads and admins)
+  app.get("/api/sales-performance/compare", isAuthenticated, async (req: any, res) => {
+    try {
+      const { month } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      
+      if (!accessControl.hasFullAccess) {
+        return res.status(403).json({ message: "Only department heads and admins can view team comparison" });
+      }
+      
+      const targetMonth = month as string || new Date().toISOString().substring(0, 7);
+      
+      // Get all sales executives in the department or all (for super admin)
+      const isSuperAdmin = currentUser.email === SUPER_ADMIN_EMAIL;
+      const isAdmin = currentUser.role === "admin";
+      
+      let salesUsers: User[] = [];
+      if (isSuperAdmin || isAdmin) {
+        // Get all sales executives
+        salesUsers = await storage.getUsersByRole("sales_executive");
+        // Also include sales heads
+        const salesHeads = await storage.getUsersByRole("sales_head");
+        salesUsers = [...salesUsers, ...salesHeads];
+      } else {
+        // Get users from managed departments
+        const managedDepts = await storage.getDepartmentsByHead(currentUser.id);
+        for (const dept of managedDepts) {
+          const deptUsers = await storage.getUsersByDepartment(dept.id);
+          salesUsers = [...salesUsers, ...deptUsers];
+        }
+      }
+      
+      // Get performance for each user
+      const comparison = await Promise.all(
+        salesUsers.map(async (user) => {
+          const performance = await storage.getSalesPerformance({
+            userId: user.id,
+            month: targetMonth,
+          });
+          
+          // Calculate totals
+          const totalTargetQty = performance.plans.reduce((sum, p) => sum + (p.targetQty || 0), 0);
+          const totalTargetValue = performance.plans.reduce((sum, p) => sum + (p.targetValue || 0), 0);
+          const totalAchievedQty = performance.achievements.reduce((sum, a) => sum + a.qty, 0);
+          const totalAchievedValue = performance.achievements.reduce((sum, a) => sum + a.value, 0);
+          
+          return {
+            userId: user.id,
+            userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            userEmail: user.email,
+            targetQty: performance.monthlyTarget?.targetQtyTotal || totalTargetQty,
+            targetValue: performance.monthlyTarget?.targetValueTotal || totalTargetValue,
+            achievedQty: totalAchievedQty,
+            achievedValue: totalAchievedValue,
+            achievementPercentQty: totalTargetQty > 0 ? Math.round((totalAchievedQty / totalTargetQty) * 100) : 0,
+            achievementPercentValue: totalTargetValue > 0 ? Math.round((totalAchievedValue / totalTargetValue) * 100) : 0,
+            prediction: performance.prediction,
+          };
+        })
+      );
+      
+      // Sort by achievement percentage descending
+      comparison.sort((a, b) => b.achievementPercentValue - a.achievementPercentValue);
+      
+      res.json({
+        month: targetMonth,
+        comparison,
+      });
+    } catch (error) {
+      console.error("Error fetching team comparison:", error);
+      res.status(500).json({ message: "Failed to fetch team comparison" });
     }
   });
 

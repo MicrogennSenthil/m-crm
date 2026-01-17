@@ -161,6 +161,12 @@ import {
   extractorOptions,
   type ExtractorOption,
   type InsertExtractorOption,
+  salesPlans,
+  salesMonthlyTargets,
+  type SalesPlan,
+  type InsertSalesPlan,
+  type SalesMonthlyTarget,
+  type InsertSalesMonthlyTarget,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
@@ -623,6 +629,46 @@ export interface IStorage {
   getExtractorOption(id: string): Promise<ExtractorOption | undefined>;
   createExtractorOption(option: InsertExtractorOption): Promise<ExtractorOption>;
   deleteExtractorOption(id: string): Promise<void>;
+
+  // Sales Planning operations
+  getSalesPlans(filters: { userId?: string; month?: string; userIds?: string[] }): Promise<SalesPlan[]>;
+  getSalesPlan(id: string): Promise<SalesPlan | undefined>;
+  upsertSalesPlan(plan: InsertSalesPlan): Promise<SalesPlan>;
+  deleteSalesPlan(id: string): Promise<void>;
+
+  // Sales Monthly Target operations
+  getSalesMonthlyTargets(filters: { userId?: string; month?: string; userIds?: string[] }): Promise<SalesMonthlyTarget[]>;
+  getSalesMonthlyTarget(id: string): Promise<SalesMonthlyTarget | undefined>;
+  upsertSalesMonthlyTarget(target: InsertSalesMonthlyTarget): Promise<SalesMonthlyTarget>;
+  deleteSalesMonthlyTarget(id: string): Promise<void>;
+
+  // Sales Performance analytics
+  getSalesPerformance(filters: { 
+    userId?: string; 
+    userIds?: string[];
+    month?: string; 
+  }): Promise<{
+    plans: SalesPlan[];
+    monthlyTarget: SalesMonthlyTarget | null;
+    achievements: {
+      stage: string;
+      qty: number;
+      value: number;
+      weekNumber: number;
+    }[];
+    dailyAchievements: {
+      date: string;
+      stage: string;
+      qty: number;
+      value: number;
+    }[];
+    prediction: {
+      predictedQty: number;
+      predictedValue: number;
+      daysElapsed: number;
+      totalDays: number;
+    };
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4367,6 +4413,244 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExtractorOption(id: string): Promise<void> {
     await db.delete(extractorOptions).where(eq(extractorOptions.id, id));
+  }
+
+  // Sales Planning operations
+  async getSalesPlans(filters: { userId?: string; month?: string; userIds?: string[] }): Promise<SalesPlan[]> {
+    const conditions: any[] = [];
+    
+    if (filters.userId) {
+      conditions.push(eq(salesPlans.userId, filters.userId));
+    }
+    if (filters.userIds && filters.userIds.length > 0) {
+      conditions.push(inArray(salesPlans.userId, filters.userIds));
+    }
+    if (filters.month) {
+      conditions.push(eq(salesPlans.month, filters.month));
+    }
+    
+    if (conditions.length > 0) {
+      return await db.select().from(salesPlans).where(and(...conditions)).orderBy(salesPlans.weekNumber, salesPlans.stage);
+    }
+    return await db.select().from(salesPlans).orderBy(salesPlans.month, salesPlans.weekNumber, salesPlans.stage);
+  }
+
+  async getSalesPlan(id: string): Promise<SalesPlan | undefined> {
+    const [plan] = await db.select().from(salesPlans).where(eq(salesPlans.id, id));
+    return plan;
+  }
+
+  async upsertSalesPlan(plan: InsertSalesPlan): Promise<SalesPlan> {
+    // Check if plan exists for this user/month/week/stage combination
+    const [existing] = await db.select().from(salesPlans).where(
+      and(
+        eq(salesPlans.userId, plan.userId),
+        eq(salesPlans.month, plan.month),
+        eq(salesPlans.weekNumber, plan.weekNumber),
+        eq(salesPlans.stage, plan.stage)
+      )
+    );
+
+    if (existing) {
+      const [updated] = await db.update(salesPlans)
+        .set({
+          targetQty: plan.targetQty,
+          targetValue: plan.targetValue,
+          updatedAt: new Date(),
+        })
+        .where(eq(salesPlans.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [newPlan] = await db.insert(salesPlans).values(plan).returning();
+    return newPlan;
+  }
+
+  async deleteSalesPlan(id: string): Promise<void> {
+    await db.delete(salesPlans).where(eq(salesPlans.id, id));
+  }
+
+  // Sales Monthly Target operations
+  async getSalesMonthlyTargets(filters: { userId?: string; month?: string; userIds?: string[] }): Promise<SalesMonthlyTarget[]> {
+    const conditions: any[] = [];
+    
+    if (filters.userId) {
+      conditions.push(eq(salesMonthlyTargets.userId, filters.userId));
+    }
+    if (filters.userIds && filters.userIds.length > 0) {
+      conditions.push(inArray(salesMonthlyTargets.userId, filters.userIds));
+    }
+    if (filters.month) {
+      conditions.push(eq(salesMonthlyTargets.month, filters.month));
+    }
+    
+    if (conditions.length > 0) {
+      return await db.select().from(salesMonthlyTargets).where(and(...conditions));
+    }
+    return await db.select().from(salesMonthlyTargets);
+  }
+
+  async getSalesMonthlyTarget(id: string): Promise<SalesMonthlyTarget | undefined> {
+    const [target] = await db.select().from(salesMonthlyTargets).where(eq(salesMonthlyTargets.id, id));
+    return target;
+  }
+
+  async upsertSalesMonthlyTarget(target: InsertSalesMonthlyTarget): Promise<SalesMonthlyTarget> {
+    // Check if target exists for this user/month combination
+    const [existing] = await db.select().from(salesMonthlyTargets).where(
+      and(
+        eq(salesMonthlyTargets.userId, target.userId),
+        eq(salesMonthlyTargets.month, target.month)
+      )
+    );
+
+    if (existing) {
+      const [updated] = await db.update(salesMonthlyTargets)
+        .set({
+          targetQtyTotal: target.targetQtyTotal,
+          targetValueTotal: target.targetValueTotal,
+          closedWonQtyTarget: target.closedWonQtyTarget,
+          closedWonValueTarget: target.closedWonValueTarget,
+          notes: target.notes,
+          updatedAt: new Date(),
+        })
+        .where(eq(salesMonthlyTargets.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [newTarget] = await db.insert(salesMonthlyTargets).values(target).returning();
+    return newTarget;
+  }
+
+  async deleteSalesMonthlyTarget(id: string): Promise<void> {
+    await db.delete(salesMonthlyTargets).where(eq(salesMonthlyTargets.id, id));
+  }
+
+  // Sales Performance analytics
+  async getSalesPerformance(filters: { 
+    userId?: string; 
+    userIds?: string[];
+    month?: string; 
+  }): Promise<{
+    plans: SalesPlan[];
+    monthlyTarget: SalesMonthlyTarget | null;
+    achievements: {
+      stage: string;
+      qty: number;
+      value: number;
+      weekNumber: number;
+    }[];
+    dailyAchievements: {
+      date: string;
+      stage: string;
+      qty: number;
+      value: number;
+    }[];
+    prediction: {
+      predictedQty: number;
+      predictedValue: number;
+      daysElapsed: number;
+      totalDays: number;
+    };
+  }> {
+    const month = filters.month || new Date().toISOString().substring(0, 7);
+    const userFilter = filters.userId ? [filters.userId] : filters.userIds || [];
+    
+    // Get plans for the month
+    const plans = await this.getSalesPlans({ 
+      userId: filters.userId, 
+      userIds: filters.userIds, 
+      month 
+    });
+    
+    // Get monthly target
+    const monthlyTargets = await this.getSalesMonthlyTargets({ 
+      userId: filters.userId, 
+      month 
+    });
+    const monthlyTarget = monthlyTargets.length > 0 ? monthlyTargets[0] : null;
+    
+    // Calculate date range for the month
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = new Date(year, monthNum - 1, 1);
+    const endDate = new Date(year, monthNum, 0); // Last day of month
+    const today = new Date();
+    
+    // Get lead stage history for the month to calculate achievements
+    const stageHistory = await this.getLeadStageHistoryByDateRange(startDate, endDate);
+    
+    // Filter by user if specified
+    const filteredHistory = userFilter.length > 0 
+      ? stageHistory.filter(h => userFilter.includes(h.changedById || ''))
+      : stageHistory;
+    
+    // Calculate achievements by stage and week
+    const achievementsByWeekStage: Record<string, { stage: string; qty: number; value: number; weekNumber: number }> = {};
+    const dailyAchievementsMap: Record<string, { date: string; stage: string; qty: number; value: number }> = {};
+    
+    for (const history of filteredHistory) {
+      const changeDate = new Date(history.createdAt || new Date());
+      const dayOfMonth = changeDate.getDate();
+      const weekNumber = Math.ceil(dayOfMonth / 7);
+      const dateStr = changeDate.toISOString().split('T')[0];
+      
+      // Get lead value (use estimatedValue as fallback)
+      const lead = await this.getLead(history.leadId);
+      const leadValue = lead?.confirmedOrderValue || lead?.quoteValue || lead?.estimatedValue || 0;
+      
+      // Weekly aggregation
+      const weekStageKey = `${weekNumber}-${history.toStage}`;
+      if (!achievementsByWeekStage[weekStageKey]) {
+        achievementsByWeekStage[weekStageKey] = { 
+          stage: history.toStage, 
+          qty: 0, 
+          value: 0, 
+          weekNumber: Math.min(weekNumber, 4) 
+        };
+      }
+      achievementsByWeekStage[weekStageKey].qty += 1;
+      achievementsByWeekStage[weekStageKey].value += leadValue;
+      
+      // Daily aggregation
+      const dailyKey = `${dateStr}-${history.toStage}`;
+      if (!dailyAchievementsMap[dailyKey]) {
+        dailyAchievementsMap[dailyKey] = { date: dateStr, stage: history.toStage, qty: 0, value: 0 };
+      }
+      dailyAchievementsMap[dailyKey].qty += 1;
+      dailyAchievementsMap[dailyKey].value += leadValue;
+    }
+    
+    const achievements = Object.values(achievementsByWeekStage);
+    const dailyAchievements = Object.values(dailyAchievementsMap).sort((a, b) => a.date.localeCompare(b.date));
+    
+    // Calculate prediction based on run rate
+    const totalDays = endDate.getDate();
+    const daysElapsed = today <= endDate && today >= startDate 
+      ? today.getDate() 
+      : (today > endDate ? totalDays : 0);
+    
+    const totalAchievedQty = achievements.reduce((sum, a) => sum + a.qty, 0);
+    const totalAchievedValue = achievements.reduce((sum, a) => sum + a.value, 0);
+    
+    const runRateQty = daysElapsed > 0 ? totalAchievedQty / daysElapsed : 0;
+    const runRateValue = daysElapsed > 0 ? totalAchievedValue / daysElapsed : 0;
+    
+    const prediction = {
+      predictedQty: Math.round(runRateQty * totalDays),
+      predictedValue: Math.round(runRateValue * totalDays),
+      daysElapsed,
+      totalDays,
+    };
+    
+    return {
+      plans,
+      monthlyTarget,
+      achievements,
+      dailyAchievements,
+      prediction,
+    };
   }
 }
 
