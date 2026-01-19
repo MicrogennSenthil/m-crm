@@ -26,6 +26,7 @@ import {
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import type { ContractType } from "@shared/schema";
 
 interface ImportResult {
@@ -106,6 +107,27 @@ export function ContractImportDialog({ open, onOpenChange }: ContractImportDialo
     return normalized;
   };
 
+  const parseRawData = (rawData: Record<string, string>[]): ParsedRow[] => {
+    return rawData.map((row) => {
+      const normalizedRow: ParsedRow = {
+        serialNo: "",
+        clientName: "",
+        mobileNo: "",
+        module: "",
+        contractType: "",
+      };
+      
+      Object.entries(row).forEach(([key, value]) => {
+        const normalizedKey = normalizeColumnName(key);
+        if (normalizedKey in normalizedRow) {
+          (normalizedRow as any)[normalizedKey] = value?.toString().trim() || "";
+        }
+      });
+      
+      return normalizedRow;
+    }).filter(row => row.clientName);
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -113,48 +135,81 @@ export function ContractImportDialog({ open, onOpenChange }: ContractImportDialo
     setFile(selectedFile);
     setResult(null);
     
-    Papa.parse(selectedFile, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.errors.length > 0) {
+    const fileName = selectedFile.name.toLowerCase();
+    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+    
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = event.target?.result;
+          const workbook = XLSX.read(data, { type: "binary" });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rawData = XLSX.utils.sheet_to_json<Record<string, string>>(sheet);
+          
+          const parsedData = parseRawData(rawData);
+          
+          if (parsedData.length === 0) {
+            toast({
+              title: "No Valid Data",
+              description: "No valid client data found in the file. Make sure you have a CLIENT NAME column.",
+              variant: "destructive",
+            });
+          }
+          
+          setPreviewData(parsedData);
+        } catch (error) {
           toast({
-            title: "Parse Warning",
-            description: `${results.errors.length} row(s) had issues and were skipped`,
-            variant: "default",
+            title: "File Error",
+            description: "Failed to parse Excel file. Please check the file format.",
+            variant: "destructive",
           });
         }
-        
-        const rawData = results.data as Record<string, string>[];
-        const parsedData: ParsedRow[] = rawData.map((row) => {
-          const normalizedRow: ParsedRow = {
-            serialNo: "",
-            clientName: "",
-            mobileNo: "",
-            module: "",
-            contractType: "",
-          };
-          
-          Object.entries(row).forEach(([key, value]) => {
-            const normalizedKey = normalizeColumnName(key);
-            if (normalizedKey in normalizedRow) {
-              (normalizedRow as any)[normalizedKey] = value?.toString().trim() || "";
-            }
-          });
-          
-          return normalizedRow;
-        }).filter(row => row.clientName);
-        
-        setPreviewData(parsedData);
-      },
-      error: (error) => {
+      };
+      reader.onerror = () => {
         toast({
           title: "File Error",
-          description: error.message || "Failed to parse file",
+          description: "Failed to read the file",
           variant: "destructive",
         });
-      }
-    });
+      };
+      reader.readAsBinaryString(selectedFile);
+    } else {
+      Papa.parse(selectedFile, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (results.errors.length > 0) {
+            toast({
+              title: "Parse Warning",
+              description: `${results.errors.length} row(s) had issues and were skipped`,
+              variant: "default",
+            });
+          }
+          
+          const rawData = results.data as Record<string, string>[];
+          const parsedData = parseRawData(rawData);
+          
+          if (parsedData.length === 0) {
+            toast({
+              title: "No Valid Data",
+              description: "No valid client data found in the file. Make sure you have a CLIENT NAME column.",
+              variant: "destructive",
+            });
+          }
+          
+          setPreviewData(parsedData);
+        },
+        error: (error) => {
+          toast({
+            title: "File Error",
+            description: error.message || "Failed to parse file",
+            variant: "destructive",
+          });
+        }
+      });
+    }
   };
 
   const handleImport = () => {
@@ -194,7 +249,7 @@ export function ContractImportDialog({ open, onOpenChange }: ContractImportDialo
             Import Clients
           </DialogTitle>
           <DialogDescription>
-            Upload a CSV file to bulk import clients with contracts
+            Upload a CSV or Excel file to bulk import clients with contracts
           </DialogDescription>
         </DialogHeader>
 
@@ -204,13 +259,13 @@ export function ContractImportDialog({ open, onOpenChange }: ContractImportDialo
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
                   <Label htmlFor="import-file" className="mb-2 block">
-                    CSV File
+                    CSV / Excel File
                   </Label>
                   <div className="flex gap-2">
                     <Input
                       id="import-file"
                       type="file"
-                      accept=".csv"
+                      accept=".csv,.xlsx,.xls"
                       ref={fileInputRef}
                       onChange={handleFileChange}
                       data-testid="input-import-file"
