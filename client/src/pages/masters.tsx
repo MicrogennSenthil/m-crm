@@ -45,7 +45,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText, Eye, Calendar, IndianRupee, ChevronDown, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Package, Search, Shield, Key, UserCog, Building2, FileText, Eye, Calendar, IndianRupee, ChevronDown, X, Copy } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Customer, Module, User, UserRole, UserRoleRight, Department, SystemModule, ContractType, CustomerContract } from "@shared/schema";
@@ -127,6 +127,11 @@ export default function Masters() {
   );
 }
 
+interface DuplicateGroup {
+  name: string;
+  customers: Customer[];
+}
+
 function CustomersTab() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
@@ -134,6 +139,8 @@ function CustomersTab() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [viewingContractsFor, setViewingContractsFor] = useState<Customer | null>(null);
+  const [showDuplicatesDialog, setShowDuplicatesDialog] = useState(false);
+  const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -211,6 +218,60 @@ function CustomersTab() {
     },
   });
 
+  // Fetch duplicates when dialog is open
+  const { data: duplicateGroups = [], isLoading: duplicatesLoading, refetch: refetchDuplicates } = useQuery<DuplicateGroup[]>({
+    queryKey: ["/api/customers/duplicates"],
+    enabled: showDuplicatesDialog,
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (customerIds: string[]) => {
+      const response = await apiRequest("POST", "/api/customers/bulk-delete", { customerIds });
+      return await response.json();
+    },
+    onSuccess: (data: { deleted: number; failed: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/duplicates"] });
+      setSelectedForDeletion(new Set());
+      toast({ 
+        title: "Duplicates removed",
+        description: `Successfully deleted ${data.deleted} customer(s)${data.failed > 0 ? `, ${data.failed} failed` : ""}`,
+      });
+      refetchDuplicates();
+    },
+    onError: () => {
+      toast({ title: "Failed to delete customers", variant: "destructive" });
+    },
+  });
+
+  const toggleCustomerSelection = (customerId: string) => {
+    setSelectedForDeletion(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(customerId)) {
+        newSet.delete(customerId);
+      } else {
+        newSet.add(customerId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllDuplicatesExceptFirst = () => {
+    const idsToSelect = new Set<string>();
+    duplicateGroups.forEach(group => {
+      // Skip the first one (oldest), select the rest
+      group.customers.slice(1).forEach(c => idsToSelect.add(c.id));
+    });
+    setSelectedForDeletion(idsToSelect);
+  };
+
+  const handleRemoveDuplicates = () => {
+    if (selectedForDeletion.size > 0) {
+      bulkDeleteMutation.mutate(Array.from(selectedForDeletion));
+    }
+  };
+
   const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -229,21 +290,32 @@ function CustomersTab() {
             <CardTitle className="text-base sm:text-lg">Customer Master</CardTitle>
             <CardDescription>Manage customers and their contact information</CardDescription>
           </div>
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-customer" className="min-h-[44px] sm:min-h-0">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Customer
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <CustomerForm
-                onSubmit={(data) => createMutation.mutate(data)}
-                isPending={createMutation.isPending}
-                onCancel={() => setIsAddOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => setShowDuplicatesDialog(true)}
+              data-testid="button-find-duplicates"
+              className="min-h-[44px] sm:min-h-0"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              Find Duplicates
+            </Button>
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-customer" className="min-h-[44px] sm:min-h-0">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Customer
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <CustomerForm
+                  onSubmit={(data) => createMutation.mutate(data)}
+                  isPending={createMutation.isPending}
+                  onCancel={() => setIsAddOpen(false)}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-4 sm:p-6 pt-0">
@@ -486,6 +558,138 @@ function CustomersTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingContractsFor(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Customers Dialog */}
+      <Dialog open={showDuplicatesDialog} onOpenChange={(open) => {
+        setShowDuplicatesDialog(open);
+        if (!open) {
+          setSelectedForDeletion(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Copy className="w-5 h-5" />
+              Find & Remove Duplicate Customers
+            </DialogTitle>
+            <DialogDescription>
+              Review duplicate customers (same name) and select which ones to remove. The oldest entry in each group is shown first.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {duplicatesLoading ? (
+              <div className="space-y-4 py-4">
+                {Array(3).fill(0).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ) : duplicateGroups.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Copy className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">No duplicates found</p>
+                <p className="text-sm mt-1">All customer names are unique</p>
+              </div>
+            ) : (
+              <div className="space-y-4 py-4">
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="text-sm">
+                    <span className="font-medium">{duplicateGroups.length}</span> duplicate group(s) found
+                    {selectedForDeletion.size > 0 && (
+                      <span className="ml-2">
+                        • <span className="font-medium text-destructive">{selectedForDeletion.size}</span> selected for removal
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllDuplicatesExceptFirst}
+                    data-testid="button-select-all-duplicates"
+                  >
+                    Select All Duplicates (Keep Oldest)
+                  </Button>
+                </div>
+
+                {duplicateGroups.map((group) => (
+                  <Card key={group.name} className="border-yellow-500/30">
+                    <CardHeader className="py-3 px-4">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Badge variant="secondary">{group.customers.length} duplicates</Badge>
+                        {group.name}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2 px-4">
+                      <div className="space-y-2">
+                        {group.customers.map((customer, index) => (
+                          <div 
+                            key={customer.id} 
+                            className={`flex items-center gap-3 p-2 rounded-md ${
+                              selectedForDeletion.has(customer.id) 
+                                ? 'bg-destructive/10 border border-destructive/30' 
+                                : index === 0 
+                                  ? 'bg-green-500/10 border border-green-500/30' 
+                                  : 'bg-muted/30'
+                            }`}
+                          >
+                            <Checkbox
+                              checked={selectedForDeletion.has(customer.id)}
+                              onCheckedChange={() => toggleCustomerSelection(customer.id)}
+                              data-testid={`checkbox-duplicate-${customer.id}`}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium truncate">{customer.name}</span>
+                                {index === 0 && (
+                                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700 dark:text-green-400">
+                                    Oldest
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
+                                {customer.phone && <span>Phone: {customer.phone}</span>}
+                                {customer.email && <span>Email: {customer.email}</span>}
+                                {customer.contactPerson && <span>Contact: {customer.contactPerson}</span>}
+                                {customer.createdAt && (
+                                  <span>Created: {format(new Date(customer.createdAt), 'dd MMM yyyy')}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="gap-2 border-t pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDuplicatesDialog(false);
+                setSelectedForDeletion(new Set());
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleRemoveDuplicates}
+              disabled={selectedForDeletion.size === 0 || bulkDeleteMutation.isPending}
+              data-testid="button-remove-duplicates"
+            >
+              {bulkDeleteMutation.isPending ? (
+                "Removing..."
+              ) : (
+                `Remove ${selectedForDeletion.size} Selected`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

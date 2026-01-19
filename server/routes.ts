@@ -1081,6 +1081,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Find duplicate customers (by name)
+  app.get("/api/customers/duplicates", isAuthenticated, async (req: any, res) => {
+    try {
+      const customers = await storage.getCustomers();
+      
+      // Group customers by normalized name (lowercase, trimmed)
+      const nameGroups: Record<string, typeof customers> = {};
+      
+      for (const customer of customers) {
+        const normalizedName = customer.name.toLowerCase().trim();
+        if (!nameGroups[normalizedName]) {
+          nameGroups[normalizedName] = [];
+        }
+        nameGroups[normalizedName].push(customer);
+      }
+      
+      // Filter to only groups with duplicates
+      const duplicateGroups = Object.entries(nameGroups)
+        .filter(([_, group]) => group.length > 1)
+        .map(([name, customers]) => ({
+          name,
+          customers: customers.sort((a, b) => 
+            new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+          ),
+        }));
+      
+      res.json(duplicateGroups);
+    } catch (error) {
+      console.error("Error finding duplicate customers:", error);
+      res.status(500).json({ message: "Failed to find duplicates" });
+    }
+  });
+
+  // Bulk delete customers
+  app.post("/api/customers/bulk-delete", isAuthenticated, async (req: any, res) => {
+    try {
+      const { customerIds } = req.body;
+      
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return res.status(400).json({ message: "No customer IDs provided" });
+      }
+      
+      let deleted = 0;
+      let failed = 0;
+      const errors: string[] = [];
+      
+      for (const id of customerIds) {
+        try {
+          const customer = await storage.getCustomer(id);
+          if (customer) {
+            await storage.deleteCustomer(id);
+            
+            await storage.logActivity({
+              entityType: "customer",
+              entityId: id,
+              action: "deleted",
+              description: `Customer deleted (bulk): ${customer.name}`,
+              userId: req.user.claims.sub,
+            });
+            
+            deleted++;
+          } else {
+            failed++;
+            errors.push(`Customer ${id} not found`);
+          }
+        } catch (err) {
+          failed++;
+          errors.push(`Failed to delete customer ${id}`);
+        }
+      }
+      
+      res.json({ deleted, failed, errors });
+    } catch (error) {
+      console.error("Error bulk deleting customers:", error);
+      res.status(500).json({ message: "Failed to bulk delete customers" });
+    }
+  });
+
   // Module Master routes
   app.get("/api/modules", isAuthenticated, async (req, res) => {
     try {
