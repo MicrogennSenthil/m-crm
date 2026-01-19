@@ -1320,6 +1320,17 @@ export default function Sales() {
                         )}
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                          {lead.salesExecutiveId && (() => {
+                            const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                            return execInfo ? (
+                              <Badge 
+                                className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
+                                data-testid={`badge-sales-exec-compact-${lead.id}`}
+                              >
+                                {execInfo.name}
+                              </Badge>
+                            ) : null;
+                          })()}
                           <span className="text-sm text-muted-foreground">{lead.daysInStage}d in stage</span>
                         </div>
                       </CardContent>
