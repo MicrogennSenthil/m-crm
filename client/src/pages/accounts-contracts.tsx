@@ -56,7 +56,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addMonths } from "date-fns";
-import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3, Package, Percent } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, FileText, Mail, Calendar, DollarSign, Clock, AlertTriangle, CheckCircle, History, User, Users, Filter, X, ChevronDown, CalendarDays, BarChart3, Package, Percent, Upload } from "lucide-react";
+import { ContractImportDialog } from "@/components/contract-import-dialog";
 import type { Customer, ContractType, CustomerContract } from "@shared/schema";
 
 interface ContractWithDetails {
@@ -118,6 +119,7 @@ export default function AccountsContracts() {
   const [viewMode, setViewMode] = useState<"list" | "monthly">("list");
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<ContractWithDetails | null>(null);
   const [editingModules, setEditingModules] = useState<ModuleEntry[]>([]);
   const [deletingContract, setDeletingContract] = useState<ContractWithDetails | null>(null);
@@ -336,7 +338,15 @@ export default function AccountsContracts() {
         </TabsList>
 
         <TabsContent value="contracts" className="space-y-4 sm:space-y-6">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsImportOpen(true)}
+              data-testid="button-import-clients"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import Clients
+            </Button>
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-contract">
@@ -868,6 +878,12 @@ export default function AccountsContracts() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Client Import Dialog */}
+      <ContractImportDialog 
+        open={isImportOpen} 
+        onOpenChange={setIsImportOpen} 
+      />
     </div>
   );
 }
@@ -3136,6 +3152,7 @@ function MonthlyRemindersTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

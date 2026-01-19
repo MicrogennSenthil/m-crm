@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { z } from "zod";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, SUPER_ADMIN_EMAIL } from "./accessControl";
@@ -13146,6 +13147,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating customer contract:", error);
       res.status(400).json({ message: error.message || "Failed to create customer contract" });
+    }
+  });
+
+  // Bulk import clients with contracts
+  app.post("/api/customer-contracts/bulk-import", isAuthenticated, requirePermission("contracts", "create"), async (req: any, res) => {
+    try {
+      const { clients } = req.body;
+      
+      if (!Array.isArray(clients) || clients.length === 0) {
+        return res.status(400).json({ message: "No clients provided for import" });
+      }
+
+      // Validate payload structure
+      const importRowSchema = z.object({
+        serialNo: z.string().optional(),
+        clientName: z.string().min(1, "Client name is required"),
+        mobileNo: z.string().optional(),
+        module: z.string().optional(),
+        contractType: z.string().optional(),
+      });
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[],
+        created: [] as { customerId: string; contractId: string; clientName: string }[],
+      };
+
+      // Get all contract types for matching
+      const allContractTypes = await db.select().from(contractTypes);
+      
+      for (let i = 0; i < clients.length; i++) {
+        const client = clients[i];
+        const rowNum = i + 1;
+        
+        try {
+          // Validate row data
+          const validationResult = importRowSchema.safeParse(client);
+          if (!validationResult.success) {
+            const errorMsg = validationResult.error.errors.map((e: { message: string }) => e.message).join(", ");
+            results.errors.push(`Row ${rowNum}: ${errorMsg}`);
+            results.failed++;
+            continue;
+          }
+          
+          const { clientName, mobileNo, module, contractType } = validationResult.data;
+          
+          if (!clientName || clientName.trim() === "") {
+            results.errors.push(`Row ${rowNum}: Client name is required`);
+            results.failed++;
+            continue;
+          }
+
+          // Find or create customer
+          let customerId: string;
+          const existingCustomer = await db.select()
+            .from(customers)
+            .where(eq(customers.name, clientName.trim()))
+            .limit(1);
+          
+          if (existingCustomer.length > 0) {
+            customerId = existingCustomer[0].id;
+            // Update phone if provided
+            if (mobileNo) {
+              await db.update(customers)
+                .set({ phone: mobileNo.trim(), updatedAt: new Date() })
+                .where(eq(customers.id, customerId));
+            }
+          } else {
+            // Create new customer
+            const [newCustomer] = await db.insert(customers).values({
+              name: clientName.trim(),
+              phone: mobileNo?.trim() || null,
+              status: "active",
+              customerType: "customer",
+              selectedModules: module?.trim() ? [module.trim()] : null,
+            }).returning();
+            customerId = newCustomer.id;
+          }
+
+          // Find contract type by name (case-insensitive)
+          let matchedContractType = allContractTypes.find(ct => 
+            ct.name.toLowerCase() === contractType?.toLowerCase()?.trim() ||
+            ct.displayName.toLowerCase() === contractType?.toLowerCase()?.trim()
+          );
+          
+          // Default to first active contract type if not found
+          if (!matchedContractType) {
+            matchedContractType = allContractTypes.find(ct => ct.isActive);
+          }
+          
+          if (!matchedContractType) {
+            results.errors.push(`${clientName}: No valid contract type found`);
+            results.failed++;
+            continue;
+          }
+
+          // Create contract
+          const contractNumber = await generateContractNumber();
+          const startDate = new Date();
+          const durationMonths = matchedContractType.defaultDurationMonths || 12;
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+
+          const [contract] = await db.insert(customerContracts).values({
+            contractNumber,
+            customerId,
+            contractTypeId: matchedContractType.id,
+            amount: 0, // Default amount, can be updated later
+            currency: "INR",
+            startDate,
+            endDate,
+            contactPhone: mobileNo?.trim() || null,
+            status: "active",
+            createdBy: req.user?.claims?.sub,
+          }).returning();
+
+          // Create module entry if provided
+          if (module && module.trim()) {
+            await db.insert(customerContractModules).values({
+              contractId: contract.id,
+              moduleName: module.trim(),
+              orderValue: 0,
+              amcAmount: 0,
+              contractPeriodMonths: durationMonths,
+              startDate,
+              endDate,
+            });
+          }
+
+          results.success++;
+          results.created.push({
+            customerId,
+            contractId: contract.id,
+            clientName: clientName.trim(),
+          });
+
+        } catch (rowError: any) {
+          results.errors.push(`${client.clientName || "Unknown"}: ${rowError.message}`);
+          results.failed++;
+        }
+      }
+
+      // Log activity
+      await storage.logActivity({
+        entityType: "customer_contract",
+        entityId: "bulk-import",
+        action: "bulk_import",
+        description: `Bulk import: ${results.success} clients imported, ${results.failed} failed`,
+        userId: req.user?.claims?.sub,
+      });
+
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error in bulk import:", error);
+      res.status(500).json({ message: error.message || "Failed to import clients" });
     }
   });
 
