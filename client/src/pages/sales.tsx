@@ -133,6 +133,30 @@ export default function Sales() {
     enabled: currentUser?.role === "sales_executive" || currentUser?.role === "sales_head",
   });
 
+  // Fetch 25th-to-25th cycle progress for motivational dashboard
+  const { data: cycleProgress } = useQuery<{
+    cycleStart: string;
+    cycleEnd: string;
+    totalAdvance: number;
+    totalOrderValue: number;
+    dealsWon: number;
+    targetValue: number;
+    progressPercent: number;
+    daysRemaining: number;
+    daysElapsed: number;
+    totalDaysInCycle: number;
+    dailyRate: number;
+    predictedTotal: number;
+    predictedPercent: number;
+    status: "on_track" | "ahead" | "behind" | "no_target";
+    motivationalMessage: string;
+    cycleMonth: string;
+  }>({
+    queryKey: ["/api/sales-performance/cycle-progress"],
+    enabled: currentUser?.role === "sales_executive" || currentUser?.role === "sales_head",
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+  });
+
   const showPlanningWarning = 
     (currentUser?.role === "sales_executive" || currentUser?.role === "sales_head") && 
     planningStatus && 
@@ -522,6 +546,102 @@ export default function Sales() {
                 Complete Planning
               </Button>
             </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Motivational Progress Widget - 25th to 25th Cycle */}
+      {cycleProgress && (currentUser?.role === "sales_executive" || currentUser?.role === "sales_head") && (
+        <Card className={`border-2 ${
+          cycleProgress.status === 'ahead' ? 'border-green-500 bg-green-50 dark:bg-green-950/20' :
+          cycleProgress.status === 'on_track' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' :
+          cycleProgress.status === 'behind' ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/20' :
+          'border-gray-300 bg-gray-50 dark:bg-gray-900/20'
+        }`} data-testid="card-cycle-progress">
+          <CardContent className="p-4">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+              {/* Progress Circle */}
+              <div className="flex items-center gap-4">
+                <div className="relative w-20 h-20 flex-shrink-0">
+                  <svg className="w-20 h-20 transform -rotate-90">
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="35"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      className="text-gray-200 dark:text-gray-700"
+                    />
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="35"
+                      stroke="currentColor"
+                      strokeWidth="8"
+                      fill="transparent"
+                      strokeDasharray={`${cycleProgress.progressPercent * 2.2} 220`}
+                      strokeLinecap="round"
+                      className={
+                        cycleProgress.status === 'ahead' ? 'text-green-500' :
+                        cycleProgress.status === 'on_track' ? 'text-blue-500' :
+                        cycleProgress.status === 'behind' ? 'text-orange-500' :
+                        'text-gray-400'
+                      }
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-lg font-bold" data-testid="text-progress-percent">{cycleProgress.progressPercent}%</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Billing Cycle</p>
+                  <p className="text-xs text-muted-foreground" data-testid="text-cycle-dates">
+                    {format(new Date(cycleProgress.cycleStart), "MMM d")} - {format(new Date(cycleProgress.cycleEnd), "MMM d")}
+                  </p>
+                  <p className="text-xs mt-1" data-testid="text-days-remaining">
+                    <span className="font-medium">{cycleProgress.daysRemaining}</span> days remaining
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="text-center p-2 rounded-md bg-white/50 dark:bg-black/20">
+                  <p className="text-xs text-muted-foreground">Advance Collected</p>
+                  <p className="text-lg font-bold text-green-600" data-testid="text-advance-collected">₹{cycleProgress.totalAdvance.toLocaleString()}</p>
+                </div>
+                <div className="text-center p-2 rounded-md bg-white/50 dark:bg-black/20">
+                  <p className="text-xs text-muted-foreground">Target</p>
+                  <p className="text-lg font-bold" data-testid="text-cycle-target">₹{cycleProgress.targetValue.toLocaleString()}</p>
+                </div>
+                <div className="text-center p-2 rounded-md bg-white/50 dark:bg-black/20">
+                  <p className="text-xs text-muted-foreground">Deals Won</p>
+                  <p className="text-lg font-bold text-blue-600" data-testid="text-deals-won">{cycleProgress.dealsWon}</p>
+                </div>
+                <div className="text-center p-2 rounded-md bg-white/50 dark:bg-black/20">
+                  <p className="text-xs text-muted-foreground">Daily Rate</p>
+                  <p className="text-lg font-bold text-purple-600" data-testid="text-daily-rate">₹{cycleProgress.dailyRate.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Motivational Message */}
+              <div className="lg:max-w-xs">
+                <p className={`text-sm font-medium ${
+                  cycleProgress.status === 'ahead' ? 'text-green-700 dark:text-green-400' :
+                  cycleProgress.status === 'on_track' ? 'text-blue-700 dark:text-blue-400' :
+                  cycleProgress.status === 'behind' ? 'text-orange-700 dark:text-orange-400' :
+                  'text-gray-600 dark:text-gray-400'
+                }`} data-testid="text-motivational-message">
+                  {cycleProgress.motivationalMessage}
+                </p>
+                {cycleProgress.targetValue > 0 && cycleProgress.predictedPercent > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Predicted: ₹{cycleProgress.predictedTotal.toLocaleString()} ({cycleProgress.predictedPercent}% of target)
+                  </p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

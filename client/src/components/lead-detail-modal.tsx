@@ -69,6 +69,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
   // Close deal state
   const [closedDate, setClosedDate] = useState<Date>();
   const [confirmedOrderValue, setConfirmedOrderValue] = useState("");
+  const [advanceAmount, setAdvanceAmount] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [closedReason, setClosedReason] = useState("");
   
@@ -647,10 +648,15 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         throw new Error("Confirmed order value is required");
       }
       
+      if (isWon && !advanceAmount) {
+        throw new Error("Advance amount is required");
+      }
+      
       await apiRequest("PATCH", `/api/leads/${lead.id}`, {
         closedDate: closedDate.toISOString(),
         stage: isWon ? "closed_won" : "closed_lost",
         confirmedOrderValue: isWon ? parseInt(confirmedOrderValue) : undefined,
+        advanceAmount: isWon ? parseInt(advanceAmount) : undefined,
         specialInstructions: isWon && specialInstructions ? specialInstructions : undefined,
         closedReason: !isWon ? closedReason : undefined,
       });
@@ -662,6 +668,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/leads", lead.id, "stage-history"] });
       setClosedDate(undefined);
       setConfirmedOrderValue("");
+      setAdvanceAmount("");
       setSpecialInstructions("");
       setClosedReason("");
       toast({
@@ -1724,6 +1731,12 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           <span>Order Value: ${lead.confirmedOrderValue.toLocaleString()}</span>
                         </div>
                       )}
+                      {lead.stage === "closed_won" && (lead as any).advanceAmount && (
+                        <div className="flex items-center gap-2 ml-6">
+                          <DollarSign className="h-3 w-3" />
+                          <span>Advance Received: ${(lead as any).advanceAmount.toLocaleString()}</span>
+                        </div>
+                      )}
                       {lead.stage === "closed_won" && lead.specialInstructions && (
                         <div className="ml-6 mt-2 p-2 bg-blue-500/10 border border-blue-500/20 rounded text-sm">
                           <span className="font-medium text-blue-600 dark:text-blue-400">Special Instructions:</span>
@@ -1789,6 +1802,20 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     </div>
                     
                     <div>
+                      <Label className="text-xs">Advance Amount ($) <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="number"
+                        value={advanceAmount}
+                        onChange={(e) => setAdvanceAmount(e.target.value)}
+                        placeholder="Required for Won deals"
+                        data-testid="input-advance-amount"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Advance amount received from the customer
+                      </p>
+                    </div>
+                    
+                    <div>
                       <Label className="text-xs">Special Instructions (for Won deals)</Label>
                       <Textarea
                         value={specialInstructions}
@@ -1815,7 +1842,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <div className="flex gap-2">
                       <Button
                         onClick={() => closeDealMutation.mutate(true)}
-                        disabled={!closedDate || !confirmedOrderValue || closeDealMutation.isPending}
+                        disabled={!closedDate || !confirmedOrderValue || !advanceAmount || closeDealMutation.isPending}
                         className="flex-1 bg-green-600 hover:bg-green-700"
                         data-testid="button-close-won"
                       >

@@ -2913,6 +2913,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get 25th-to-25th cycle progress for motivational dashboard
+  app.get("/api/sales-performance/cycle-progress", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      
+      if (!currentUser) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const targetUserId = userId && accessControl.hasFullAccess ? userId as string : currentUser.id;
+      
+      // Calculate current 25th-to-25th cycle
+      const now = new Date();
+      const currentDay = now.getDate();
+      let cycleStart: Date;
+      let cycleEnd: Date;
+      
+      if (currentDay >= 25) {
+        // We're in the cycle that started this month's 25th
+        cycleStart = new Date(now.getFullYear(), now.getMonth(), 25, 0, 0, 0, 0);
+        cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, 24, 23, 59, 59, 999);
+      } else {
+        // We're in the cycle that started last month's 25th
+        cycleStart = new Date(now.getFullYear(), now.getMonth() - 1, 25, 0, 0, 0, 0);
+        cycleEnd = new Date(now.getFullYear(), now.getMonth(), 24, 23, 59, 59, 999);
+      }
+      
+      // Get all closed won leads for this user within the cycle
+      const allLeads = await storage.getLeads({ salesExecutiveId: targetUserId });
+      const cycleLeads = allLeads.filter(l => {
+        if (l.stage !== 'closed_won' || !l.closedDate) return false;
+        const closedDate = new Date(l.closedDate);
+        return closedDate >= cycleStart && closedDate <= cycleEnd;
+      });
+      
+      // Sum up advance amounts
+      const totalAdvance = cycleLeads.reduce((sum, l) => sum + ((l as any).advanceAmount || 0), 0);
+      const totalOrderValue = cycleLeads.reduce((sum, l) => sum + (l.confirmedOrderValue || 0), 0);
+      const dealsWon = cycleLeads.length;
+      
+      // Get the monthly target - use the cycle start month for target
+      const cycleMonth = cycleStart.toISOString().substring(0, 7);
+      const performance = await storage.getSalesPerformance({ userId: targetUserId, month: cycleMonth });
+      const targetValue = performance.monthlyTarget?.targetValueTotal || 
+        performance.plans.reduce((sum, p) => sum + (p.targetValue || 0), 0);
+      
+      // Calculate days in cycle and days remaining
+      const totalDaysInCycle = Math.ceil((cycleEnd.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const daysElapsed = Math.ceil((now.getTime() - cycleStart.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = Math.max(0, totalDaysInCycle - daysElapsed);
+      
+      // Calculate progress percentage
+      const progressPercent = targetValue > 0 ? Math.min(100, Math.round((totalAdvance / targetValue) * 100)) : 0;
+      
+      // Calculate run rate and predicted achievement
+      const dailyRate = daysElapsed > 0 ? totalAdvance / daysElapsed : 0;
+      const predictedTotal = dailyRate * totalDaysInCycle;
+      const predictedPercent = targetValue > 0 ? Math.min(200, Math.round((predictedTotal / targetValue) * 100)) : 0;
+      
+      // Generate motivational message
+      let motivationalMessage = "";
+      let status: "on_track" | "ahead" | "behind" | "no_target" = "no_target";
+      
+      if (targetValue > 0) {
+        const expectedProgress = (daysElapsed / totalDaysInCycle) * 100;
+        if (progressPercent >= 100) {
+          status = "ahead";
+          motivationalMessage = "Congratulations! You've exceeded your target! Keep the momentum going!";
+        } else if (progressPercent >= expectedProgress) {
+          status = "on_track";
+          const gap = progressPercent - expectedProgress;
+          if (gap > 10) {
+            motivationalMessage = "Excellent! You're ahead of schedule! You're on fire!";
+          } else {
+            motivationalMessage = "Good progress! You're on track to meet your target. Keep it up!";
+          }
+        } else {
+          status = "behind";
+          const gap = expectedProgress - progressPercent;
+          const amountNeeded = targetValue - totalAdvance;
+          if (gap > 30) {
+            motivationalMessage = `Push harder! You need ${amountNeeded.toLocaleString()} more in ${daysRemaining} days. Every call counts!`;
+          } else {
+            motivationalMessage = `Almost there! Just ${amountNeeded.toLocaleString()} more to reach your target. You can do it!`;
+          }
+        }
+      } else {
+        motivationalMessage = "Set your monthly target in Sales Planning to track your progress!";
+      }
+      
+      res.json({
+        cycleStart: cycleStart.toISOString(),
+        cycleEnd: cycleEnd.toISOString(),
+        totalAdvance,
+        totalOrderValue,
+        dealsWon,
+        targetValue,
+        progressPercent,
+        daysRemaining,
+        daysElapsed,
+        totalDaysInCycle,
+        dailyRate: Math.round(dailyRate),
+        predictedTotal: Math.round(predictedTotal),
+        predictedPercent,
+        status,
+        motivationalMessage,
+        cycleMonth,
+      });
+    } catch (error) {
+      console.error("Error fetching cycle progress:", error);
+      res.status(500).json({ message: "Failed to fetch cycle progress" });
+    }
+  });
+
   // Lead routes
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
@@ -3155,8 +3272,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!updateData.confirmedOrderValue) {
             return res.status(400).json({ message: "Confirmed order value is required to close the deal" });
           }
+          // Server-side validation: advanceAmount is mandatory for won deals
+          if (updateData.advanceAmount === undefined || updateData.advanceAmount === null || updateData.advanceAmount <= 0) {
+            return res.status(400).json({ message: "Advance amount is required and must be greater than 0 to close the deal as won" });
+          }
           activityAction = "deal_won";
-          activityDescription = `Deal won with ${currentLead?.companyName} - Confirmed Value: $${updateData.confirmedOrderValue?.toLocaleString()}`;
+          activityDescription = `Deal won with ${currentLead?.companyName} - Confirmed Value: $${updateData.confirmedOrderValue?.toLocaleString()} - Advance: $${updateData.advanceAmount?.toLocaleString()}`;
         } else if (updateData.stage === "closed_lost") {
           activityAction = "deal_lost";
           activityDescription = `Deal lost with ${currentLead?.companyName}${updateData.closedReason ? ` - Reason: ${updateData.closedReason}` : ""}`;
