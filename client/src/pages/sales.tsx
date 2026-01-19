@@ -1102,6 +1102,16 @@ export default function Sales() {
                               )}
                             </div>
                           )}
+                          {/* Sales Executive Name - Prominent Display */}
+                          {lead.salesExecutiveId && (() => {
+                            const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                            return execInfo ? (
+                              <div className="flex items-center gap-1 text-xs mt-0.5" data-testid={`row-sales-exec-${lead.id}`}>
+                                <User className="h-3 w-3 text-primary flex-shrink-0" />
+                                <span className="text-primary font-medium truncate">{execInfo.name}</span>
+                              </div>
+                            ) : null;
+                          })()}
                         </CardHeader>
                         <CardContent className="p-2 sm:p-3 pt-0 space-y-1.5">
                           {lead.estimatedValue && (
@@ -1283,6 +1293,16 @@ export default function Sales() {
                                 )}
                               </div>
                             )}
+                            {/* Sales Executive Name - Prominent Display */}
+                            {lead.salesExecutiveId && (() => {
+                              const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                              return execInfo ? (
+                                <div className="flex items-center gap-1 text-xs mt-1" data-testid={`row-sales-exec-compact-${lead.id}`}>
+                                  <User className="h-3 w-3 text-primary flex-shrink-0" />
+                                  <span className="text-primary font-medium truncate">{execInfo.name}</span>
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
                       </CardHeader>
@@ -1300,17 +1320,6 @@ export default function Sales() {
                         )}
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
-                          {lead.salesExecutiveId && (() => {
-                            const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
-                            return execInfo ? (
-                              <Badge 
-                                className={`${execInfo.color} no-default-hover-elevate text-[10px] px-1.5`}
-                                data-testid={`badge-sales-exec-compact-${lead.id}`}
-                              >
-                                {execInfo.name}
-                              </Badge>
-                            ) : null;
-                          })()}
                           <span className="text-sm text-muted-foreground">{lead.daysInStage}d in stage</span>
                         </div>
                       </CardContent>
@@ -1433,6 +1442,16 @@ export default function Sales() {
                             )}
                           </p>
                         )}
+                        {/* Sales Executive Name - Prominent Display */}
+                        {lead.salesExecutiveId && (() => {
+                          const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
+                          return execInfo ? (
+                            <p className="flex items-center gap-1 text-xs mt-1" data-testid={`row-sales-exec-list-${lead.id}`}>
+                              <User className="h-3 w-3 text-primary flex-shrink-0" />
+                              <span className="text-primary font-medium">{execInfo.name}</span>
+                            </p>
+                          ) : null;
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0 flex-wrap justify-end">
                         {lead.estimatedValue && (
