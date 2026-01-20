@@ -3704,9 +3704,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDevelopmentTask(task: InsertDevelopmentTask): Promise<DevelopmentTask> {
-    // Generate task number DEV-XXXXXX
-    const taskCount = await db.select({ count: sql<number>`count(*)` }).from(developmentTasks);
-    const taskNumber = `DEV-${String(Number(taskCount[0].count) + 1).padStart(6, '0')}`;
+    // Generate task number DEV-XXXXXX based on max existing number
+    const maxResult = await db
+      .select({ maxNum: sql<string>`MAX(CAST(SUBSTRING(task_number FROM 5) AS INTEGER))` })
+      .from(developmentTasks);
+    const nextNum = (Number(maxResult[0]?.maxNum) || 0) + 1;
+    const taskNumber = `DEV-${String(nextNum).padStart(6, '0')}`;
     
     const [newTask] = await db
       .insert(developmentTasks)
