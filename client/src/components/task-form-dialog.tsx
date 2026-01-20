@@ -916,6 +916,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                       placeholder="Company name"
                       value={newCustomerData.name}
                       onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                      onKeyDown={(e) => e.stopPropagation()}
                       data-testid="input-new-customer-name"
                     />
                   </div>
@@ -925,6 +926,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                       placeholder="Contact person name"
                       value={newCustomerData.contactPerson}
                       onChange={(e) => setNewCustomerData({ ...newCustomerData, contactPerson: e.target.value })}
+                      onKeyDown={(e) => e.stopPropagation()}
                       data-testid="input-new-customer-contact"
                     />
                   </div>
@@ -935,6 +937,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                       placeholder="email@company.com"
                       value={newCustomerData.email}
                       onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                      onKeyDown={(e) => e.stopPropagation()}
                       data-testid="input-new-customer-email"
                     />
                   </div>
@@ -944,6 +947,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                       placeholder="Phone number"
                       value={newCustomerData.phone}
                       onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                      onKeyDown={(e) => e.stopPropagation()}
                       data-testid="input-new-customer-phone"
                     />
                   </div>
@@ -975,7 +979,12 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="Task title" {...field} data-testid="input-task-title" />
+                    <Input 
+                      placeholder="Task title" 
+                      {...field} 
+                      data-testid="input-task-title"
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -994,6 +1003,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                       className="min-h-[100px]" 
                       {...field} 
                       data-testid="input-task-description"
+                      onKeyDown={(e) => e.stopPropagation()}
                     />
                   </FormControl>
                   <FormMessage />
@@ -1013,6 +1023,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                         placeholder="Contact person name" 
                         {...field} 
                         data-testid="input-task-contact-name"
+                        onKeyDown={(e) => e.stopPropagation()}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1031,6 +1042,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                         placeholder="Contact phone number" 
                         {...field} 
                         data-testid="input-task-contact-phone"
+                        onKeyDown={(e) => e.stopPropagation()}
                       />
                     </FormControl>
                     <FormMessage />
