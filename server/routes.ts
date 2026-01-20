@@ -12466,6 +12466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         penaltyApplied: false,
       };
       
+      console.log("[DevTask] Creating task with data:", JSON.stringify(taskData, null, 2));
       const task = await storage.createDevelopmentTask(taskData);
       
       // Log activity
@@ -12478,9 +12479,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.status(201).json(task);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating development task:", error);
-      res.status(500).json({ message: "Failed to create development task" });
+      console.error("Error details:", error?.message, error?.stack);
+      res.status(500).json({ message: error?.message || "Failed to create development task" });
     }
   });
 
