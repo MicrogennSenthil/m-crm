@@ -348,6 +348,7 @@ export interface IStorage {
 
   // Attachment operations
   getAttachments(entityType: string, entityId: string): Promise<Attachment[]>;
+  getAllAttachments(): Promise<Attachment[]>;
   createAttachment(attachment: InsertAttachment): Promise<Attachment>;
   deleteAttachment(id: string): Promise<Attachment | undefined>;
 
@@ -2351,6 +2352,13 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(attachments)
       .where(and(eq(attachments.entityType, entityType), eq(attachments.entityId, entityId)))
+      .orderBy(desc(attachments.createdAt));
+  }
+
+  async getAllAttachments(): Promise<Attachment[]> {
+    return await db
+      .select()
+      .from(attachments)
       .orderBy(desc(attachments.createdAt));
   }
 

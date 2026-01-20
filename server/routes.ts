@@ -8199,12 +8199,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         uploadedBy: req.user.claims.sub,
       });
       
-      // Set ACL policy on the uploaded object
+      // Set ACL policy on the uploaded object - public visibility allows all authenticated users to view
       const userId = req.user.claims.sub;
       if (validatedData.objectPath.startsWith("/objects/")) {
         await objectStorageService.trySetObjectEntityAclPolicy(validatedData.objectPath, {
           owner: userId,
-          visibility: "private",
+          visibility: "public",
         });
       }
       
@@ -8236,6 +8236,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching attachments:", error);
       res.status(500).json({ message: "Failed to fetch attachments" });
+    }
+  });
+
+  // Update attachment visibility to public (admin only) - for existing files
+  app.post("/api/attachments/make-public", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const allAttachments = await storage.getAllAttachments();
+      let updated = 0;
+      let errors = 0;
+      
+      for (const attachment of allAttachments) {
+        if (attachment.objectPath?.startsWith("/objects/")) {
+          try {
+            await objectStorageService.trySetObjectEntityAclPolicy(attachment.objectPath, {
+              owner: attachment.uploadedBy || "system",
+              visibility: "public",
+            });
+            updated++;
+          } catch (err) {
+            console.error(`Error updating ACL for ${attachment.objectPath}:`, err);
+            errors++;
+          }
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `Updated ${updated} attachments to public visibility`,
+        updated,
+        errors
+      });
+    } catch (error) {
+      console.error("Error making attachments public:", error);
+      res.status(500).json({ message: "Failed to update attachment visibility" });
     }
   });
 
