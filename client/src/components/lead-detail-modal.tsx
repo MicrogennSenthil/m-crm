@@ -475,7 +475,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         description: "Follow-up added successfully",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: any) => {
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -487,9 +487,18 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         }, 500);
         return;
       }
+      // Check if it's a planning requirement error
+      if (error?.code === "PLANNING_REQUIRED" || error?.message?.includes("planning")) {
+        toast({
+          title: "Planning Required",
+          description: error.message || "Please complete your monthly sales planning first",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Error",
-        description: "Failed to add follow-up",
+        description: error?.message || "Failed to add follow-up",
         variant: "destructive",
       });
     },
