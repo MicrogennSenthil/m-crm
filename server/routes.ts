@@ -4438,13 +4438,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return true;
     }
     
-    // Check if lead is assigned to the user
-    if (lead.salesExecutiveId === userId) {
+    // Check if lead is assigned to the user (check both auth ID and internal user ID)
+    if (lead.salesExecutiveId === userId || lead.salesExecutiveId === user.id) {
       return true;
     }
     
     // Check if user is a department head (using junction table)
-    const managedDepartments = await storage.getDepartmentsByHead(userId);
+    const managedDepartments = await storage.getDepartmentsByHead(user.id);
     
     if (managedDepartments.length > 0) {
       // Department heads can access all leads assigned to users in their department
