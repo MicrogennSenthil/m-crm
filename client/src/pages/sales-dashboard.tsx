@@ -806,7 +806,8 @@ export default function SalesDashboard() {
       )}
 
       {/* Call Analytics - User-wise Cold Calls vs Followups */}
-      <CallAnalytics compact={!isAdmin && !isSuperAdmin} />
+      {/* Full view for admins, superadmins, and department heads; compact for others */}
+      <CallAnalytics compact={!canViewAnalytics} />
 
       {/* Content Area */}
       <Card>
