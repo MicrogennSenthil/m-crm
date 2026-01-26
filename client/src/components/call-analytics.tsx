@@ -194,7 +194,20 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     return 'Your personal performance';
   };
 
-  const chartData = userAnalytics.map(user => ({
+  // Get unique users for filter dropdown
+  const allUsers = userAnalytics.map(u => ({ id: u.userId, name: u.userName }));
+  
+  // Get the selected user's name for display
+  const selectedUserName = selectedUserId !== "all" 
+    ? allUsers.find(u => u.id === selectedUserId)?.name || "Selected User"
+    : null;
+  
+  // Filter userAnalytics based on selected user
+  const filteredUserAnalytics = selectedUserId !== "all"
+    ? userAnalytics.filter(u => u.userId === selectedUserId)
+    : userAnalytics;
+
+  const chartData = filteredUserAnalytics.map(user => ({
     name: user.userName.split(' ')[0],
     fullName: user.userName,
     coldCalls: user.coldCalls,
@@ -204,13 +217,22 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     total: user.totalCalls
   }));
 
-  const pieData = [
-    { name: 'Cold Calls', value: totals.coldCalls, color: '#1a2b6d' },
-    { name: 'Follow-ups', value: totals.followupCalls, color: '#f5a623' }
-  ];
+  // Calculate display totals based on filter
+  const displayTotals = selectedUserId !== "all" && filteredUserAnalytics.length > 0
+    ? {
+        coldCalls: filteredUserAnalytics[0].coldCalls,
+        followupCalls: filteredUserAnalytics[0].followupCalls,
+        totalCalls: filteredUserAnalytics[0].totalCalls,
+        leadConversions: filteredUserAnalytics[0].leadConversions,
+        demoCount: filteredUserAnalytics[0].demoCount,
+        totalUsers: 1
+      }
+    : totals;
 
-  // Get unique users for filter dropdown
-  const allUsers = userAnalytics.map(u => ({ id: u.userId, name: u.userName }));
+  const pieData = [
+    { name: 'Cold Calls', value: displayTotals.coldCalls, color: '#1a2b6d' },
+    { name: 'Follow-ups', value: displayTotals.followupCalls, color: '#f5a623' }
+  ];
   
   // Day-wise chart data - filter to only show days with activity
   // Also filter by selected user if applicable
@@ -246,17 +268,6 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
       };
     })
     .filter((d): d is NonNullable<typeof d> => d !== null && (d.coldCalls > 0 || d.followupCalls > 0 || d.leadConversions > 0 || d.demoCount > 0));
-  
-  // Calculate filtered totals when user is selected
-  const filteredTotals = selectedUserId !== "all" 
-    ? {
-        coldCalls: dailyChartData.reduce((sum, d) => sum + d.coldCalls, 0),
-        followupCalls: dailyChartData.reduce((sum, d) => sum + d.followupCalls, 0),
-        leadConversions: dailyChartData.reduce((sum, d) => sum + d.leadConversions, 0),
-        demoCount: dailyChartData.reduce((sum, d) => sum + d.demoCount, 0),
-        totalCalls: dailyChartData.reduce((sum, d) => sum + d.coldCalls + d.followupCalls, 0)
-      }
-    : null;
 
   if (compact) {
     return (
@@ -306,54 +317,86 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Phone className="h-5 w-5" />
-          Call Analytics
-          {viewScope === 'team' && (
-            <Badge variant="outline" className="ml-2 bg-indigo-50 text-indigo-600 border-indigo-200">
-              Team View
-            </Badge>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              Call Analytics
+              {viewScope === 'team' && (
+                <Badge variant="outline" className="ml-2 bg-indigo-50 text-indigo-600 border-indigo-200">
+                  Team View
+                </Badge>
+              )}
+              {viewScope === 'self' && (
+                <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-600 border-emerald-200">
+                  My Performance
+                </Badge>
+              )}
+              {selectedUserName && (
+                <Badge variant="outline" className="ml-2 bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-400">
+                  Filtered: {selectedUserName}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              {selectedUserName ? `Showing call analytics for ${selectedUserName}` : getScopeDescription()}
+            </CardDescription>
+          </div>
+          
+          {/* User Filter - Global */}
+          {allUsers.length > 1 && (
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select 
+                value={selectedUserId} 
+                onValueChange={setSelectedUserId}
+              >
+                <SelectTrigger className="w-[200px]" data-testid="select-user-filter-global">
+                  <SelectValue placeholder="Filter by executive" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Executives</SelectItem>
+                  {allUsers.map(user => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
-          {viewScope === 'self' && (
-            <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-600 border-emerald-200">
-              My Performance
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          {getScopeDescription()}
-        </CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
             <PhoneCall className="h-6 w-6 mx-auto mb-2 text-blue-600" />
-            <div className="text-2xl font-bold text-blue-600" data-testid="text-total-cold-calls">{totals.coldCalls}</div>
+            <div className="text-2xl font-bold text-blue-600" data-testid="text-total-cold-calls">{displayTotals.coldCalls}</div>
             <div className="text-sm text-muted-foreground">Cold Calls</div>
           </div>
           <div className="text-center p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
             <Phone className="h-6 w-6 mx-auto mb-2 text-amber-600" />
-            <div className="text-2xl font-bold text-amber-600" data-testid="text-total-followups">{totals.followupCalls}</div>
+            <div className="text-2xl font-bold text-amber-600" data-testid="text-total-followups">{displayTotals.followupCalls}</div>
             <div className="text-sm text-muted-foreground">Follow-up Calls</div>
           </div>
           <div className="text-center p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
             <ArrowRightLeft className="h-6 w-6 mx-auto mb-2 text-green-600" />
-            <div className="text-2xl font-bold text-green-600" data-testid="text-total-conversions">{totals.leadConversions}</div>
+            <div className="text-2xl font-bold text-green-600" data-testid="text-total-conversions">{displayTotals.leadConversions}</div>
             <div className="text-sm text-muted-foreground">Lead Conversions</div>
           </div>
           <div className="text-center p-4 bg-pink-50 dark:bg-pink-950/30 rounded-lg border border-pink-200 dark:border-pink-800">
             <Presentation className="h-6 w-6 mx-auto mb-2 text-pink-600" />
-            <div className="text-2xl font-bold text-pink-600" data-testid="text-total-demos">{totals.demoCount}</div>
+            <div className="text-2xl font-bold text-pink-600" data-testid="text-total-demos">{displayTotals.demoCount}</div>
             <div className="text-sm text-muted-foreground">Demos</div>
           </div>
           <div className="text-center p-4 bg-slate-50 dark:bg-slate-950/30 rounded-lg border border-slate-200 dark:border-slate-800">
             <Phone className="h-6 w-6 mx-auto mb-2 text-slate-600" />
-            <div className="text-2xl font-bold text-slate-600" data-testid="text-total-calls">{totals.totalCalls}</div>
+            <div className="text-2xl font-bold text-slate-600" data-testid="text-total-calls">{displayTotals.totalCalls}</div>
             <div className="text-sm text-muted-foreground">Total Calls</div>
           </div>
           <div className="text-center p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
             <Users className="h-6 w-6 mx-auto mb-2 text-purple-600" />
-            <div className="text-2xl font-bold text-purple-600" data-testid="text-total-users">{totals.totalUsers}</div>
+            <div className="text-2xl font-bold text-purple-600" data-testid="text-total-users">{displayTotals.totalUsers}</div>
             <div className="text-sm text-muted-foreground">Active Users</div>
           </div>
         </div>
@@ -371,61 +414,10 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
 
           <TabsContent value="daily" className="mt-4">
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Daily call activity (last 30 days with activity)</span>
-                </div>
-                
-                {/* User Filter */}
-                {allUsers.length > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <Select 
-                      value={selectedUserId} 
-                      onValueChange={setSelectedUserId}
-                    >
-                      <SelectTrigger className="w-[180px]" data-testid="select-user-filter">
-                        <SelectValue placeholder="Filter by user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Users</SelectItem>
-                        {allUsers.map(user => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                <span>Daily call activity (last 30 days with activity){selectedUserName && ` - ${selectedUserName}`}</span>
               </div>
-              
-              {/* Show filtered totals when a user is selected */}
-              {filteredTotals && (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3 bg-muted/50 rounded-lg border">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{filteredTotals.coldCalls}</div>
-                    <div className="text-xs text-muted-foreground">Cold Calls</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-amber-600">{filteredTotals.followupCalls}</div>
-                    <div className="text-xs text-muted-foreground">Follow-ups</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">{filteredTotals.leadConversions}</div>
-                    <div className="text-xs text-muted-foreground">Conversions</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-pink-600">{filteredTotals.demoCount}</div>
-                    <div className="text-xs text-muted-foreground">Demos</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-slate-600">{filteredTotals.totalCalls}</div>
-                    <div className="text-xs text-muted-foreground">Total Calls</div>
-                  </div>
-                </div>
-              )}
               
               {dailyChartData.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
