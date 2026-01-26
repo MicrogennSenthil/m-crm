@@ -12,7 +12,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from "recharts";
-import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp, ArrowRightLeft, Presentation, X, MapPin, Mail, Clock, Loader2 } from "lucide-react";
+import { Phone, PhoneCall, Users, Building2, Calendar, TrendingUp, ArrowRightLeft, Presentation, X, MapPin, Mail, Clock, Loader2, Filter } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DrilldownRecord {
   id: string | number;
@@ -115,6 +122,7 @@ const STAGE_TYPE_COLORS: Record<string, { bg: string; text: string; border: stri
 export function CallAnalytics({ compact = false }: { compact?: boolean }) {
   const [drilldownOpen, setDrilldownOpen] = useState(false);
   const [drilldownParams, setDrilldownParams] = useState<{ date: string; stageType: string; dateLabel: string } | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string>("all");
   
   const { data, isLoading, error } = useQuery<CallAnalyticsData>({
     queryKey: ["/api/analytics/calls"],
@@ -201,19 +209,54 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
     { name: 'Follow-ups', value: totals.followupCalls, color: '#f5a623' }
   ];
 
+  // Get unique users for filter dropdown
+  const allUsers = userAnalytics.map(u => ({ id: u.userId, name: u.userName }));
+  
   // Day-wise chart data - filter to only show days with activity
+  // Also filter by selected user if applicable
   const dailyChartData = (dailyAnalytics || [])
-    .filter(d => d.totalColdCalls > 0 || d.totalFollowupCalls > 0 || d.totalLeadConversions > 0 || d.totalDemoCount > 0)
-    .map(d => ({
-      date: d.date,
-      dateLabel: d.dateLabel,
-      coldCalls: d.totalColdCalls,
-      followupCalls: d.totalFollowupCalls,
-      leadConversions: d.totalLeadConversions,
-      demoCount: d.totalDemoCount,
-      total: d.totalColdCalls + d.totalFollowupCalls,
-      users: d.users
-    }));
+    .map(d => {
+      // If a user is selected, filter data to just that user's stats
+      if (selectedUserId !== "all") {
+        const userStats = d.users.find(u => u.userId === selectedUserId);
+        if (userStats) {
+          return {
+            date: d.date,
+            dateLabel: d.dateLabel,
+            coldCalls: userStats.coldCalls,
+            followupCalls: userStats.followupCalls,
+            leadConversions: userStats.leadConversions,
+            demoCount: userStats.demoCount,
+            total: userStats.coldCalls + userStats.followupCalls,
+            users: [userStats]
+          };
+        }
+        return null; // User had no activity on this day
+      }
+      // No filter - show all users' combined stats
+      return {
+        date: d.date,
+        dateLabel: d.dateLabel,
+        coldCalls: d.totalColdCalls,
+        followupCalls: d.totalFollowupCalls,
+        leadConversions: d.totalLeadConversions,
+        demoCount: d.totalDemoCount,
+        total: d.totalColdCalls + d.totalFollowupCalls,
+        users: d.users
+      };
+    })
+    .filter((d): d is NonNullable<typeof d> => d !== null && (d.coldCalls > 0 || d.followupCalls > 0 || d.leadConversions > 0 || d.demoCount > 0));
+  
+  // Calculate filtered totals when user is selected
+  const filteredTotals = selectedUserId !== "all" 
+    ? {
+        coldCalls: dailyChartData.reduce((sum, d) => sum + d.coldCalls, 0),
+        followupCalls: dailyChartData.reduce((sum, d) => sum + d.followupCalls, 0),
+        leadConversions: dailyChartData.reduce((sum, d) => sum + d.leadConversions, 0),
+        demoCount: dailyChartData.reduce((sum, d) => sum + d.demoCount, 0),
+        totalCalls: dailyChartData.reduce((sum, d) => sum + d.coldCalls + d.followupCalls, 0)
+      }
+    : null;
 
   if (compact) {
     return (
@@ -328,10 +371,61 @@ export function CallAnalytics({ compact = false }: { compact?: boolean }) {
 
           <TabsContent value="daily" className="mt-4">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
-                <span>Daily call activity (last 30 days with activity)</span>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Daily call activity (last 30 days with activity)</span>
+                </div>
+                
+                {/* User Filter */}
+                {allUsers.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <Select 
+                      value={selectedUserId} 
+                      onValueChange={setSelectedUserId}
+                    >
+                      <SelectTrigger className="w-[180px]" data-testid="select-user-filter">
+                        <SelectValue placeholder="Filter by user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Users</SelectItem>
+                        {allUsers.map(user => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
+              
+              {/* Show filtered totals when a user is selected */}
+              {filteredTotals && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3 bg-muted/50 rounded-lg border">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-blue-600">{filteredTotals.coldCalls}</div>
+                    <div className="text-xs text-muted-foreground">Cold Calls</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-amber-600">{filteredTotals.followupCalls}</div>
+                    <div className="text-xs text-muted-foreground">Follow-ups</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-green-600">{filteredTotals.leadConversions}</div>
+                    <div className="text-xs text-muted-foreground">Conversions</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-pink-600">{filteredTotals.demoCount}</div>
+                    <div className="text-xs text-muted-foreground">Demos</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-slate-600">{filteredTotals.totalCalls}</div>
+                    <div className="text-xs text-muted-foreground">Total Calls</div>
+                  </div>
+                </div>
+              )}
               
               {dailyChartData.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
