@@ -25,9 +25,13 @@ import {
   Target, Search, MessageSquare, Send, ArrowLeft, 
   Phone, Mail, Building2, DollarSign, Plus, XCircle,
   PlayCircle, Image, Video, Mic, FileText, LayoutGrid, List,
-  CalendarDays, Handshake, UserPlus, AlertTriangle
+  CalendarDays, Handshake, UserPlus, AlertTriangle, Filter, X
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -510,10 +514,43 @@ export default function SalesDashboard() {
   const [selectedLead, setSelectedLead] = useState<LeadWithSalesExec | null>(null);
   const [newComment, setNewComment] = useState("");
   const [activeTab, setActiveTab] = useState<'leads' | 'followups'>('leads');
+  
+  // Filter states
+  const [selectedExecutiveId, setSelectedExecutiveId] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+
+  // Build query params for filters
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    if (selectedExecutiveId && selectedExecutiveId !== "all") {
+      params.append("executiveId", selectedExecutiveId);
+    }
+    if (dateRange?.from) {
+      params.append("startDate", format(dateRange.from, "yyyy-MM-dd"));
+    }
+    if (dateRange?.to) {
+      params.append("endDate", format(dateRange.to, "yyyy-MM-dd"));
+    }
+    return params.toString();
+  };
+
+  const queryParams = buildQueryParams();
+  const apiUrl = queryParams ? `/api/dashboard/sales?${queryParams}` : "/api/dashboard/sales";
 
   // All hooks must be called before any conditional returns (React rules of hooks)
   const { data: dashboardData, isLoading, error } = useQuery<SalesDashboardData>({
-    queryKey: ["/api/dashboard/sales"],
+    queryKey: ["/api/dashboard/sales", selectedExecutiveId, dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
+    queryFn: async () => {
+      const response = await fetch(apiUrl, { credentials: 'include' });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch dashboard data');
+      }
+      return response.json();
+    },
     enabled: !userLoading && hasAccess(user),
   });
 
@@ -707,6 +744,51 @@ export default function SalesDashboard() {
     );
   }
 
+  // Get sales executives for the dropdown filter
+  const salesExecutives = users.filter(u => 
+    u.role === 'sales_executive' || u.role === 'admin' || u.role === 'sales_head'
+  );
+
+  // Quick date presets
+  const setDatePreset = (preset: string) => {
+    const today = new Date();
+    switch (preset) {
+      case 'today':
+        setDateRange({ from: today, to: today });
+        break;
+      case 'thisMonth':
+        setDateRange({ from: startOfMonth(today), to: endOfMonth(today) });
+        break;
+      case 'lastMonth':
+        const lastMonth = subMonths(today, 1);
+        setDateRange({ from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) });
+        break;
+      case 'last3Months':
+        setDateRange({ from: startOfMonth(subMonths(today, 2)), to: endOfMonth(today) });
+        break;
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedExecutiveId("all");
+    setDateRange({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+  };
+
+  const hasActiveFilters = selectedExecutiveId !== "all" || 
+    (dateRange?.from && format(dateRange.from, "yyyy-MM-dd") !== format(startOfMonth(new Date()), "yyyy-MM-dd")) ||
+    (dateRange?.to && format(dateRange.to, "yyyy-MM-dd") !== format(endOfMonth(new Date()), "yyyy-MM-dd"));
+
+  // Get selected executive name for display
+  const selectedExecutiveName = selectedExecutiveId !== "all"
+    ? (() => {
+        const exec = users.find(u => u.id === selectedExecutiveId);
+        if (exec) {
+          return [exec.firstName, exec.lastName].filter(Boolean).join(' ') || exec.email || "Selected Executive";
+        }
+        return "Selected Executive";
+      })()
+    : null;
+
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -714,6 +796,11 @@ export default function SalesDashboard() {
           <h1 className="text-lg sm:text-xl font-bold mb-1">Sales Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             Monitor sales pipeline and performance
+            {selectedExecutiveName && (
+              <Badge variant="outline" className="ml-2 bg-cyan-50 text-cyan-600 border-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-400">
+                {selectedExecutiveName}
+              </Badge>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -737,6 +824,125 @@ export default function SalesDashboard() {
           </Button>
         </div>
       </div>
+      
+      {/* Filters Section */}
+      <Card className="bg-muted/30">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters:</span>
+            </div>
+            
+            {/* Executive Filter */}
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">Executive:</Label>
+              <Select 
+                value={selectedExecutiveId} 
+                onValueChange={setSelectedExecutiveId}
+              >
+                <SelectTrigger className="w-[180px]" data-testid="select-executive-filter">
+                  <SelectValue placeholder="All Executives" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Executives</SelectItem>
+                  {salesExecutives.map(exec => (
+                    <SelectItem key={exec.id} value={exec.id}>
+                      {[exec.firstName, exec.lastName].filter(Boolean).join(' ') || exec.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Date Range Filter */}
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">Date Range:</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-[240px] justify-start text-left font-normal"
+                    data-testid="button-date-range"
+                  >
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "MMM dd, yyyy")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="p-3 border-b flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setDatePreset('today')} data-testid="button-preset-today">
+                      Today
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setDatePreset('thisMonth')} data-testid="button-preset-thismonth">
+                      This Month
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setDatePreset('lastMonth')} data-testid="button-preset-lastmonth">
+                      Last Month
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setDatePreset('last3Months')} data-testid="button-preset-last3months">
+                      Last 3 Months
+                    </Button>
+                  </div>
+                  <CalendarComponent
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            
+            {/* Clear Filters */}
+            {hasActiveFilters && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearFilters}
+                className="text-muted-foreground hover:text-foreground"
+                data-testid="button-clear-filters"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+            )}
+          </div>
+          
+          {/* Active filter badges */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+              {selectedExecutiveName && (
+                <Badge variant="secondary" className="gap-1">
+                  Executive: {selectedExecutiveName}
+                  <X 
+                    className="h-3 w-3 cursor-pointer" 
+                    onClick={() => setSelectedExecutiveId("all")}
+                  />
+                </Badge>
+              )}
+              {dateRange?.from && dateRange?.to && (
+                <Badge variant="secondary" className="gap-1">
+                  {format(dateRange.from, "MMM dd")} - {format(dateRange.to, "MMM dd, yyyy")}
+                </Badge>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Grouped Stats Cards - Seeds, Leads, Follow-ups, Deal, Negotiation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

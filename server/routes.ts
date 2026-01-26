@@ -5599,6 +5599,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const currentUser = await storage.getUser(userId);
       
+      // Get filter parameters
+      const executiveIdFilter = req.query.executiveId as string | undefined;
+      const startDateFilter = req.query.startDate as string | undefined;
+      const endDateFilter = req.query.endDate as string | undefined;
+      
+      // Parse date filters
+      const filterStartDate = startDateFilter ? new Date(startDateFilter + 'T00:00:00') : null;
+      const filterEndDate = endDateFilter ? new Date(endDateFilter + 'T23:59:59.999') : null;
+      
       // Check if user has access to sales dashboard (admin, sales_executive, sales_head, or super admin)
       const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
       const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
@@ -5634,10 +5643,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allLeads = allLeads.filter(l => !l.salesExecutiveId || deptUserIds.has(l.salesExecutiveId));
       }
       
+      // Apply executive filter if provided
+      if (executiveIdFilter) {
+        allLeads = allLeads.filter(l => l.salesExecutiveId === executiveIdFilter);
+      }
+      
+      // Apply date range filter if provided (filter by createdAt)
+      if (filterStartDate && filterEndDate) {
+        allLeads = allLeads.filter(l => {
+          if (!l.createdAt) return false;
+          const leadDate = new Date(l.createdAt);
+          return leadDate >= filterStartDate && leadDate <= filterEndDate;
+        });
+      }
+      
       const allFollowUps = await storage.getAllFollowUps();
       // Filter followups to only those for visible leads
       const leadIds = new Set(allLeads.map(l => l.id));
-      const filteredFollowUps = allFollowUps.filter(f => leadIds.has(f.leadId));
+      let filteredFollowUps = allFollowUps.filter(f => leadIds.has(f.leadId));
+      
+      // Apply date range filter to followups
+      if (filterStartDate && filterEndDate) {
+        filteredFollowUps = filteredFollowUps.filter(f => {
+          const fDate = new Date(f.followUpDate);
+          return fDate >= filterStartDate && fDate <= filterEndDate;
+        });
+      }
       
       // Get current date boundaries
       const now = new Date();
