@@ -262,15 +262,36 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
     setLeadOpen(false);
   };
 
-  // Reset form when task changes
+  // Track if form has been initialized to avoid re-resets
+  const formInitializedRef = useRef(false);
+  const prevOpenRef = useRef(open);
+  
+  // Reset form only when dialog opens or task changes
   useEffect(() => {
+    // Only reset when dialog opens or when task reference changes
+    const dialogJustOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+    
+    // Skip if dialog is not open
+    if (!open) {
+      formInitializedRef.current = false;
+      return;
+    }
+    
+    // Skip if already initialized and dialog didn't just open
+    if (formInitializedRef.current && !dialogJustOpened) {
+      return;
+    }
+    
+    formInitializedRef.current = true;
+    
     if (task) {
       // Get contact info from linked customer if available
       let contactName = task.contactName || "";
       let contactPhone = task.contactPhone || "";
       
       if (task.relatedEntityType === "customer" && task.relatedEntityId) {
-        const linkedCustomer = activeCustomers.find(c => c.id === task.relatedEntityId);
+        const linkedCustomer = customers.find(c => c.id === task.relatedEntityId);
         if (linkedCustomer) {
           // Use customer contact info if task doesn't have its own
           if (!contactName && linkedCustomer.contactPerson) {
@@ -306,6 +327,11 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       } else {
         setSelectedLeadId(null);
       }
+      
+      // Load existing attachments when editing
+      if (task.attachments) {
+        setAttachments(task.attachments);
+      }
     } else {
       form.reset({
         title: "",
@@ -339,12 +365,7 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
       setShowCamera(false);
       setAttachments([]);
     }
-    
-    // Load existing attachments when editing
-    if (task?.attachments) {
-      setAttachments(task.attachments);
-    }
-  }, [task, form, open, activeCustomers]);
+  }, [task, form, open]);
 
   // Create customer mutation
   const createCustomerMutation = useMutation({
