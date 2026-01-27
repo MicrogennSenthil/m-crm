@@ -748,7 +748,10 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent 
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{task ? "Edit Task" : "Create New Task"}</DialogTitle>
         </DialogHeader>
@@ -772,9 +775,9 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search leads..." />
+                <PopoverContent className="w-full p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                  <Command shouldFilter={true}>
+                    <CommandInput placeholder="Search leads..." onKeyDown={(e) => e.stopPropagation()} />
                     <CommandList>
                       <CommandEmpty>No leads found.</CommandEmpty>
                       <CommandGroup>
@@ -833,9 +836,9 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-full p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search customers..." />
+                <PopoverContent className="w-full p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                  <Command shouldFilter={true}>
+                    <CommandInput placeholder="Search customers..." onKeyDown={(e) => e.stopPropagation()} />
                     <CommandList>
                       <CommandEmpty>No customers found.</CommandEmpty>
                       <CommandGroup>
@@ -1159,9 +1162,9 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Search team members..." />
+                    <PopoverContent className="w-full p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
+                      <Command shouldFilter={true}>
+                        <CommandInput placeholder="Search team members..." onKeyDown={(e) => e.stopPropagation()} />
                         <CommandList>
                           <CommandEmpty>No team member found.</CommandEmpty>
                           <CommandGroup>
