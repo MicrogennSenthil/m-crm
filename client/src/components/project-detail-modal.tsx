@@ -392,10 +392,11 @@ export function ProjectDetailModal({ project, open, onClose }: ProjectDetailModa
   const { data: engineers } = useQuery<UserType[]>({
     queryKey: ["/api/users/all"],
     enabled: open,
-    // Include technical, engineer roles or users in implementation-related work
+    // Include technical, engineer, and support roles for implementation work
     select: (users) => users.filter((u) => {
       const role = u.role?.toLowerCase() || "";
-      return role === "engineer" || role === "technical" || role.includes("engineer") || role.includes("implementation");
+      return role === "engineer" || role === "technical" || role === "support" || 
+             role.includes("engineer") || role.includes("implementation") || role.includes("support");
     }),
   });
 
