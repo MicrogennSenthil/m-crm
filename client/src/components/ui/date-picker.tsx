@@ -30,11 +30,23 @@ export function DatePicker({
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
-  // Convert string value to Date if needed
+  // Convert string value to Date if needed - handle timezone properly
   const dateValue = React.useMemo(() => {
     if (!value) return undefined
     if (value instanceof Date) return value
     if (typeof value === "string") {
+      // Parse date string without timezone conversion
+      // For "YYYY-MM-DD" format, parse as local date
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number)
+        return new Date(year, month - 1, day)
+      }
+      // For ISO strings with time, extract just the date part
+      if (value.includes('T')) {
+        const datePart = value.split('T')[0]
+        const [year, month, day] = datePart.split('-').map(Number)
+        return new Date(year, month - 1, day)
+      }
       const parsed = new Date(value)
       return isNaN(parsed.getTime()) ? undefined : parsed
     }
@@ -91,10 +103,23 @@ export function DatePickerCompact({
 }: DatePickerCompactProps) {
   const [open, setOpen] = React.useState(false)
 
+  // Convert string value to Date if needed - handle timezone properly
   const dateValue = React.useMemo(() => {
     if (!value) return undefined
     if (value instanceof Date) return value
     if (typeof value === "string") {
+      // Parse date string without timezone conversion
+      // For "YYYY-MM-DD" format, parse as local date
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number)
+        return new Date(year, month - 1, day)
+      }
+      // For ISO strings with time, extract just the date part
+      if (value.includes('T')) {
+        const datePart = value.split('T')[0]
+        const [year, month, day] = datePart.split('-').map(Number)
+        return new Date(year, month - 1, day)
+      }
       const parsed = new Date(value)
       return isNaN(parsed.getTime()) ? undefined : parsed
     }

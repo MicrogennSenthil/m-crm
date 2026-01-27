@@ -213,7 +213,14 @@ function ModuleInstallationCard({
               <Label className="text-xs">Scheduled Start</Label>
               <DatePickerCompact
                 value={localData.scheduledStartDate}
-                onChange={(date) => updateField("scheduledStartDate", date ? date.toISOString().split('T')[0] : "")}
+                onChange={(date) => {
+                  if (!date) return updateField("scheduledStartDate", "");
+                  // Format as YYYY-MM-DD using local date parts to avoid timezone issues
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  updateField("scheduledStartDate", `${yyyy}-${mm}-${dd}`);
+                }}
                 placeholder="Select start date"
                 data-testid={`input-scheduled-start-${pm.id}`}
               />
@@ -223,7 +230,14 @@ function ModuleInstallationCard({
               <Label className="text-xs">Scheduled End</Label>
               <DatePickerCompact
                 value={localData.scheduledEndDate}
-                onChange={(date) => updateField("scheduledEndDate", date ? date.toISOString().split('T')[0] : "")}
+                onChange={(date) => {
+                  if (!date) return updateField("scheduledEndDate", "");
+                  // Format as YYYY-MM-DD using local date parts to avoid timezone issues
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  updateField("scheduledEndDate", `${yyyy}-${mm}-${dd}`);
+                }}
                 placeholder="Select end date"
                 data-testid={`input-scheduled-end-${pm.id}`}
               />
@@ -264,7 +278,14 @@ function ModuleInstallationCard({
               <Label className="text-xs">Actual Visit Date</Label>
               <DatePickerCompact
                 value={localData.actualVisitDate}
-                onChange={(date) => updateField("actualVisitDate", date ? date.toISOString().split('T')[0] : "")}
+                onChange={(date) => {
+                  if (!date) return updateField("actualVisitDate", "");
+                  // Format as YYYY-MM-DD using local date parts to avoid timezone issues
+                  const yyyy = date.getFullYear();
+                  const mm = String(date.getMonth() + 1).padStart(2, '0');
+                  const dd = String(date.getDate()).padStart(2, '0');
+                  updateField("actualVisitDate", `${yyyy}-${mm}-${dd}`);
+                }}
                 placeholder="Select visit date"
                 data-testid={`input-actual-visit-${pm.id}`}
               />
