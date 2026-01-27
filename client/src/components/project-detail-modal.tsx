@@ -102,17 +102,26 @@ function ModuleInstallationCard({
     setHasChanges(true);
   };
 
+  // Helper to convert date string to ISO without timezone shift
+  const toLocalISOString = (dateStr: string) => {
+    if (!dateStr) return null;
+    // Parse as local date and add noon time to avoid timezone issues
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day, 12, 0, 0);
+    return localDate.toISOString();
+  };
+
   const handleSave = () => {
     updateModuleMutation.mutate({
       id: pm.id,
       assignedEngineerId: localData.assignedEngineerId || null,
       departmentName: localData.departmentName || null,
-      scheduledStartDate: localData.scheduledStartDate ? new Date(localData.scheduledStartDate).toISOString() : null,
-      scheduledEndDate: localData.scheduledEndDate ? new Date(localData.scheduledEndDate).toISOString() : null,
+      scheduledStartDate: toLocalISOString(localData.scheduledStartDate),
+      scheduledEndDate: toLocalISOString(localData.scheduledEndDate),
       installationStatus: localData.installationStatus,
       installationNotes: localData.installationNotes || null,
       actualEngineerId: localData.actualEngineerId || null,
-      actualVisitDate: localData.actualVisitDate ? new Date(localData.actualVisitDate).toISOString() : null,
+      actualVisitDate: toLocalISOString(localData.actualVisitDate),
     }, {
       onSuccess: () => {
         setHasChanges(false);
