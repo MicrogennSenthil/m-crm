@@ -7,3 +7,5 @@ replit.nix
 .upm/
 .cache/
 .config/
+*.zip
+attached_assets/
