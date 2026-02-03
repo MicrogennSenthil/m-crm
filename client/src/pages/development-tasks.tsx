@@ -1529,6 +1529,12 @@ export default function DevelopmentTasks() {
                     </Button>
                   </>
                 )}
+                {(selectedTask.status === "completed" || selectedTask.status === "incomplete") && (isAdmin || canEdit("development_tasks")) && (
+                  <Button variant="secondary" onClick={() => handleOpenCompletionDialog("complete")} data-testid="button-update-completion">
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Update Completion
+                  </Button>
+                )}
                 {selectedTask.status === "incomplete" && isAdmin && (
                   <Button 
                     onClick={() => setIsReassignDialogOpen(true)} 
