@@ -1211,12 +1211,12 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   
                   {/* Interest Status Selection */}
                   <div className="space-y-3 p-3 border rounded-md">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <Button
                         size="sm"
                         variant={interestStatus === "interested" ? "default" : "outline"}
                         onClick={() => setInterestStatus("interested")}
-                        className={interestStatus === "interested" ? "bg-green-600 hover:bg-green-700" : ""}
+                        className={cn("w-full", interestStatus === "interested" ? "bg-green-600 hover:bg-green-700" : "")}
                         data-testid="button-interested"
                       >
                         <CheckCircle className="h-4 w-4 mr-1" />
@@ -1226,7 +1226,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         size="sm"
                         variant={interestStatus === "followup" ? "default" : "outline"}
                         onClick={() => setInterestStatus("followup")}
-                        className={interestStatus === "followup" ? "bg-blue-600 hover:bg-blue-700" : ""}
+                        className={cn("w-full", interestStatus === "followup" ? "bg-blue-600 hover:bg-blue-700" : "")}
                         data-testid="button-followup"
                       >
                         <Clock className="h-4 w-4 mr-1" />
@@ -1236,7 +1236,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                         size="sm"
                         variant={interestStatus === "not_interested" ? "default" : "outline"}
                         onClick={() => setInterestStatus("not_interested")}
-                        className={interestStatus === "not_interested" ? "bg-red-600 hover:bg-red-700" : ""}
+                        className={cn("w-full", interestStatus === "not_interested" ? "bg-red-600 hover:bg-red-700" : "")}
                         data-testid="button-not-interested"
                       >
                         <XCircle className="h-4 w-4 mr-1" />
