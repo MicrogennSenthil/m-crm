@@ -161,7 +161,12 @@ export default function MarketingReports() {
     
     return reports.filter(report => {
       if (fromDate && toDate && report.reportDate) {
-        const reportDate = new Date(report.reportDate);
+        // Parse the date string and normalize to local date for comparison
+        const reportDateStr = String(report.reportDate);
+        const datePart = reportDateStr.includes('T') ? reportDateStr.split('T')[0] : reportDateStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const reportDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(reportDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

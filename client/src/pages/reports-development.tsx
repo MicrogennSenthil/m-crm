@@ -155,7 +155,12 @@ export default function DevelopmentReports() {
     
     return tasks.filter(task => {
       if (fromDate && toDate && task.createdAt) {
-        const taskDate = new Date(task.createdAt);
+        // Parse the date string and normalize to local date for comparison
+        const createdAtStr = String(task.createdAt);
+        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const taskDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(taskDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

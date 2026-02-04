@@ -157,7 +157,12 @@ export default function SalesReports() {
       }
       
       if (fromDate && toDate && lead.createdAt) {
-        const leadDate = new Date(lead.createdAt);
+        // Parse the date string and normalize to local date for comparison
+        const createdAtStr = String(lead.createdAt);
+        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const leadDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(leadDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

@@ -166,7 +166,12 @@ export default function FeedbackReports() {
     
     return feedbackList.filter(fb => {
       if (fromDate && toDate && fb.submittedAt) {
-        const feedbackDate = new Date(fb.submittedAt);
+        // Parse the date string and normalize to local date for comparison
+        const submittedAtStr = String(fb.submittedAt);
+        const datePart = submittedAtStr.includes('T') ? submittedAtStr.split('T')[0] : submittedAtStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const feedbackDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(feedbackDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

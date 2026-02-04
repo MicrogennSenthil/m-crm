@@ -151,7 +151,12 @@ export default function SupportReports() {
     
     return tickets.filter(ticket => {
       if (fromDate && toDate && ticket.createdAt) {
-        const ticketDate = new Date(ticket.createdAt);
+        // Parse the date string and normalize to local date for comparison
+        const createdAtStr = String(ticket.createdAt);
+        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const ticketDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(ticketDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

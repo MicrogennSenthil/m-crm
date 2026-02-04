@@ -179,7 +179,12 @@ export default function AccountsReports() {
     
     return contracts.filter(contract => {
       if (fromDate && toDate && contract.startDate) {
-        const contractDate = new Date(contract.startDate);
+        // Parse the date string and normalize to local date for comparison
+        const startDateStr = String(contract.startDate);
+        const datePart = startDateStr.includes('T') ? startDateStr.split('T')[0] : startDateStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const contractDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(contractDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }

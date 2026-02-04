@@ -150,7 +150,12 @@ export default function ImplementationReports() {
     
     return projects.filter(project => {
       if (fromDate && toDate && project.createdAt) {
-        const projectDate = new Date(project.createdAt);
+        // Parse the date string and normalize to local date for comparison
+        const createdAtStr = String(project.createdAt);
+        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        const projectDate = new Date(year, month - 1, day);
+        
         if (!isWithinInterval(projectDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
