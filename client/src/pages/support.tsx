@@ -81,8 +81,8 @@ export default function Support() {
   const [sortOrder, setSortOrder] = useState<string>("status");
   const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
-  const [toDate, setToDate] = useState<Date | undefined>(undefined);
+  const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
+  const [toDate, setToDate] = useState<Date | undefined>(new Date());
   const [asOnDate, setAsOnDate] = useState<Date | undefined>(undefined);
   const [dateFilterMode, setDateFilterMode] = useState<"range" | "asOn">("range");
   const [showDateFilters, setShowDateFilters] = useState(false);
