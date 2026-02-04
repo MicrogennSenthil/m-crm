@@ -430,34 +430,33 @@ export default function Support() {
             </Button>
           )}
 
-          <div className="border-l pl-3 ml-auto flex items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Assigned To</Label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger className="w-[180px] min-h-[36px]" data-testid="select-employee-filter">
-                  <SelectValue placeholder="All Employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Employees</SelectItem>
-                  {supportEmployees?.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id.toString()}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedEmployee !== "all" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedEmployee("all")}
-                data-testid="button-clear-employee-filter"
-              >
-                Clear
-              </Button>
-            )}
+          <div className="space-y-1">
+            <Label className="text-xs">Assigned To</Label>
+            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+              <SelectTrigger className="w-[180px] min-h-[36px]" data-testid="select-employee-filter">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {supportEmployees?.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id.toString()}>
+                    {emp.firstName} {emp.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          
+          {selectedEmployee !== "all" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedEmployee("all")}
+              data-testid="button-clear-employee-filter"
+            >
+              Clear
+            </Button>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
