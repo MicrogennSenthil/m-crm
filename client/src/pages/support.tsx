@@ -161,16 +161,41 @@ export default function Support() {
   // Helper to check if ticket is in development (level 3 OR has active development task)
   const isDevelopmentTicket = (t: any) => t.escalationLevel === 3 || t.hasActiveDevelopmentTask;
   
-  // Filter tickets by category first (Support = level 1-2 with no dev task, Development = level 3 OR has active dev task)
-  const categoryFilteredTickets = tickets?.filter(t => {
+  // Helper to check if ticket passes date and employee filters
+  const passesDateAndEmployeeFilter = (ticket: any) => {
+    // Date filtering
+    if (ticket.createdAt) {
+      const ticketDate = new Date(ticket.createdAt);
+      
+      if (dateFilterMode === "asOn" && asOnDate) {
+        if (ticketDate > endOfDay(asOnDate)) return false;
+      } else if (dateFilterMode === "range") {
+        if (fromDate && ticketDate < startOfDay(fromDate)) return false;
+        if (toDate && ticketDate > endOfDay(toDate)) return false;
+      }
+    }
+    
+    // Employee filtering
+    if (selectedEmployee !== "all") {
+      if (ticket.assignedTo !== parseInt(selectedEmployee)) return false;
+    }
+    
+    return true;
+  };
+
+  // Apply date and employee filters first
+  const dateEmployeeFilteredTickets = tickets?.filter(passesDateAndEmployeeFilter) || [];
+
+  // Filter tickets by category (Support = level 1-2 with no dev task, Development = level 3 OR has active dev task)
+  const categoryFilteredTickets = dateEmployeeFilteredTickets.filter(t => {
     if (categoryTab === "support") return !isDevelopmentTicket(t);
     if (categoryTab === "development") return isDevelopmentTicket(t);
     return true;
-  }) || [];
+  });
 
-  // Category counts
-  const supportCount = tickets?.filter(t => !isDevelopmentTicket(t)).length || 0;
-  const developmentCount = tickets?.filter(t => isDevelopmentTicket(t)).length || 0;
+  // Category counts (based on date/employee filtered tickets)
+  const supportCount = dateEmployeeFilteredTickets.filter(t => !isDevelopmentTicket(t)).length;
+  const developmentCount = dateEmployeeFilteredTickets.filter(t => isDevelopmentTicket(t)).length;
   
   // Calculate counts for status tabs (based on category-filtered tickets)
   const allCount = categoryFilteredTickets.length;
@@ -205,26 +230,7 @@ export default function Support() {
     if (activeTab === "completed" && !RESOLVED_STATUSES.includes(ticket.status)) return false;
     if (activeTab === "reminders_due" && (!ticket.reminderDate || new Date(ticket.reminderDate).toDateString() !== today || RESOLVED_STATUSES.includes(ticket.status))) return false;
     
-    // Date filtering
-    if (ticket.createdAt) {
-      const ticketDate = new Date(ticket.createdAt);
-      
-      if (dateFilterMode === "asOn" && asOnDate) {
-        // "As On Date" - show tickets created on or before this date
-        if (ticketDate > endOfDay(asOnDate)) return false;
-      } else if (dateFilterMode === "range") {
-        // Date range filtering
-        if (fromDate && ticketDate < startOfDay(fromDate)) return false;
-        if (toDate && ticketDate > endOfDay(toDate)) return false;
-      }
-    }
-    
-    // Employee filtering
-    if (selectedEmployee !== "all") {
-      if (ticket.assignedTo !== parseInt(selectedEmployee)) return false;
-    }
-    
-    // Search filtering
+    // Search filtering (date and employee filters already applied in categoryFilteredTickets)
     if (!searchQuery) return true;
     
     const query = searchQuery.toLowerCase();
