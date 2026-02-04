@@ -127,7 +127,7 @@ export default function AccountsReports() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportType>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [fromDate, setFromDate] = useState<Date | undefined>(subDays(new Date(), 90));
+  const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
   const [toDate, setToDate] = useState<Date | undefined>(new Date());
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
