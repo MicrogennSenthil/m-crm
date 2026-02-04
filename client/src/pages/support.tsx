@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX } from "lucide-react";
+import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX, Calendar as CalendarIcon, Filter } from "lucide-react";
+import { format, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,11 @@ import {
 } from "@/components/ui/dialog";
 import { TicketForm } from "@/components/ticket-form";
 import { TicketDetailModal } from "@/components/ticket-detail-modal";
+import { DatePickerCompact } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import type { Ticket } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -75,6 +81,11 @@ export default function Support() {
   const [sortOrder, setSortOrder] = useState<string>("status");
   const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
+  const [toDate, setToDate] = useState<Date | undefined>(undefined);
+  const [asOnDate, setAsOnDate] = useState<Date | undefined>(undefined);
+  const [dateFilterMode, setDateFilterMode] = useState<"range" | "asOn">("range");
+  const [showDateFilters, setShowDateFilters] = useState(false);
   const [layout, setLayout] = useState<LayoutType>(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("support-layout") as LayoutType) || "table";
@@ -187,6 +198,20 @@ export default function Support() {
     if (activeTab === "in_progress" && !["in_progress", "escalated", "pending_customer"].includes(ticket.status)) return false;
     if (activeTab === "completed" && !RESOLVED_STATUSES.includes(ticket.status)) return false;
     if (activeTab === "reminders_due" && (!ticket.reminderDate || new Date(ticket.reminderDate).toDateString() !== today || RESOLVED_STATUSES.includes(ticket.status))) return false;
+    
+    // Date filtering
+    if (ticket.createdAt) {
+      const ticketDate = new Date(ticket.createdAt);
+      
+      if (dateFilterMode === "asOn" && asOnDate) {
+        // "As On Date" - show tickets created on or before this date
+        if (ticketDate > endOfDay(asOnDate)) return false;
+      } else if (dateFilterMode === "range") {
+        // Date range filtering
+        if (fromDate && ticketDate < startOfDay(fromDate)) return false;
+        if (toDate && ticketDate > endOfDay(toDate)) return false;
+      }
+    }
     
     // Search filtering
     if (!searchQuery) return true;
@@ -320,6 +345,80 @@ export default function Support() {
                 </TabsTrigger>
               )}
             </TabsList>
+
+        {/* Date Filters */}
+        <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-md border">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={dateFilterMode === "range" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setDateFilterMode("range");
+                setAsOnDate(undefined);
+              }}
+              data-testid="button-date-range-mode"
+            >
+              Date Range
+            </Button>
+            <Button
+              variant={dateFilterMode === "asOn" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setDateFilterMode("asOn");
+                setFromDate(undefined);
+                setToDate(undefined);
+              }}
+              data-testid="button-as-on-mode"
+            >
+              As On Date
+            </Button>
+          </div>
+          
+          {dateFilterMode === "range" ? (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">From Date</Label>
+                <DatePickerCompact
+                  value={fromDate}
+                  onChange={setFromDate}
+                  placeholder="Start date"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">To Date</Label>
+                <DatePickerCompact
+                  value={toDate}
+                  onChange={setToDate}
+                  placeholder="End date"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs">As On Date</Label>
+              <DatePickerCompact
+                value={asOnDate}
+                onChange={setAsOnDate}
+                placeholder="Select date"
+              />
+            </div>
+          )}
+          
+          {(fromDate || toDate || asOnDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFromDate(undefined);
+                setToDate(undefined);
+                setAsOnDate(undefined);
+              }}
+              data-testid="button-clear-date-filters"
+            >
+              Clear Dates
+            </Button>
+          )}
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
