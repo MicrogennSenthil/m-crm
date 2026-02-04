@@ -137,13 +137,14 @@ export default function SupportReports() {
     queryKey: ["/api/users"],
   });
 
-  // Filter users to get support engineers (users with support role or assigned to tickets)
+  // Filter users to get support engineers (users with support-related roles)
   const supportEngineers = useMemo(() => {
     if (!users) return [];
-    // Include all users who could be support engineers
+    // Include all users who could be assigned to support tickets
     return users.filter(u => 
       u.role === "support" || 
-      u.role === "engineer" || 
+      u.role === "supporthead" || 
+      u.role === "technical" || 
       u.role === "admin"
     );
   }, [users]);
