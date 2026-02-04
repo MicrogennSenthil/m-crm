@@ -243,8 +243,53 @@ export default function MarketingDailyReport() {
       setIsFormOpen(false);
       resetForm();
     },
-    onError: (error: any) => {
-      toast({ title: "Error creating report", description: error.message, variant: "destructive" });
+    onError: async (error: any) => {
+      // Check if error indicates a report already exists for this date
+      if (error.message?.includes("already exists") || error.existingReportId) {
+        // Try to find the existing report ID from the error
+        let existingReportId = error.existingReportId;
+        if (!existingReportId && error.message) {
+          // Try to extract from JSON error message
+          try {
+            const errorData = JSON.parse(error.message);
+            existingReportId = errorData.existingReportId;
+          } catch {
+            // Not JSON, try regex
+            const match = error.message.match(/existingReportId['":\s]+([a-f0-9-]+)/i);
+            if (match) existingReportId = match[1];
+          }
+        }
+        
+        if (existingReportId) {
+          // Fetch the existing report and open in edit mode
+          try {
+            const response = await fetch(`/api/marketing-reports/${existingReportId}`, {
+              credentials: 'include'
+            });
+            if (response.ok) {
+              const fullReport = await response.json();
+              toast({
+                title: "Report already exists for today",
+                description: "Opening your existing report for editing.",
+              });
+              openEditMode(fullReport);
+              return;
+            }
+          } catch (fetchError) {
+            console.error("Error fetching existing report:", fetchError);
+          }
+        }
+        
+        // Fallback - show friendly message
+        toast({
+          title: "Report already exists",
+          description: "A report for today already exists. Please edit the existing report instead.",
+        });
+        setIsFormOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
+      } else {
+        toast({ title: "Error creating report", description: error.message, variant: "destructive" });
+      }
     },
   });
 
