@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX, Calendar as CalendarIcon, Filter } from "lucide-react";
-import { format, startOfDay, endOfDay, isWithinInterval } from "date-fns";
+import { format, startOfDay, endOfDay, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
 import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
@@ -81,8 +81,8 @@ export default function Support() {
   const [sortOrder, setSortOrder] = useState<string>("status");
   const [categoryTab, setCategoryTab] = useState<string>("all"); // all, support or development
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
-  const [toDate, setToDate] = useState<Date | undefined>(new Date());
+  const [fromDate, setFromDate] = useState<Date | undefined>(startOfMonth(new Date()));
+  const [toDate, setToDate] = useState<Date | undefined>(endOfMonth(new Date()));
   const [asOnDate, setAsOnDate] = useState<Date | undefined>(undefined);
   const [dateFilterMode, setDateFilterMode] = useState<"range" | "asOn">("range");
   const [showDateFilters, setShowDateFilters] = useState(false);
