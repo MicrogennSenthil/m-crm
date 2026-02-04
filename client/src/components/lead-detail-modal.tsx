@@ -427,6 +427,8 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         title: "Interest Status Updated",
         description: interestStatus === "interested" 
           ? "Seed marked as interested with followup scheduled" 
+          : interestStatus === "followup"
+          ? "Seed marked for followup with reminder scheduled"
           : "Seed marked as not interested",
       });
     },
@@ -1166,6 +1168,8 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       "mb-3 p-3 border rounded-md",
                       (lead as any).interestStatus === "interested" 
                         ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"
+                        : (lead as any).interestStatus === "followup"
+                        ? "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800"
                         : "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800"
                     )}>
                       <div className="flex items-center gap-2 text-sm">
@@ -1174,6 +1178,11 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                             <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                             <span className="font-medium text-green-700 dark:text-green-300">Interested</span>
                           </>
+                        ) : (lead as any).interestStatus === "followup" ? (
+                          <>
+                            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            <span className="font-medium text-blue-700 dark:text-blue-300">Followup Scheduled</span>
+                          </>
                         ) : (
                           <>
                             <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -1181,8 +1190,13 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           </>
                         )}
                       </div>
-                      {(lead as any).interestStatus === "interested" && (lead as any).nextFollowupDate && (
-                        <div className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                      {((lead as any).interestStatus === "interested" || (lead as any).interestStatus === "followup") && (lead as any).nextFollowupDate && (
+                        <div className={cn(
+                          "mt-2 flex items-center gap-2 text-sm",
+                          (lead as any).interestStatus === "interested" 
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-blue-600 dark:text-blue-400"
+                        )}>
                           <CalendarIcon className="h-3 w-3" />
                           <span>Next Followup: {format(new Date((lead as any).nextFollowupDate), "PPP 'at' h:mm a")}</span>
                         </div>
@@ -1197,7 +1211,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                   
                   {/* Interest Status Selection */}
                   <div className="space-y-3 p-3 border rounded-md">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         variant={interestStatus === "interested" ? "default" : "outline"}
@@ -1207,6 +1221,16 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       >
                         <CheckCircle className="h-4 w-4 mr-1" />
                         Interested
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={interestStatus === "followup" ? "default" : "outline"}
+                        onClick={() => setInterestStatus("followup")}
+                        className={interestStatus === "followup" ? "bg-blue-600 hover:bg-blue-700" : ""}
+                        data-testid="button-followup"
+                      >
+                        <Clock className="h-4 w-4 mr-1" />
+                        Followup
                       </Button>
                       <Button
                         size="sm"
@@ -1246,8 +1270,8 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       )}
                     </div>
                     
-                    {/* If Interested - Show Next Followup Date */}
-                    {interestStatus === "interested" && (
+                    {/* If Interested or Followup - Show Next Followup Date */}
+                    {(interestStatus === "interested" || interestStatus === "followup") && (
                       <div className="space-y-2">
                         <Label>Next Followup Date & Time</Label>
                         <div className="flex gap-2">
@@ -1319,7 +1343,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           if (interestStatus === "not_interested" && notInterestedReason) {
                             data.notInterestedReason = notInterestedReason;
                           }
-                          if (interestStatus === "interested" && nextFollowupDate) {
+                          if ((interestStatus === "interested" || interestStatus === "followup") && nextFollowupDate) {
                             const [hours, minutes] = nextFollowupTime.split(":").map(Number);
                             const dateWithTime = new Date(nextFollowupDate);
                             dateWithTime.setHours(hours, minutes, 0, 0);
@@ -1327,7 +1351,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                           }
                           updateInterestMutation.mutate(data);
                         }}
-                        disabled={updateInterestMutation.isPending || (interestStatus === "interested" && !nextFollowupDate)}
+                        disabled={updateInterestMutation.isPending || ((interestStatus === "interested" || interestStatus === "followup") && !nextFollowupDate)}
                         className="w-full"
                         data-testid="button-save-interest"
                       >

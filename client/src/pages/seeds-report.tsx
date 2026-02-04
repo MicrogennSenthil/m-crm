@@ -85,6 +85,8 @@ export default function SeedsReportPage() {
     switch (tab) {
       case "interested":
         return "interested";
+      case "followup":
+        return "followup";
       case "not_interested":
         return "not_interested";
       case "undecided":
@@ -215,8 +217,9 @@ export default function SeedsReportPage() {
   const stats = useMemo(() => ({
     total: filteredSeeds.length,
     interested: filteredSeeds.filter((s) => s.interestStatus === "interested").length,
+    followupScheduled: filteredSeeds.filter((s) => s.interestStatus === "followup").length,
     notInterested: filteredSeeds.filter((s) => s.interestStatus === "not_interested").length,
-    undecided: filteredSeeds.filter((s) => !s.interestStatus).length,
+    undecided: filteredSeeds.filter((s) => !s.interestStatus || s.interestStatus === "undecided").length,
     existingCustomers: filteredSeeds.filter((s) => s.isExistingCustomer === true).length,
     upcomingFollowups: followupReminders.length,
   }), [filteredSeeds, followupReminders]);
@@ -333,6 +336,13 @@ export default function SeedsReportPage() {
           <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
             <CheckCircle className="h-3 w-3 mr-1" />
             Interested
+          </Badge>
+        );
+      case "followup":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+            <Clock className="h-3 w-3 mr-1" />
+            Followup
           </Badge>
         );
       case "not_interested":
@@ -678,6 +688,9 @@ export default function SeedsReportPage() {
             <TabsTrigger value="interested" data-testid="tab-interested">
               Interested ({stats.interested})
             </TabsTrigger>
+            <TabsTrigger value="followup" data-testid="tab-followup-scheduled">
+              Followup ({stats.followupScheduled})
+            </TabsTrigger>
             <TabsTrigger value="not_interested" data-testid="tab-not-interested">
               Not Interested ({stats.notInterested})
             </TabsTrigger>
@@ -787,6 +800,29 @@ export default function SeedsReportPage() {
             onSeedClick={setSelectedSeed}
             showFollowupDate
           />
+        </TabsContent>
+
+        <TabsContent value="followup" className="mt-0">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-blue-600" />
+                Followup Scheduled
+              </CardTitle>
+              <CardDescription>
+                Seeds marked for followup with scheduled reminder dates
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SeedsTable
+                seeds={filteredSeeds.filter((s) => s.interestStatus === "followup")}
+                isLoading={isLoading}
+                getInterestBadge={getInterestBadge}
+                onSeedClick={setSelectedSeed}
+                showFollowupDate
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="not_interested" className="mt-0">
