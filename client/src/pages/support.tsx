@@ -325,7 +325,7 @@ export default function Support() {
       <Tabs value={categoryTab} onValueChange={(val) => { setCategoryTab(val); setActiveTab("all"); }} className="space-y-4">
         <TabsList className="flex-wrap" data-testid="tabs-category">
           <TabsTrigger value="all" data-testid="tab-all-categories">
-            All ({tickets?.length || 0})
+            All ({dateEmployeeFilteredTickets.length})
           </TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support">
             Support ({supportCount})
