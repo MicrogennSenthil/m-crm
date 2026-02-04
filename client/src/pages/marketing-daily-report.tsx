@@ -444,32 +444,71 @@ export default function MarketingDailyReport() {
     }
   };
 
-  const openEditMode = (report: MarketingDailyReport) => {
-    setEditingReport(report);
-    setFormData({
-      reportDate: format(new Date(report.reportDate), "yyyy-MM-dd"),
-      websiteSessions: report.websiteSessions?.toString() || "",
-      bounceRate: report.bounceRate || "",
-      websiteConversions: report.websiteConversions?.toString() || "",
-      socialLikes: report.socialLikes?.toString() || "",
-      socialShares: report.socialShares?.toString() || "",
-      socialComments: report.socialComments?.toString() || "",
-      socialCtr: report.socialCtr || "",
-      emailOpenRate: report.emailOpenRate || "",
-      emailClickRate: report.emailClickRate || "",
-      emailConversions: report.emailConversions?.toString() || "",
-      adBudgetUsed: report.adBudgetUsed?.toString() || "",
-      leadsGenerated: report.leadsGenerated?.toString() || "",
-      costPerLead: report.costPerLead?.toString() || "",
-      achievements: report.achievements?.length ? report.achievements : [""],
-      issues: report.issues?.length ? report.issues : [""],
-      tomorrowPlan: report.tomorrowPlan?.length ? report.tomorrowPlan : [""],
-      additionalNotes: report.additionalNotes || "",
-    });
-    setTaskEntries(report.taskEntries?.length ? report.taskEntries : [
-      { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
-    ]);
-    setIsFormOpen(true);
+  const openEditMode = async (report: MarketingDailyReport) => {
+    // Always fetch the full report to ensure we have taskEntries
+    try {
+      const response = await fetch(`/api/marketing-reports/${report.id}`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const fullReport = await response.json();
+        setEditingReport(fullReport);
+        setFormData({
+          reportDate: format(new Date(fullReport.reportDate), "yyyy-MM-dd"),
+          websiteSessions: fullReport.websiteSessions?.toString() || "",
+          bounceRate: fullReport.bounceRate || "",
+          websiteConversions: fullReport.websiteConversions?.toString() || "",
+          socialLikes: fullReport.socialLikes?.toString() || "",
+          socialShares: fullReport.socialShares?.toString() || "",
+          socialComments: fullReport.socialComments?.toString() || "",
+          socialCtr: fullReport.socialCtr || "",
+          emailOpenRate: fullReport.emailOpenRate || "",
+          emailClickRate: fullReport.emailClickRate || "",
+          emailConversions: fullReport.emailConversions?.toString() || "",
+          adBudgetUsed: fullReport.adBudgetUsed?.toString() || "",
+          leadsGenerated: fullReport.leadsGenerated?.toString() || "",
+          costPerLead: fullReport.costPerLead?.toString() || "",
+          achievements: fullReport.achievements?.length ? fullReport.achievements : [""],
+          issues: fullReport.issues?.length ? fullReport.issues : [""],
+          tomorrowPlan: fullReport.tomorrowPlan?.length ? fullReport.tomorrowPlan : [""],
+          additionalNotes: fullReport.additionalNotes || "",
+        });
+        setTaskEntries(fullReport.taskEntries?.length ? fullReport.taskEntries : [
+          { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+        ]);
+        setIsFormOpen(true);
+      } else {
+        // Fallback to using the provided report data
+        setEditingReport(report);
+        setFormData({
+          reportDate: format(new Date(report.reportDate), "yyyy-MM-dd"),
+          websiteSessions: report.websiteSessions?.toString() || "",
+          bounceRate: report.bounceRate || "",
+          websiteConversions: report.websiteConversions?.toString() || "",
+          socialLikes: report.socialLikes?.toString() || "",
+          socialShares: report.socialShares?.toString() || "",
+          socialComments: report.socialComments?.toString() || "",
+          socialCtr: report.socialCtr || "",
+          emailOpenRate: report.emailOpenRate || "",
+          emailClickRate: report.emailClickRate || "",
+          emailConversions: report.emailConversions?.toString() || "",
+          adBudgetUsed: report.adBudgetUsed?.toString() || "",
+          leadsGenerated: report.leadsGenerated?.toString() || "",
+          costPerLead: report.costPerLead?.toString() || "",
+          achievements: report.achievements?.length ? report.achievements : [""],
+          issues: report.issues?.length ? report.issues : [""],
+          tomorrowPlan: report.tomorrowPlan?.length ? report.tomorrowPlan : [""],
+          additionalNotes: report.additionalNotes || "",
+        });
+        setTaskEntries(report.taskEntries?.length ? report.taskEntries : [
+          { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+        ]);
+        setIsFormOpen(true);
+      }
+    } catch (error) {
+      console.error("Error fetching full report:", error);
+      toast({ title: "Error loading report", variant: "destructive" });
+    }
   };
 
   const getStatusBadge = (status: string) => {
