@@ -53,7 +53,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { Task, User, Department } from "@shared/schema";
-import { format, subDays, isWithinInterval, isPast, isToday } from "date-fns";
+import { format, subDays, isWithinInterval, isPast, isToday, startOfDay, endOfDay } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "pending" | "completed" | "overdue";
@@ -178,7 +178,7 @@ export default function TasksReports() {
     return tasks.filter(task => {
       if (fromDate && toDate && task.createdAt) {
         const taskDate = new Date(task.createdAt);
-        if (!isWithinInterval(taskDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(taskDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

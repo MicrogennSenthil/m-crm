@@ -54,7 +54,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { CustomerContract, Customer, ContractType, User } from "@shared/schema";
-import { format, subDays, isWithinInterval, differenceInDays, addDays } from "date-fns";
+import { format, subDays, isWithinInterval, differenceInDays, addDays, startOfDay, endOfDay } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "active" | "expiring" | "expired";
@@ -180,7 +180,7 @@ export default function AccountsReports() {
     return contracts.filter(contract => {
       if (fromDate && toDate && contract.startDate) {
         const contractDate = new Date(contract.startDate);
-        if (!isWithinInterval(contractDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(contractDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

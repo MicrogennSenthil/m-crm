@@ -54,7 +54,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { Feedback, User, Ticket, Customer } from "@shared/schema";
-import { format, subDays, isWithinInterval, parseISO } from "date-fns";
+import { format, subDays, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "satisfied" | "unsatisfied" | "reopened";
@@ -167,7 +167,7 @@ export default function FeedbackReports() {
     return feedbackList.filter(fb => {
       if (fromDate && toDate && fb.submittedAt) {
         const feedbackDate = new Date(fb.submittedAt);
-        if (!isWithinInterval(feedbackDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(feedbackDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

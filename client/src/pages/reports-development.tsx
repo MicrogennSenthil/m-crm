@@ -53,7 +53,7 @@ import {
   ListTodo,
 } from "lucide-react";
 import type { DevelopmentTask, User } from "@shared/schema";
-import { format, subDays, isWithinInterval } from "date-fns";
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 
 type ReportType = "pending" | "in_progress" | "completed" | "overdue" | "all";
 
@@ -156,7 +156,7 @@ export default function DevelopmentReports() {
     return tasks.filter(task => {
       if (fromDate && toDate && task.createdAt) {
         const taskDate = new Date(task.createdAt);
-        if (!isWithinInterval(taskDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(taskDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

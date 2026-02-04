@@ -53,7 +53,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { MarketingDailyReport, User } from "@shared/schema";
-import { format, subDays, isWithinInterval } from "date-fns";
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 
 type ReportType = "all" | "approved" | "pending" | "rejected";
@@ -162,7 +162,7 @@ export default function MarketingReports() {
     return reports.filter(report => {
       if (fromDate && toDate && report.reportDate) {
         const reportDate = new Date(report.reportDate);
-        if (!isWithinInterval(reportDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(reportDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

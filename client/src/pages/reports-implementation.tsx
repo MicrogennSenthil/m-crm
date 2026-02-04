@@ -52,7 +52,7 @@ import {
   Building,
 } from "lucide-react";
 import type { Project, Customer } from "@shared/schema";
-import { format, subDays, isWithinInterval } from "date-fns";
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
@@ -151,7 +151,7 @@ export default function ImplementationReports() {
     return projects.filter(project => {
       if (fromDate && toDate && project.createdAt) {
         const projectDate = new Date(project.createdAt);
-        if (!isWithinInterval(projectDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(projectDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

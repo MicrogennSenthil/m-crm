@@ -53,7 +53,7 @@ import {
   History,
 } from "lucide-react";
 import type { Lead, Customer } from "@shared/schema";
-import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfDay } from "date-fns";
+import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
@@ -158,7 +158,7 @@ export default function SalesReports() {
       
       if (fromDate && toDate && lead.createdAt) {
         const leadDate = new Date(lead.createdAt);
-        if (!isWithinInterval(leadDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(leadDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }

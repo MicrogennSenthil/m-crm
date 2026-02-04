@@ -51,7 +51,7 @@ import {
   Headphones,
 } from "lucide-react";
 import type { Ticket, Customer } from "@shared/schema";
-import { format, subDays, isWithinInterval } from "date-fns";
+import { format, subDays, isWithinInterval, endOfDay, startOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
@@ -152,7 +152,7 @@ export default function SupportReports() {
     return tickets.filter(ticket => {
       if (fromDate && toDate && ticket.createdAt) {
         const ticketDate = new Date(ticket.createdAt);
-        if (!isWithinInterval(ticketDate, { start: fromDate, end: toDate })) {
+        if (!isWithinInterval(ticketDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
           return false;
         }
       }
