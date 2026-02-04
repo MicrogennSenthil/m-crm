@@ -184,14 +184,19 @@ export default function MarketingDailyReport() {
 
   const isDeptHead = deptHeadStatus?.isHead || false;
 
-  // Find today's report for the current user
-  const getTodaysReport = () => {
-    const today = format(new Date(), "yyyy-MM-dd");
+  // Find a report for the current user by date
+  const getReportByDate = (dateStr: string) => {
     return reports.find(report => {
       const reportDateStr = String(report.reportDate);
       const datePart = reportDateStr.includes('T') ? reportDateStr.split('T')[0] : reportDateStr.split(' ')[0];
-      return datePart === today && report.userId === user?.id;
+      return datePart === dateStr && report.userId === user?.id;
     });
+  };
+
+  // Find today's report for the current user
+  const getTodaysReport = () => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    return getReportByDate(today);
   };
 
   // Handle "New Report" button click - check if today's report exists
@@ -415,7 +420,7 @@ export default function MarketingDailyReport() {
     setTaskEntries(newEntries);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const payload = {
       websiteSessions: formData.websiteSessions ? parseInt(formData.websiteSessions) : null,
       bounceRate: formData.bounceRate || null,
@@ -440,7 +445,19 @@ export default function MarketingDailyReport() {
     if (editingReport) {
       updateMutation.mutate({ id: editingReport.id, data: payload });
     } else {
-      createMutation.mutate(payload);
+      // Check if a report already exists for the selected date
+      const existingReport = getReportByDate(formData.reportDate);
+      if (existingReport) {
+        // Switch to edit mode for existing report
+        toast({
+          title: "Report already exists for this date",
+          description: "Updating your existing report instead.",
+        });
+        // Update the existing report instead of creating
+        updateMutation.mutate({ id: existingReport.id, data: payload });
+      } else {
+        createMutation.mutate(payload);
+      }
     }
   };
 
