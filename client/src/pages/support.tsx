@@ -86,6 +86,7 @@ export default function Support() {
   const [asOnDate, setAsOnDate] = useState<Date | undefined>(undefined);
   const [dateFilterMode, setDateFilterMode] = useState<"range" | "asOn">("range");
   const [showDateFilters, setShowDateFilters] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
   const [layout, setLayout] = useState<LayoutType>(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("support-layout") as LayoutType) || "table";
@@ -147,6 +148,11 @@ export default function Support() {
 
   const { data: tickets, isLoading } = useQuery<Ticket[]>({
     queryKey: ["/api/tickets"],
+  });
+
+  // Fetch support-assignable employees for filtering
+  const { data: supportEmployees } = useQuery<any[]>({
+    queryKey: ["/api/users/support-assignable"],
   });
 
   // Resolved statuses for counting completed tickets
@@ -211,6 +217,11 @@ export default function Support() {
         if (fromDate && ticketDate < startOfDay(fromDate)) return false;
         if (toDate && ticketDate > endOfDay(toDate)) return false;
       }
+    }
+    
+    // Employee filtering
+    if (selectedEmployee !== "all") {
+      if (ticket.assignedTo !== parseInt(selectedEmployee)) return false;
     }
     
     // Search filtering
@@ -418,6 +429,35 @@ export default function Support() {
               Clear Dates
             </Button>
           )}
+
+          <div className="border-l pl-3 ml-auto flex items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Assigned To</Label>
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger className="w-[180px] min-h-[36px]" data-testid="select-employee-filter">
+                  <SelectValue placeholder="All Employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {supportEmployees?.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id.toString()}>
+                      {emp.firstName} {emp.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedEmployee !== "all" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedEmployee("all")}
+                data-testid="button-clear-employee-filter"
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
