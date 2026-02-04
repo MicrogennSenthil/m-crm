@@ -64,11 +64,9 @@ import {
 
 interface MarketingTaskEntry {
   id?: string;
-  startTime: string;
-  endTime: string;
-  taskDescription: string;
-  platform: string;
-  toolUsed: string;
+  timeSlot: string; // e.g., "09:00–10:00"
+  taskActivity: string;
+  platformTool: string;
   status: string;
   remarks: string;
   sortOrder: number;
@@ -171,7 +169,7 @@ export default function MarketingDailyReport() {
   });
 
   const [taskEntries, setTaskEntries] = useState<MarketingTaskEntry[]>([
-    { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+    { timeSlot: "", taskActivity: "", platformTool: "", status: "completed", remarks: "", sortOrder: 0 },
   ]);
 
   const { data: reports = [], isLoading } = useQuery<MarketingDailyReport[]>({
@@ -382,7 +380,7 @@ export default function MarketingDailyReport() {
       additionalNotes: "",
     });
     setTaskEntries([
-      { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+      { timeSlot: "", taskActivity: "", platformTool: "", status: "completed", remarks: "", sortOrder: 0 },
     ]);
   };
 
@@ -404,7 +402,7 @@ export default function MarketingDailyReport() {
   const addTaskEntry = () => {
     setTaskEntries([
       ...taskEntries,
-      { startTime: "", endTime: "", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: taskEntries.length },
+      { timeSlot: "", taskActivity: "", platformTool: "", status: "completed", remarks: "", sortOrder: taskEntries.length },
     ]);
   };
 
@@ -439,7 +437,7 @@ export default function MarketingDailyReport() {
       issues: formData.issues.filter(i => i.trim()),
       tomorrowPlan: formData.tomorrowPlan.filter(p => p.trim()),
       additionalNotes: formData.additionalNotes || null,
-      taskEntries: taskEntries.filter(t => t.taskDescription?.trim()),
+      taskEntries: taskEntries.filter(t => t.taskActivity?.trim()),
     };
 
     if (editingReport) {
@@ -491,7 +489,7 @@ export default function MarketingDailyReport() {
           additionalNotes: fullReport.additionalNotes || "",
         });
         setTaskEntries(fullReport.taskEntries?.length ? fullReport.taskEntries : [
-          { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+          { timeSlot: "", taskActivity: "", platformTool: "", status: "completed", remarks: "", sortOrder: 0 },
         ]);
         setIsFormOpen(true);
       } else {
@@ -518,7 +516,7 @@ export default function MarketingDailyReport() {
           additionalNotes: report.additionalNotes || "",
         });
         setTaskEntries(report.taskEntries?.length ? report.taskEntries : [
-          { startTime: "09:00", endTime: "10:00", taskDescription: "", platform: "", toolUsed: "", status: "completed", remarks: "", sortOrder: 0 },
+          { timeSlot: "", taskActivity: "", platformTool: "", status: "completed", remarks: "", sortOrder: 0 },
         ]);
         setIsFormOpen(true);
       }
@@ -711,38 +709,29 @@ export default function MarketingDailyReport() {
                 <CardContent className="space-y-4">
                   {taskEntries.map((entry, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-start border-b pb-4 last:border-0">
-                      <div className="col-span-2">
-                        <Label className="text-xs">Start</Label>
+                      <div className="col-span-3">
+                        <Label className="text-xs">Time Slot</Label>
                         <Input
-                          type="time"
-                          value={entry.startTime}
-                          onChange={(e) => updateTaskEntry(index, "startTime", e.target.value)}
-                          data-testid={`input-start-time-${index}`}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Label className="text-xs">End</Label>
-                        <Input
-                          type="time"
-                          value={entry.endTime}
-                          onChange={(e) => updateTaskEntry(index, "endTime", e.target.value)}
-                          data-testid={`input-end-time-${index}`}
+                          placeholder="e.g., 09:00–10:00"
+                          value={entry.timeSlot || ""}
+                          onChange={(e) => updateTaskEntry(index, "timeSlot", e.target.value)}
+                          data-testid={`input-time-slot-${index}`}
                         />
                       </div>
                       <div className="col-span-3">
                         <Label className="text-xs">Task</Label>
                         <Input
                           placeholder="What did you work on?"
-                          value={entry.taskDescription}
-                          onChange={(e) => updateTaskEntry(index, "taskDescription", e.target.value)}
+                          value={entry.taskActivity || ""}
+                          onChange={(e) => updateTaskEntry(index, "taskActivity", e.target.value)}
                           data-testid={`input-task-${index}`}
                         />
                       </div>
-                      <div className="col-span-2">
-                        <Label className="text-xs">Platform</Label>
-                        <Select value={entry.platform} onValueChange={(v) => updateTaskEntry(index, "platform", v)}>
+                      <div className="col-span-3">
+                        <Label className="text-xs">Platform/Tool</Label>
+                        <Select value={entry.platformTool || ""} onValueChange={(v) => updateTaskEntry(index, "platformTool", v)}>
                           <SelectTrigger data-testid={`select-platform-${index}`}>
-                            <SelectValue placeholder="Platform" />
+                            <SelectValue placeholder="Platform/Tool" />
                           </SelectTrigger>
                           <SelectContent>
                             {PLATFORMS.map((p) => (
@@ -1062,9 +1051,9 @@ export default function MarketingDailyReport() {
                         <TableBody>
                           {viewingReport.taskEntries.map((entry, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono text-sm">{entry.startTime} - {entry.endTime}</TableCell>
-                              <TableCell>{entry.taskDescription}</TableCell>
-                              <TableCell>{entry.platform}</TableCell>
+                              <TableCell className="font-mono text-sm">{entry.timeSlot || "-"}</TableCell>
+                              <TableCell>{entry.taskActivity || "-"}</TableCell>
+                              <TableCell>{entry.platformTool || "-"}</TableCell>
                               <TableCell>
                                 <Badge className={TASK_STATUSES.find(s => s.value === entry.status)?.color || ""}>
                                   {TASK_STATUSES.find(s => s.value === entry.status)?.label || entry.status}
