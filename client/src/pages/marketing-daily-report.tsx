@@ -434,7 +434,7 @@ export default function MarketingDailyReport() {
       issues: formData.issues.filter(i => i.trim()),
       tomorrowPlan: formData.tomorrowPlan.filter(p => p.trim()),
       additionalNotes: formData.additionalNotes || null,
-      taskEntries: taskEntries.filter(t => t.taskDescription.trim()),
+      taskEntries: taskEntries.filter(t => t.taskDescription?.trim()),
     };
 
     if (editingReport) {
