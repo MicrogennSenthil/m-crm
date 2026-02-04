@@ -50,7 +50,7 @@ import {
   Users,
   Headphones,
 } from "lucide-react";
-import type { Ticket, Customer, User } from "@shared/schema";
+import type { Ticket, Customer, User, Department } from "@shared/schema";
 import { format, subDays, isWithinInterval, endOfDay, startOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
@@ -119,6 +119,7 @@ export default function SupportReports() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [selectedEngineer, setSelectedEngineer] = useState<string>("all");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
@@ -134,9 +135,21 @@ export default function SupportReports() {
   });
 
   // Fetch support-assignable users for the engineer filter
-  const { data: supportEngineers } = useQuery<User[]>({
+  const { data: allSupportEngineers } = useQuery<User[]>({
     queryKey: ["/api/users/support-assignable"],
   });
+
+  // Fetch departments for the department filter
+  const { data: departments } = useQuery<Department[]>({
+    queryKey: ["/api/departments"],
+  });
+
+  // Filter engineers by selected department
+  const supportEngineers = useMemo(() => {
+    if (!allSupportEngineers) return [];
+    if (selectedDepartment === "all") return allSupportEngineers;
+    return allSupportEngineers.filter(u => u.departmentId === selectedDepartment);
+  }, [allSupportEngineers, selectedDepartment]);
 
   const sendEmailMutation = useMutation({
     mutationFn: async (params: { to: string; subject: string; html: string }) => {
@@ -341,7 +354,7 @@ export default function SupportReports() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">From Date</Label>
               <DatePickerCompact
@@ -368,6 +381,23 @@ export default function SupportReports() {
                   <SelectItem value="all">All Customers</SelectItem>
                   {customers?.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Department</Label>
+              <Select value={selectedDepartment} onValueChange={(val) => {
+                setSelectedDepartment(val);
+                setSelectedEngineer("all"); // Reset engineer when department changes
+              }}>
+                <SelectTrigger data-testid="filter-department">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {departments?.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
