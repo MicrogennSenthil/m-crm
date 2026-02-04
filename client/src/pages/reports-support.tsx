@@ -133,21 +133,10 @@ export default function SupportReports() {
     queryKey: ["/api/customers"],
   });
 
-  const { data: users } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+  // Fetch support-assignable users for the engineer filter
+  const { data: supportEngineers } = useQuery<User[]>({
+    queryKey: ["/api/users/support-assignable"],
   });
-
-  // Filter users to get support engineers (users with support-related roles)
-  const supportEngineers = useMemo(() => {
-    if (!users) return [];
-    // Include all users who could be assigned to support tickets
-    return users.filter(u => 
-      u.role === "support" || 
-      u.role === "supporthead" || 
-      u.role === "technical" || 
-      u.role === "admin"
-    );
-  }, [users]);
 
   const sendEmailMutation = useMutation({
     mutationFn: async (params: { to: string; subject: string; html: string }) => {
