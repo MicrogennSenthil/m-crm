@@ -50,7 +50,7 @@ import {
   Users,
   Headphones,
 } from "lucide-react";
-import type { Ticket, Customer } from "@shared/schema";
+import type { Ticket, Customer, User } from "@shared/schema";
 import { format, subDays, isWithinInterval, endOfDay, startOfDay } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
@@ -118,6 +118,7 @@ export default function SupportReports() {
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
+  const [selectedEngineer, setSelectedEngineer] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
@@ -131,6 +132,21 @@ export default function SupportReports() {
   const { data: customers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  const { data: users } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+  });
+
+  // Filter users to get support engineers (users with support role or assigned to tickets)
+  const supportEngineers = useMemo(() => {
+    if (!users) return [];
+    // Include all users who could be support engineers
+    return users.filter(u => 
+      u.role === "support" || 
+      u.role === "engineer" || 
+      u.role === "admin"
+    );
+  }, [users]);
 
   const sendEmailMutation = useMutation({
     mutationFn: async (params: { to: string; subject: string; html: string }) => {
@@ -174,6 +190,10 @@ export default function SupportReports() {
         return false;
       }
       
+      if (selectedEngineer !== "all" && ticket.assignedEngineerId !== selectedEngineer) {
+        return false;
+      }
+      
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
@@ -185,7 +205,7 @@ export default function SupportReports() {
       
       return true;
     });
-  }, [tickets, fromDate, toDate, selectedCustomer, selectedStatus, selectedPriority, searchQuery]);
+  }, [tickets, fromDate, toDate, selectedCustomer, selectedStatus, selectedPriority, selectedEngineer, searchQuery]);
 
   const reportData = useMemo(() => {
     const freshTickets = filteredTickets.filter(t => t.status === "open");
@@ -331,7 +351,7 @@ export default function SupportReports() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             <div className="space-y-2">
               <Label className="text-xs">From Date</Label>
               <DatePickerCompact
@@ -358,6 +378,22 @@ export default function SupportReports() {
                   <SelectItem value="all">All Customers</SelectItem>
                   {customers?.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Support Engineer</Label>
+              <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+                <SelectTrigger data-testid="filter-engineer">
+                  <SelectValue placeholder="All Engineers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Engineers</SelectItem>
+                  {supportEngineers?.map(u => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email || u.id}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
