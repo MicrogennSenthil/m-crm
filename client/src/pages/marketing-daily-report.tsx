@@ -139,6 +139,19 @@ const TASK_STATUSES = [
   { value: "blocked", label: "Blocked", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
 ];
 
+const TIME_SLOTS = [
+  "09:00–10:00",
+  "10:00–11:00",
+  "11:00–12:00",
+  "12:00–13:00",
+  "13:00–14:00",
+  "14:00–15:00",
+  "15:00–16:00",
+  "16:00–17:00",
+  "17:00–18:00",
+  "18:00–19:00",
+];
+
 export default function MarketingDailyReport() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -711,12 +724,21 @@ export default function MarketingDailyReport() {
                     <div key={index} className="grid grid-cols-12 gap-2 items-start border-b pb-4 last:border-0">
                       <div className="col-span-3">
                         <Label className="text-xs">Time Slot</Label>
-                        <Input
-                          placeholder="e.g., 09:00–10:00"
+                        <Select
                           value={entry.timeSlot || ""}
-                          onChange={(e) => updateTaskEntry(index, "timeSlot", e.target.value)}
-                          data-testid={`input-time-slot-${index}`}
-                        />
+                          onValueChange={(value) => updateTaskEntry(index, "timeSlot", value)}
+                        >
+                          <SelectTrigger data-testid={`select-time-slot-${index}`}>
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_SLOTS.map((slot) => (
+                              <SelectItem key={slot} value={slot}>
+                                {slot}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="col-span-3">
                         <Label className="text-xs">Task</Label>
