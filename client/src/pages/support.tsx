@@ -163,16 +163,23 @@ export default function Support() {
   
   // Helper to check if ticket passes date and employee filters
   const passesDateAndEmployeeFilter = (ticket: any) => {
-    // Date filtering
-    if (ticket.createdAt) {
-      const ticketDate = new Date(ticket.createdAt);
-      
-      if (dateFilterMode === "asOn" && asOnDate) {
-        if (ticketDate > endOfDay(asOnDate)) return false;
-      } else if (dateFilterMode === "range") {
-        if (fromDate && ticketDate < startOfDay(fromDate)) return false;
-        if (toDate && ticketDate > endOfDay(toDate)) return false;
+    // Date filtering - always apply if dates are set
+    const ticketCreatedAt = ticket.createdAt;
+    if (ticketCreatedAt) {
+      const ticketDate = new Date(ticketCreatedAt);
+      // Check for valid date
+      if (!isNaN(ticketDate.getTime())) {
+        if (dateFilterMode === "asOn" && asOnDate) {
+          if (ticketDate > endOfDay(asOnDate)) return false;
+        } else if (dateFilterMode === "range") {
+          if (fromDate && ticketDate < startOfDay(fromDate)) return false;
+          if (toDate && ticketDate > endOfDay(toDate)) return false;
+        }
       }
+    } else {
+      // If no createdAt and date filter is active, exclude the ticket
+      if (dateFilterMode === "asOn" && asOnDate) return false;
+      if (dateFilterMode === "range" && (fromDate || toDate)) return false;
     }
     
     // Employee filtering

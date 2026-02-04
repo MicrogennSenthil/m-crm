@@ -304,7 +304,7 @@ export interface IStorage {
   createTrainingRecord(training: InsertTrainingRecord): Promise<TrainingRecord>;
 
   // Ticket operations
-  getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[] }): Promise<Ticket[]>;
+  getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]>;
   getTicket(id: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<InsertTicket>): Promise<Ticket>;
@@ -1650,9 +1650,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Ticket operations
-  async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number }): Promise<Ticket[]> {
+  async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]> {
     const conditions: any[] = [];
-    const maxLimit = filters?.limit || 500; // Default limit for performance
+    const maxLimit = filters?.limit || 2000; // Increased limit for proper date filtering
     
     if (filters?.status) {
       conditions.push(eq(tickets.status, filters.status));
@@ -1664,6 +1664,14 @@ export class DatabaseStorage implements IStorage {
     
     if (filters?.assignedEngineerIds && filters.assignedEngineerIds.length > 0) {
       conditions.push(inArray(tickets.assignedEngineerId, filters.assignedEngineerIds));
+    }
+    
+    // Date range filtering
+    if (filters?.fromDate) {
+      conditions.push(gte(tickets.createdAt, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(tickets.createdAt, filters.toDate));
     }
     
     if (conditions.length > 0) {
