@@ -294,6 +294,20 @@ export default function MarketingDailyReport() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/marketing-reports/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketing-reports"] });
+      toast({ title: "Report deleted successfully" });
+      setViewingReport(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error deleting report", description: error.message, variant: "destructive" });
+    },
+  });
+
   const canReviewReports = user?.role === 'admin' || user?.role === 'super_admin' || isDeptHead;
 
   const resetForm = () => {
@@ -510,6 +524,22 @@ export default function MarketingDailyReport() {
                           {report.status === "draft" && (
                             <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); openEditMode(report); }} data-testid={`button-edit-${report.id}`}>
                               <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {report.status === "draft" && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                if (confirm("Are you sure you want to delete this report?")) {
+                                  deleteMutation.mutate(report.id);
+                                }
+                              }} 
+                              data-testid={`button-delete-${report.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
