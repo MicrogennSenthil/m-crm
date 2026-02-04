@@ -184,6 +184,34 @@ export default function MarketingDailyReport() {
 
   const isDeptHead = deptHeadStatus?.isHead || false;
 
+  // Find today's report for the current user
+  const getTodaysReport = () => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    return reports.find(report => {
+      const reportDateStr = String(report.reportDate);
+      const datePart = reportDateStr.includes('T') ? reportDateStr.split('T')[0] : reportDateStr.split(' ')[0];
+      return datePart === today && report.userId === user?.id;
+    });
+  };
+
+  // Handle "New Report" button click - check if today's report exists
+  const handleNewReport = () => {
+    const todaysReport = getTodaysReport();
+    if (todaysReport) {
+      // Today's report already exists - open for editing
+      toast({
+        title: "Report already exists for today",
+        description: "Opening your existing report for editing.",
+      });
+      openEditMode(todaysReport);
+    } else {
+      // No report for today - open new form
+      resetForm();
+      setEditingReport(null);
+      setIsFormOpen(true);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       return apiRequest("POST", "/api/marketing-reports", data);
@@ -389,7 +417,7 @@ export default function MarketingDailyReport() {
           </h1>
           <p className="text-muted-foreground">Track your daily marketing activities and performance</p>
         </div>
-        <Button onClick={() => { resetForm(); setEditingReport(null); setIsFormOpen(true); }} data-testid="button-new-report">
+        <Button onClick={handleNewReport} data-testid="button-new-report">
           <Plus className="h-4 w-4 mr-2" />
           New Report
         </Button>
@@ -420,7 +448,7 @@ export default function MarketingDailyReport() {
                 <CalendarDays className="h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-lg font-medium">No reports yet</p>
                 <p className="text-muted-foreground mb-4">Create your first daily marketing report</p>
-                <Button onClick={() => setIsFormOpen(true)}>
+                <Button onClick={handleNewReport}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Report
                 </Button>
