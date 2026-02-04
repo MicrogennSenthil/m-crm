@@ -195,15 +195,36 @@ export default function MarketingDailyReport() {
   };
 
   // Handle "New Report" button click - check if today's report exists
-  const handleNewReport = () => {
+  const handleNewReport = async () => {
     const todaysReport = getTodaysReport();
     if (todaysReport) {
-      // Today's report already exists - open for editing
-      toast({
-        title: "Report already exists for today",
-        description: "Opening your existing report for editing.",
-      });
-      openEditMode(todaysReport);
+      // Today's report already exists - fetch full details and open for editing
+      try {
+        const response = await fetch(`/api/marketing-reports/${todaysReport.id}`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const fullReport = await response.json();
+          toast({
+            title: "Report already exists for today",
+            description: "Opening your existing report for editing.",
+          });
+          openEditMode(fullReport);
+        } else {
+          toast({
+            title: "Error loading report",
+            description: "Could not load the existing report for editing.",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching report details:", error);
+        toast({
+          title: "Error loading report",
+          description: "Could not load the existing report for editing.",
+          variant: "destructive"
+        });
+      }
     } else {
       // No report for today - open new form
       resetForm();
