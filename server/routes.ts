@@ -4474,8 +4474,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { interestStatus, notInterestedReason, nextFollowupDate } = req.body;
       
-      if (!interestStatus || !["interested", "not_interested"].includes(interestStatus)) {
-        return res.status(400).json({ message: "Valid interest status (interested/not_interested) is required" });
+      if (!interestStatus || !["interested", "not_interested", "followup"].includes(interestStatus)) {
+        return res.status(400).json({ message: "Valid interest status (interested/not_interested/followup) is required" });
       }
       
       const updateData: any = {
@@ -4485,9 +4485,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (interestStatus === "not_interested") {
         updateData.notInterestedReason = notInterestedReason || null;
-        updateData.nextFollowupDate = null; // Clear followup date if not interested
-      } else if (interestStatus === "interested") {
-        updateData.notInterestedReason = null; // Clear reason if interested
+        updateData.nextFollowupDate = null;
+      } else if (interestStatus === "interested" || interestStatus === "followup") {
+        updateData.notInterestedReason = null;
         if (nextFollowupDate) {
           updateData.nextFollowupDate = new Date(nextFollowupDate);
         }
@@ -4497,13 +4497,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log activity
       const lead = await storage.getLead(req.params.id);
+      const actionMap: Record<string, string> = {
+        interested: "seed_interested",
+        followup: "seed_followup",
+        not_interested: "seed_not_interested",
+      };
+      const descMap: Record<string, string> = {
+        interested: `Seed "${lead?.companyName}" marked as interested${nextFollowupDate ? `, followup scheduled for ${new Date(nextFollowupDate).toLocaleDateString()}` : ""}`,
+        followup: `Seed "${lead?.companyName}" marked for followup${nextFollowupDate ? `, reminder set for ${new Date(nextFollowupDate).toLocaleDateString()}` : ""}`,
+        not_interested: `Seed "${lead?.companyName}" marked as not interested${notInterestedReason ? `: ${notInterestedReason}` : ""}`,
+      };
       await storage.logActivity({
         entityType: "lead",
         entityId: req.params.id,
-        action: interestStatus === "interested" ? "seed_interested" : "seed_not_interested",
-        description: interestStatus === "interested" 
-          ? `Seed "${lead?.companyName}" marked as interested${nextFollowupDate ? `, followup scheduled for ${new Date(nextFollowupDate).toLocaleDateString()}` : ""}`
-          : `Seed "${lead?.companyName}" marked as not interested${notInterestedReason ? `: ${notInterestedReason}` : ""}`,
+        action: actionMap[interestStatus] || "seed_updated",
+        description: descMap[interestStatus] || `Seed "${lead?.companyName}" interest status updated`,
         userId: req.user.claims.sub,
       });
       
@@ -4534,6 +4542,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Filter by interest status
       if (interestStatus === "interested") {
         seeds = seeds.filter(seed => (seed as any).interestStatus === "interested");
+      } else if (interestStatus === "followup") {
+        seeds = seeds.filter(seed => (seed as any).interestStatus === "followup");
       } else if (interestStatus === "not_interested") {
         seeds = seeds.filter(seed => (seed as any).interestStatus === "not_interested");
       } else if (interestStatus === "undecided") {
@@ -4583,7 +4593,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allLeads = await storage.getLeads();
       const seedsWithFollowups = allLeads.filter(lead => {
         if (lead.stage !== "seed") return false;
-        if ((lead as any).interestStatus !== "interested") return false;
+        if ((lead as any).interestStatus !== "interested" && (lead as any).interestStatus !== "followup") return false;
         if ((lead as any).isExistingCustomer === true) return false; // Exclude existing customers from followups
         if (!(lead as any).nextFollowupDate) return false;
         
