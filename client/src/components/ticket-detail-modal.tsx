@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench, Bell, Calendar, X, Star, MessageCircle, User as UserIcon, Phone } from "lucide-react";
+import { ArrowUp, Send, AlertTriangle, CheckCircle2, Mail, RotateCcw, Link2, Code2, Headphones, Wrench, Bell, Calendar, X, Star, MessageCircle, User as UserIcon, Phone, Pencil as Edit, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AssignToDevelopmentDialog } from "./assign-to-development-dialog";
 import { formatDistanceToNow, format } from "date-fns";
@@ -51,6 +51,11 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [reminderDate, setReminderDate] = useState("");
   const [reminderNotes, setReminderNotes] = useState("");
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editSummary, setEditSummary] = useState(ticket.issueSummary);
+  const [editDescription, setEditDescription] = useState(ticket.issueDescription || "");
+  const [editPriority, setEditPriority] = useState(ticket.priority);
+  const [editCustomerPhone, setEditCustomerPhone] = useState(ticket.customerPhone || "");
   const { toast } = useToast();
 
   const { data: comments } = useQuery<(TicketComment & { user?: User })[]>({
@@ -116,7 +121,7 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
   });
 
   const updateTicketMutation = useMutation({
-    mutationFn: async (data: { status?: string; assignedEngineerId?: string; reminderDate?: Date | null; reminderNotes?: string | null }) => {
+    mutationFn: async (data: { status?: string; assignedEngineerId?: string; reminderDate?: Date | null; reminderNotes?: string | null; issueSummary?: string; issueDescription?: string; priority?: string; customerPhone?: string }) => {
       await apiRequest("PATCH", `/api/tickets/${ticket.id}`, data);
     },
     onSuccess: () => {
@@ -125,6 +130,7 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
       setShowReminderForm(false);
       setReminderDate("");
       setReminderNotes("");
+      setIsEditingDetails(false);
       toast({
         title: "Success",
         description: "Ticket updated successfully",
@@ -290,7 +296,25 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <DialogTitle className="text-2xl font-mono">{ticket.ticketNumber}</DialogTitle>
+              <div className="flex items-center gap-2">
+                <DialogTitle className="text-2xl font-mono">{ticket.ticketNumber}</DialogTitle>
+                {ticket.status !== "closed" && !isEditingDetails && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setEditSummary(ticket.issueSummary);
+                      setEditDescription(ticket.issueDescription || "");
+                      setEditPriority(ticket.priority);
+                      setEditCustomerPhone(ticket.customerPhone || "");
+                      setIsEditingDetails(true);
+                    }}
+                    data-testid="button-edit-ticket"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               <p className="text-muted-foreground mt-1">{ticket.issueSummary}</p>
             </div>
             <div className="flex gap-2">
@@ -330,11 +354,87 @@ export function TicketDetailModal({ ticket, open, onClose }: TicketDetailModalPr
               </div>
             )}
 
-            {/* Issue Description */}
-            <div className="p-4 border rounded-md bg-muted/30">
-              <h3 className="font-semibold mb-2">Issue Description</h3>
-              <p className="text-sm whitespace-pre-wrap">{ticket.issueDescription}</p>
-            </div>
+            {/* Issue Description / Edit Form */}
+            {isEditingDetails ? (
+              <div className="p-4 border rounded-md bg-muted/30 space-y-3">
+                <h3 className="font-semibold mb-2">Edit Ticket Details</h3>
+                <div>
+                  <Label className="text-xs">Issue Summary</Label>
+                  <Input
+                    value={editSummary}
+                    onChange={(e) => setEditSummary(e.target.value)}
+                    placeholder="Brief summary of the issue"
+                    data-testid="input-edit-summary"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Issue Description</Label>
+                  <Textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="Detailed description of the issue"
+                    className="min-h-24"
+                    data-testid="input-edit-description"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Priority</Label>
+                    <Select value={editPriority} onValueChange={setEditPriority}>
+                      <SelectTrigger data-testid="select-edit-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="critical">Critical</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Contact Phone</Label>
+                    <Input
+                      value={editCustomerPhone}
+                      onChange={(e) => setEditCustomerPhone(e.target.value)}
+                      placeholder="Customer phone"
+                      data-testid="input-edit-phone"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      updateTicketMutation.mutate({
+                        issueSummary: editSummary,
+                        issueDescription: editDescription,
+                        priority: editPriority,
+                        customerPhone: editCustomerPhone,
+                      });
+                    }}
+                    disabled={!editSummary.trim() || updateTicketMutation.isPending}
+                    data-testid="button-save-edit"
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    {updateTicketMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsEditingDetails(false)}
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 border rounded-md bg-muted/30">
+                <h3 className="font-semibold mb-2">Issue Description</h3>
+                <p className="text-sm whitespace-pre-wrap">{ticket.issueDescription || ticket.issueSummary || "-"}</p>
+              </div>
+            )}
 
             {/* Resolution Details - Shows for closed tickets, tickets with dev tasks, or tickets with closing notes (reopened tickets) */}
             {(ticket.status === "closed" || hasDevTasks || ticket.closingNotes) && (
