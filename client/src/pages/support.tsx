@@ -184,7 +184,7 @@ export default function Support() {
     
     // Employee filtering
     if (selectedEmployee !== "all") {
-      if (ticket.assignedTo !== parseInt(selectedEmployee)) return false;
+      if (ticket.assignedEngineerId !== selectedEmployee) return false;
     }
     
     return true;
