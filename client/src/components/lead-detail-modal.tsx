@@ -107,6 +107,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
         contactEmail: lead.contactEmail,
         contactPhone: lead.contactPhone || "",
         leadSource: lead.leadSource,
+        customLeadSource: (lead as any).customLeadSource || "",
         stage: lead.stage,
         estimatedValue: lead.estimatedValue || undefined,
         salesExecutiveId: lead.salesExecutiveId || undefined,
@@ -730,6 +731,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
       contactEmail: lead.contactEmail,
       contactPhone: lead.contactPhone || "",
       leadSource: lead.leadSource,
+      customLeadSource: (lead as any).customLeadSource || "",
       stage: lead.stage,
       estimatedValue: lead.estimatedValue || undefined,
       salesExecutiveId: lead.salesExecutiveId || undefined,
@@ -930,7 +932,7 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                     <Label htmlFor="leadSource">Source</Label>
                     <Select
                       value={editForm.leadSource}
-                      onValueChange={(value) => setEditForm({ ...editForm, leadSource: value })}
+                      onValueChange={(value) => setEditForm({ ...editForm, leadSource: value, customLeadSource: value !== "other" ? "" : (editForm as any).customLeadSource })}
                     >
                       <SelectTrigger data-testid="select-edit-lead-source">
                         <SelectValue />
@@ -944,6 +946,18 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                       </SelectContent>
                     </Select>
                   </div>
+                  {editForm.leadSource === "other" && (
+                    <div>
+                      <Label htmlFor="customLeadSource">Specify Source</Label>
+                      <Input
+                        id="customLeadSource"
+                        placeholder="Enter custom lead source"
+                        value={(editForm as any).customLeadSource || ""}
+                        onChange={(e) => setEditForm({ ...editForm, customLeadSource: e.target.value } as any)}
+                        data-testid="input-edit-custom-lead-source"
+                      />
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="stage">Stage</Label>
                     <Select
@@ -1054,7 +1068,9 @@ export function LeadDetailModal({ lead, open, onClose }: LeadDetailModalProps) {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Source:</span>
-                    <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                    <Badge variant="outline" className="capitalize">
+                      {lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource}
+                    </Badge>
                   </div>
                   {lead.estimatedValue && (
                     <div className="flex justify-between items-center">

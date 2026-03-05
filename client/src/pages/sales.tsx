@@ -392,9 +392,10 @@ export default function Sales() {
   const uniqueLeadSources = useMemo(() => {
     const sources = new Set<string>();
     leads?.forEach((lead) => {
-      if (lead.leadSource && lead.leadSource.trim()) {
-        sources.add(lead.leadSource.trim());
-      }
+      const displaySource = lead.leadSource === "other" && (lead as any).customLeadSource
+        ? (lead as any).customLeadSource.trim()
+        : lead.leadSource?.trim();
+      if (displaySource) sources.add(displaySource);
     });
     return Array.from(sources).sort();
   }, [leads]);
@@ -447,8 +448,11 @@ export default function Sales() {
       }
 
       // Lead source filter
-      if (selectedLeadSource !== "all" && lead.leadSource !== selectedLeadSource) {
-        return false;
+      if (selectedLeadSource !== "all") {
+        const displaySource = lead.leadSource === "other" && (lead as any).customLeadSource
+          ? (lead as any).customLeadSource.trim()
+          : lead.leadSource?.trim();
+        if (displaySource !== selectedLeadSource) return false;
       }
 
       return true;
@@ -1140,7 +1144,7 @@ export default function Sales() {
                           )}
                           <div className="flex items-center justify-between gap-1 text-xs flex-wrap">
                             <Badge variant="outline" className="capitalize text-xs px-1.5 py-0">
-                              {lead.leadSource}
+                              {lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource}
                             </Badge>
                             {lead.salesExecutiveId && (() => {
                               const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
@@ -1319,7 +1323,7 @@ export default function Sales() {
                           </div>
                         )}
                         <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                          <Badge variant="outline" className="capitalize">{lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource}</Badge>
                           {lead.salesExecutiveId && (() => {
                             const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
                             return execInfo ? (
@@ -1476,7 +1480,7 @@ export default function Sales() {
                             {format(new Date(lead.demoDate), "MMM d")}
                           </div>
                         )}
-                        <Badge variant="outline" className="capitalize">{lead.leadSource}</Badge>
+                        <Badge variant="outline" className="capitalize">{lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource}</Badge>
                         {lead.salesExecutiveId && (() => {
                           const execInfo = getSalesExecutiveInfo(lead.salesExecutiveId);
                           return execInfo ? (

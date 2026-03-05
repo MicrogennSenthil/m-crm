@@ -245,7 +245,7 @@ export default function SalesReports() {
       "Phone": lead.contactPhone,
       "Location": lead.city || "",
       "Stage": lead.stage?.replace("_", " ").toUpperCase(),
-      "Source": lead.leadSource,
+      "Source": lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource,
       "Expected Value": lead.estimatedValue,
       "Created Date": lead.createdAt ? format(new Date(lead.createdAt), "yyyy-MM-dd") : "",
       "Demo Date": lead.demoDate ? format(new Date(lead.demoDate), "yyyy-MM-dd") : "",

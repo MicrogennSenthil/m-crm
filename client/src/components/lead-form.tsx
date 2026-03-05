@@ -117,6 +117,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       contactEmail: "",
       contactPhone: "",
       leadSource: "website",
+      customLeadSource: "",
       stage: "seed",
       currency: "INR",
       estimatedValue: undefined,
@@ -129,6 +130,8 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       isExistingCustomer: false,
     },
   });
+
+  const watchedLeadSource = form.watch("leadSource");
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -445,7 +448,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Lead Source</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={(val) => { field.onChange(val); if (val !== "other") form.setValue("customLeadSource", ""); }} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-lead-source">
                         <SelectValue placeholder="Select source" />
@@ -463,6 +466,27 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
                 </FormItem>
               )}
             />
+
+            {watchedLeadSource === "other" && (
+              <FormField
+                control={form.control}
+                name="customLeadSource"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Specify Source</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter custom lead source"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-custom-lead-source"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

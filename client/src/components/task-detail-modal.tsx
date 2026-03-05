@@ -135,6 +135,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
     contactEmail: "",
     contactPhone: "",
     leadSource: "task_conversion",
+    customLeadSource: "",
     currency: "INR",
     estimatedValue: "",
     city: "",
@@ -338,6 +339,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
       contactEmail: "",
       contactPhone: "",
       leadSource: "task_conversion",
+      customLeadSource: "",
       currency: "INR",
       estimatedValue: "",
       city: "",
@@ -1269,7 +1271,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                     <Label htmlFor="leadSource">Lead Source</Label>
                     <Select
                       value={convertLeadForm.leadSource}
-                      onValueChange={(value) => setConvertLeadForm(prev => ({ ...prev, leadSource: value }))}
+                      onValueChange={(value) => setConvertLeadForm(prev => ({ ...prev, leadSource: value, customLeadSource: value !== "other" ? "" : prev.customLeadSource }))}
                     >
                       <SelectTrigger data-testid="select-convert-lead-source">
                         <SelectValue placeholder="Select source" />
@@ -1285,6 +1287,18 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
                         <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
+                    {convertLeadForm.leadSource === "other" && (
+                      <div className="mt-2">
+                        <Label htmlFor="customLeadSource">Specify Source</Label>
+                        <Input
+                          id="customLeadSource"
+                          placeholder="Enter custom lead source"
+                          value={convertLeadForm.customLeadSource || ""}
+                          onChange={(e) => setConvertLeadForm(prev => ({ ...prev, customLeadSource: e.target.value }))}
+                          data-testid="input-convert-custom-lead-source"
+                        />
+                      </div>
+                    )}
                   </div>
                   
                   <div>
