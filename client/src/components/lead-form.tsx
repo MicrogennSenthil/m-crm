@@ -269,7 +269,7 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
       });
       onSuccess?.();
     },
-    onError: (error: Error) => {
+    onError: async (error: any) => {
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -281,9 +281,25 @@ export function LeadForm({ onSuccess, defaultValues }: LeadFormProps) {
         }, 500);
         return;
       }
+      let description = "Failed to create lead";
+      let errorCode = null;
+      try {
+        const body = await error?.response?.json?.() || {};
+        if (body?.message) description = body.message;
+        if (body?.code) errorCode = body.code;
+      } catch {}
+      if (errorCode === "PLANNING_REQUIRED") {
+        toast({
+          title: "Monthly Planning Required",
+          description: "You must complete your monthly sales planning before adding leads. Please go to Sales Planning.",
+          variant: "destructive",
+        });
+        setTimeout(() => { window.location.href = "/sales-planning"; }, 2000);
+        return;
+      }
       toast({
         title: "Error",
-        description: "Failed to create lead",
+        description,
         variant: "destructive",
       });
     },
