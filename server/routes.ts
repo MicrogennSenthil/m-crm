@@ -324,17 +324,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Auto-assign admin role to super admin email if not already admin
       let userRole = user.role;
       if (email === "senthil@microgenn.com" && user.role !== "admin") {
-        await storage.updateUser(user.id, { role: "admin" });
         userRole = "admin";
+        storage.updateUser(user.id, { role: "admin" }).catch(() => {});
       }
-      
-      // Update last login
-      await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
       // Set up session
       (req.session as any).userId = user.id;
       (req.session as any).isLocalAuth = true;
       req.user = { claims: { sub: user.id } };
+
+      // Update last login in background (non-blocking)
+      storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
       
       res.json({ 
         success: true, 
