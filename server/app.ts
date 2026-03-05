@@ -6,6 +6,7 @@ import express, {
   Response,
   NextFunction,
 } from "express";
+import compression from "compression";
 
 import { registerRoutes } from "./routes";
 import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
@@ -30,6 +31,7 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+app.use(compression());
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
