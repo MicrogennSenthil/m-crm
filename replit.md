@@ -50,3 +50,19 @@ The database schema comprises 14 tables. Core business logic includes round-robi
 -   **UI Components**: Shadcn UI (built on Radix UI)
 -   **Icons**: Lucide React
 -   **Hosting**: Replit (development) / Hostinger VPS (production)
+
+## VPS Deployment Notes
+-   **VPS path**: `/var/www/m-crm`
+-   **PM2 app name**: `mcrm`, **Port**: `5050`
+-   **Database**: `mcrm_db`, user: `mcrm_user`
+-   **Nginx**: proxies `crm.microgenn.com` → port 5050
+-   **PM2 config**: `ecosystem.config.cjs` with env vars inline (not .env file)
+-   **DATABASE_URL** includes `?sslmode=disable` (local PostgreSQL, no SSL)
+-   **Git remote on VPS**: `origin` → `git@github-mcrm:MicrogennSenthil/m-crm.git`
+-   **Deploy steps**: `git pull origin main` → apply DB migrations → `npm run build` → `fuser -k 5050/tcp && pm2 delete mcrm && pm2 start ecosystem.config.cjs && pm2 save`
+-   **DB migrations on VPS**: Run SQL directly via `sudo -u postgres psql -d mcrm_db -c "..."` (no drizzle push needed if column already applied)
+-   **Super admin**: `senthil@microgenn.com`
+
+## Recent Changes (March 5, 2026)
+-   **Lead creation error handling**: Server returns actual Zod/DB error messages; frontend shows specific reason in toast; PLANNING_REQUIRED (403) redirects to Sales Planning
+-   **Custom lead source**: Added `custom_lead_source` column to leads table; selecting "Other" as lead source shows a "Specify Source" text input; custom source shown in badges, filters, reports export, and task-to-lead conversion form
