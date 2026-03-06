@@ -63,8 +63,20 @@ function createStorageClient(): Storage {
       return new Storage({ projectId });
     }
     
+    // No credentials configured — return a disabled stub.
+    // IMPORTANT: Do NOT call new Storage() here without credentials.
+    // On non-GCP servers (e.g. Hostinger VPS), the GCS SDK will try to fetch
+    // credentials from http://metadata.google.internal which times out after
+    // ~3 minutes, causing the entire app to be unresponsive on first request.
     console.warn("[ObjectStorage] No GCS credentials configured. Object storage features will be disabled.");
-    return new Storage({ projectId: projectId || "disabled" });
+    return {
+      bucket: () => ({
+        file: () => ({}),
+        upload: () => Promise.reject(new Error("Object storage not configured")),
+        getFiles: () => Promise.reject(new Error("Object storage not configured")),
+        exists: () => Promise.resolve([false]),
+      }),
+    } as unknown as Storage;
   }
 }
 
