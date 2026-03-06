@@ -1,4 +1,5 @@
 import { Switch, Route } from "wouter";
+import { lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,56 +14,71 @@ import { BottomNav } from "@/components/bottom-nav";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
+
+// Eagerly load critical auth/landing pages
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Home from "@/pages/home";
-import Sales from "@/pages/sales";
-import Implementations from "@/pages/implementations";
-import ImplementationDashboard from "@/pages/implementation-dashboard";
-import Support from "@/pages/support";
-import SupportDashboard from "@/pages/support-dashboard";
-import SalesDashboard from "@/pages/sales-dashboard";
-import DepartmentUsers from "@/pages/department-users";
-import Reports from "@/pages/reports";
-import SalesReports from "@/pages/reports-sales";
-import ImplementationReports from "@/pages/reports-implementation";
-import SupportReports from "@/pages/reports-support";
-import DevelopmentReports from "@/pages/reports-development";
-import FeedbackReports from "@/pages/reports-feedback";
-import AccountsReports from "@/pages/reports-accounts";
-import TasksReports from "@/pages/reports-tasks";
-import MarketingReports from "@/pages/reports-marketing";
-import SeedsReport from "@/pages/seeds-report";
-import Masters from "@/pages/masters";
-import Settings from "@/pages/settings";
-import Tasks from "@/pages/tasks";
-import TaskDetail from "@/pages/task-detail";
-import TodaysTasks from "@/pages/todays-tasks";
 import AuthLogin from "@/pages/auth-login";
 import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
-import AdminUsers from "@/pages/admin-users";
-import UserManagement from "@/pages/user-management";
-import UserMaster from "@/pages/admin/user-master";
-import UserRoleMaster from "@/pages/admin/user-role-master";
-import UserRightsAllocation from "@/pages/admin/user-rights-allocation";
-import UserApproval from "@/pages/admin/user-approval";
-import KnowledgeBaseAdmin from "@/pages/knowledge-base-admin";
-import KnowledgeBaseSearch from "@/pages/knowledge-base-search";
-import SmtpConfig from "@/pages/admin/smtp-config";
-import PointCategories from "@/pages/admin/point-categories";
-import AssignmentSettings from "@/pages/admin/assignment-settings";
-import DatabaseControl from "@/pages/admin/database-control";
-import SuperAdminDashboard from "@/pages/super-admin-dashboard";
-import DevelopmentDashboard from "@/pages/development-dashboard";
-import DevelopmentTasks from "@/pages/development-tasks";
-import AccountsContracts from "@/pages/accounts-contracts";
-import HRFeedback from "@/pages/hr-feedback";
-import MarketingDailyReport from "@/pages/marketing-daily-report";
-import MarketingDashboard from "@/pages/marketing-dashboard";
-import Extractor from "@/pages/extractor";
-import MyPerformance from "@/pages/my-performance";
-import SalesPlanning from "@/pages/sales-planning";
+
+// Lazy load all other pages — only downloaded when the user navigates there
+const Home = lazy(() => import("@/pages/home"));
+const Sales = lazy(() => import("@/pages/sales"));
+const Implementations = lazy(() => import("@/pages/implementations"));
+const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));
+const Support = lazy(() => import("@/pages/support"));
+const SupportDashboard = lazy(() => import("@/pages/support-dashboard"));
+const SalesDashboard = lazy(() => import("@/pages/sales-dashboard"));
+const DepartmentUsers = lazy(() => import("@/pages/department-users"));
+const Reports = lazy(() => import("@/pages/reports"));
+const SalesReports = lazy(() => import("@/pages/reports-sales"));
+const ImplementationReports = lazy(() => import("@/pages/reports-implementation"));
+const SupportReports = lazy(() => import("@/pages/reports-support"));
+const DevelopmentReports = lazy(() => import("@/pages/reports-development"));
+const FeedbackReports = lazy(() => import("@/pages/reports-feedback"));
+const AccountsReports = lazy(() => import("@/pages/reports-accounts"));
+const TasksReports = lazy(() => import("@/pages/reports-tasks"));
+const MarketingReports = lazy(() => import("@/pages/reports-marketing"));
+const SeedsReport = lazy(() => import("@/pages/seeds-report"));
+const Masters = lazy(() => import("@/pages/masters"));
+const Settings = lazy(() => import("@/pages/settings"));
+const Tasks = lazy(() => import("@/pages/tasks"));
+const TaskDetail = lazy(() => import("@/pages/task-detail"));
+const TodaysTasks = lazy(() => import("@/pages/todays-tasks"));
+const AdminUsers = lazy(() => import("@/pages/admin-users"));
+const UserManagement = lazy(() => import("@/pages/user-management"));
+const UserMaster = lazy(() => import("@/pages/admin/user-master"));
+const UserRoleMaster = lazy(() => import("@/pages/admin/user-role-master"));
+const UserRightsAllocation = lazy(() => import("@/pages/admin/user-rights-allocation"));
+const UserApproval = lazy(() => import("@/pages/admin/user-approval"));
+const KnowledgeBaseAdmin = lazy(() => import("@/pages/knowledge-base-admin"));
+const KnowledgeBaseSearch = lazy(() => import("@/pages/knowledge-base-search"));
+const SmtpConfig = lazy(() => import("@/pages/admin/smtp-config"));
+const PointCategories = lazy(() => import("@/pages/admin/point-categories"));
+const AssignmentSettings = lazy(() => import("@/pages/admin/assignment-settings"));
+const DatabaseControl = lazy(() => import("@/pages/admin/database-control"));
+const SuperAdminDashboard = lazy(() => import("@/pages/super-admin-dashboard"));
+const DevelopmentDashboard = lazy(() => import("@/pages/development-dashboard"));
+const DevelopmentTasks = lazy(() => import("@/pages/development-tasks"));
+const AccountsContracts = lazy(() => import("@/pages/accounts-contracts"));
+const HRFeedback = lazy(() => import("@/pages/hr-feedback"));
+const MarketingDailyReport = lazy(() => import("@/pages/marketing-daily-report"));
+const MarketingDashboard = lazy(() => import("@/pages/marketing-dashboard"));
+const Extractor = lazy(() => import("@/pages/extractor"));
+const MyPerformance = lazy(() => import("@/pages/my-performance"));
+const SalesPlanning = lazy(() => import("@/pages/sales-planning"));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    </div>
+  );
+}
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
@@ -96,54 +112,55 @@ function AuthenticatedLayout() {
             </div>
           </header>
           <main className="flex-1 overflow-auto p-3 sm:p-6 pb-20 md:pb-6">
-            <Switch>
-              <Route path="/" component={Home} />
-              <Route path="/tasks" component={Tasks} />
-              <Route path="/my-performance" component={MyPerformance} />
-              <Route path="/tasks/today" component={TodaysTasks} />
-              <Route path="/tasks/:id" component={TaskDetail} />
-              <Route path="/extractor" component={Extractor} />
-              <Route path="/sales" component={Sales} />
-              <Route path="/sales-dashboard" component={SalesDashboard} />
-              <Route path="/sales-planning" component={SalesPlanning} />
-              <Route path="/implementations" component={Implementations} />
-              <Route path="/implementation-dashboard" component={ImplementationDashboard} />
-              <Route path="/support" component={Support} />
-              <Route path="/support-dashboard" component={SupportDashboard} />
-              <Route path="/reports" component={Reports} />
-              <Route path="/reports/sales" component={SalesReports} />
-              <Route path="/reports/implementation" component={ImplementationReports} />
-              <Route path="/reports/support" component={SupportReports} />
-              <Route path="/reports/development" component={DevelopmentReports} />
-              <Route path="/reports/feedback" component={FeedbackReports} />
-              <Route path="/reports/accounts" component={AccountsReports} />
-              <Route path="/reports/tasks" component={TasksReports} />
-              <Route path="/reports/marketing" component={MarketingReports} />
-              <Route path="/masters" component={Masters} />
-              <Route path="/settings" component={Settings} />
-              <Route path="/admin/users" component={UserMaster} />
-              <Route path="/admin/user-roles" component={UserRoleMaster} />
-              <Route path="/admin/user-rights" component={UserRightsAllocation} />
-              <Route path="/admin/user-approval" component={UserApproval} />
-              <Route path="/admin/user-management" component={UserManagement} />
-              <Route path="/knowledge-base" component={KnowledgeBaseSearch} />
-              <Route path="/admin/knowledge-base" component={KnowledgeBaseAdmin} />
-              <Route path="/admin/smtp-config" component={SmtpConfig} />
-              <Route path="/admin/point-categories" component={PointCategories} />
-              <Route path="/admin/assignment-settings" component={AssignmentSettings} />
-              <Route path="/admin/database-control" component={DatabaseControl} />
-              <Route path="/admin/dashboard" component={SuperAdminDashboard} />
-              <Route path="/department-users" component={DepartmentUsers} />
-              <Route path="/development/dashboard" component={DevelopmentDashboard} />
-              <Route path="/development/tasks" component={DevelopmentTasks} />
-              <Route path="/accounts/contracts" component={AccountsContracts} />
-              <Route path="/hr/feedback" component={HRFeedback} />
-              <Route path="/marketing/daily-report" component={MarketingDailyReport} />
-              <Route path="/marketing/dashboard" component={MarketingDashboard} />
-              <Route path="/reports/seeds" component={SeedsReport} />
-              {/* Fallback to Home for any unmatched routes in authenticated layout */}
-              <Route component={Home} />
-            </Switch>
+            <Suspense fallback={<PageLoader />}>
+              <Switch>
+                <Route path="/" component={Home} />
+                <Route path="/tasks" component={Tasks} />
+                <Route path="/my-performance" component={MyPerformance} />
+                <Route path="/tasks/today" component={TodaysTasks} />
+                <Route path="/tasks/:id" component={TaskDetail} />
+                <Route path="/extractor" component={Extractor} />
+                <Route path="/sales" component={Sales} />
+                <Route path="/sales-dashboard" component={SalesDashboard} />
+                <Route path="/sales-planning" component={SalesPlanning} />
+                <Route path="/implementations" component={Implementations} />
+                <Route path="/implementation-dashboard" component={ImplementationDashboard} />
+                <Route path="/support" component={Support} />
+                <Route path="/support-dashboard" component={SupportDashboard} />
+                <Route path="/reports" component={Reports} />
+                <Route path="/reports/sales" component={SalesReports} />
+                <Route path="/reports/implementation" component={ImplementationReports} />
+                <Route path="/reports/support" component={SupportReports} />
+                <Route path="/reports/development" component={DevelopmentReports} />
+                <Route path="/reports/feedback" component={FeedbackReports} />
+                <Route path="/reports/accounts" component={AccountsReports} />
+                <Route path="/reports/tasks" component={TasksReports} />
+                <Route path="/reports/marketing" component={MarketingReports} />
+                <Route path="/masters" component={Masters} />
+                <Route path="/settings" component={Settings} />
+                <Route path="/admin/users" component={UserMaster} />
+                <Route path="/admin/user-roles" component={UserRoleMaster} />
+                <Route path="/admin/user-rights" component={UserRightsAllocation} />
+                <Route path="/admin/user-approval" component={UserApproval} />
+                <Route path="/admin/user-management" component={UserManagement} />
+                <Route path="/knowledge-base" component={KnowledgeBaseSearch} />
+                <Route path="/admin/knowledge-base" component={KnowledgeBaseAdmin} />
+                <Route path="/admin/smtp-config" component={SmtpConfig} />
+                <Route path="/admin/point-categories" component={PointCategories} />
+                <Route path="/admin/assignment-settings" component={AssignmentSettings} />
+                <Route path="/admin/database-control" component={DatabaseControl} />
+                <Route path="/admin/dashboard" component={SuperAdminDashboard} />
+                <Route path="/department-users" component={DepartmentUsers} />
+                <Route path="/development/dashboard" component={DevelopmentDashboard} />
+                <Route path="/development/tasks" component={DevelopmentTasks} />
+                <Route path="/accounts/contracts" component={AccountsContracts} />
+                <Route path="/hr/feedback" component={HRFeedback} />
+                <Route path="/marketing/daily-report" component={MarketingDailyReport} />
+                <Route path="/marketing/dashboard" component={MarketingDashboard} />
+                <Route path="/reports/seeds" component={SeedsReport} />
+                <Route component={Home} />
+              </Switch>
+            </Suspense>
           </main>
           <BottomNav />
         </SidebarInset>
@@ -158,7 +175,10 @@ function Router() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <span className="text-sm text-muted-foreground">Loading...</span>
+        </div>
       </div>
     );
   }

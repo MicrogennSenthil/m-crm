@@ -32,6 +32,17 @@ declare module 'http' {
   }
 }
 app.use(compression());
+
+// Cache static assets aggressively — JS/CSS files have hashed names so safe to cache for 1 year
+app.use((req, res, next) => {
+  if (req.path.match(/\.(js|css|woff2?|ttf|otf|eot|svg|png|jpg|jpeg|gif|ico|webp)$/)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else if (req.path.startsWith("/assets/")) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  }
+  next();
+});
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
