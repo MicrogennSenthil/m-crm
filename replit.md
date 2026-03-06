@@ -62,6 +62,12 @@ The database schema comprises 14 tables. Core business logic includes round-robi
 -   **Deploy steps**: `git pull origin main` → apply DB migrations → `npm run build` → `fuser -k 5050/tcp && pm2 delete mcrm && pm2 start ecosystem.config.cjs && pm2 save`
 -   **DB migrations on VPS**: Run SQL directly via `sudo -u postgres psql -d mcrm_db -c "..."` (no drizzle push needed if column already applied)
 -   **Super admin**: `senthil@microgenn.com`
+-   **IMPORTANT — Multiple apps on same VPS**: Other apps (irm-backend, infantinteriors.in, srijayamhall.com, etc.) run on same server. Always scope commands to M-CRM only:
+    -   File changes: only inside `/var/www/m-crm/`
+    -   PM2: only `pm2 restart mcrm` / `pm2 delete mcrm` — NEVER `pm2 restart all`
+    -   Port: only `fuser -k 5050/tcp` — NEVER other ports
+    -   Nginx: only edit `/etc/nginx/sites-available/mcrm` — NEVER global nginx.conf or other site configs
+    -   Database: only `mcrm_db` — NEVER touch other databases
 
 ## Recent Changes (March 5, 2026)
 -   **Lead creation error handling**: Server returns actual Zod/DB error messages; frontend shows specific reason in toast; PLANNING_REQUIRED (403) redirects to Sales Planning
