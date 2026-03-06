@@ -231,6 +231,7 @@ export interface IStorage {
   // Follow-up operations
   getFollowUpsByLead(leadId: string): Promise<FollowUp[]>;
   getAllFollowUps(): Promise<FollowUp[]>;
+  countPendingFollowUpsByLeadIds(leadIds: string[]): Promise<number>;
   createFollowUp(followUp: InsertFollowUp): Promise<FollowUp>;
   updateFollowUp(id: string, data: Partial<InsertFollowUp>): Promise<FollowUp>;
 
@@ -1204,6 +1205,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(followUps.followUpDate));
   }
 
+  async countPendingFollowUpsByLeadIds(leadIds: string[]): Promise<number> {
+    if (leadIds.length === 0) return 0;
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(followUps)
+      .where(
+        and(
+          inArray(followUps.leadId, leadIds),
+          eq(followUps.completed, false),
+          lte(followUps.followUpDate, new Date().toISOString().split('T')[0])
+        )
+      );
+    return Number(result[0]?.count ?? 0);
+  }
+
   // Lead Comment operations
   async getLeadComments(leadId: string): Promise<LeadComment[]> {
     return await db
@@ -1652,7 +1668,7 @@ export class DatabaseStorage implements IStorage {
   // Ticket operations
   async getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]> {
     const conditions: any[] = [];
-    const maxLimit = filters?.limit || 2000; // Increased limit for proper date filtering
+    const maxLimit = filters?.limit || 500;
     
     if (filters?.status) {
       conditions.push(eq(tickets.status, filters.status));

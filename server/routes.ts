@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
+import { getCached, setCached, invalidateCache } from "./cache";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
@@ -3136,12 +3137,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.salesExecutiveIds = userFilter.userIds;
       }
       
-      let leadsList = await storage.getLeads(filters);
-      
-      if (limit) {
-        leadsList = leadsList.slice(0, parseInt(limit as string));
-      }
-      
+      const leadsList = await storage.getLeads({
+        ...filters,
+        limit: limit ? parseInt(limit as string) : undefined,
+      });
+
       res.json(leadsList);
     } catch (error) {
       console.error("Error fetching leads:", error);
@@ -7038,7 +7038,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes
   app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("dashboard:stats");
+      if (cached) return res.json(cached);
       const stats = await storage.getDashboardStats();
+      setCached("dashboard:stats", stats, 120);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
@@ -7050,6 +7053,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/my-department", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const cacheKey = `my-department:${userId}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -7096,14 +7103,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Sales Department Stats
       if (departmentName.includes('sales') || userRole.includes('sales')) {
-        const allLeads = await storage.getLeads();
-        const userLeads = isDepartmentHead 
-          ? allLeads.filter(l => departmentMembers.some(m => m.id === l.salesExecutiveId) || l.salesExecutiveId === userId)
-          : allLeads.filter(l => l.salesExecutiveId === userId);
-        
-        // Get follow-ups for counting pending ones
-        const allFollowUps = await Promise.all(userLeads.map(l => storage.getFollowUpsByLead(l.id)));
-        const pendingFollowups = allFollowUps.flat().filter(f => !f.completed && new Date(f.followUpDate) <= new Date()).length;
+        const salesFilter = isDepartmentHead
+          ? { salesExecutiveIds: [...departmentMembers.map((m: any) => m.id), user.id] }
+          : { salesExecutiveId: user.id };
+        const userLeads = await storage.getLeads(salesFilter);
+
+        const pendingFollowups = await storage.countPendingFollowUpsByLeadIds(userLeads.map(l => l.id));
         
         departmentStats.stats = {
           type: 'sales',
@@ -7117,10 +7122,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Support Department Stats
       else if (departmentName.includes('support') || userRole.includes('support') || userRole.includes('engineer')) {
-        const allTickets = await storage.getTickets({});
-        const userTickets = isDepartmentHead
-          ? allTickets.filter(t => departmentMembers.some(m => m.id === t.assignedEngineerId) || t.assignedEngineerId === userId)
-          : allTickets.filter(t => t.assignedEngineerId === userId);
+        const engineerIds = isDepartmentHead
+          ? [...departmentMembers.map((m: any) => m.id), user.id]
+          : [user.id];
+        const userTickets = await storage.getTickets({ assignedEngineerIds: engineerIds });
         
         const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
         departmentStats.stats = {
@@ -7135,21 +7140,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Technical/Implementation Department Stats
       else if (departmentName.includes('technical') || departmentName.includes('implementation')) {
-        const allProjects = await storage.getProjects();
-        // For non-heads, filter projects by checking project engineer assignments
-        let userProjects = allProjects;
-        if (!isDepartmentHead) {
-          const projectEngineerAssignments = await Promise.all(
-            allProjects.map(async (p) => {
-              const engineers = await storage.getProjectEngineers(p.id);
-              return { projectId: p.id, engineerIds: engineers.map(e => e.engineerId) };
-            })
-          );
-          const userProjectIds = projectEngineerAssignments
-            .filter(pe => pe.engineerIds.includes(userId))
-            .map(pe => pe.projectId);
-          userProjects = allProjects.filter(p => userProjectIds.includes(p.id));
-        }
+        const userProjects = isDepartmentHead
+          ? await storage.getProjects()
+          : await storage.getProjects({ engineerIds: [user.id] });
         
         departmentStats.stats = {
           type: 'implementation',
@@ -7189,11 +7182,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
 
-      // Get user's tasks
-      const allTasks = await storage.getTasks();
-      const myTasks = allTasks.filter(t => 
-        t.createdBy === userId || t.assignedTo === userId
-      );
+      // Get user's tasks (filtered in DB, not in JS)
+      const myTasks = await storage.getTasks({ userId: user.id });
       
       departmentStats.myTasks = {
         total: myTasks.length,
@@ -7209,6 +7199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Dashboard] Department stats for ${user.email}: ${department?.name || 'No department'}, isHead: ${isDepartmentHead}`);
       
+      setCached(cacheKey, departmentStats, 60);
       res.json(departmentStats);
     } catch (error) {
       console.error("Error fetching department dashboard:", error);
