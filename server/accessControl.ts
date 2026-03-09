@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { getCached, setCached, invalidateCache } from "./cache";
 
 export const SUPER_ADMIN_EMAIL = "senthil@microgenn.com";
 
@@ -10,15 +11,21 @@ export interface AccessControlResult {
 }
 
 export async function getAllowedUserIdsForUser(userId: string): Promise<AccessControlResult> {
+  const cacheKey = `acl:${userId}`;
+  const cached = getCached<AccessControlResult>(cacheKey);
+  if (cached) return cached;
+
   const user = await storage.getUser(userId);
   
   if (!user) {
-    return {
+    const result: AccessControlResult = {
       isSuperAdmin: false,
       isAdmin: false,
       hasFullAccess: false,
       allowedUserIds: [],
     };
+    setCached(cacheKey, result, 30);
+    return result;
   }
   
   const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
@@ -31,21 +38,16 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
   // Department heads, admins, and super admins get full access to all leads
   const hasFullAccess = isSuperAdmin || isAdmin || isDepartmentHead;
   
-  if (hasFullAccess) {
-    return {
-      isSuperAdmin,
-      isAdmin,
-      hasFullAccess: true,
-      allowedUserIds: undefined,
-    };
-  }
-  
-  return {
-    isSuperAdmin,
-    isAdmin,
-    hasFullAccess: false,
-    allowedUserIds: [userId],
-  };
+  const result: AccessControlResult = hasFullAccess
+    ? { isSuperAdmin, isAdmin, hasFullAccess: true, allowedUserIds: undefined }
+    : { isSuperAdmin, isAdmin, hasFullAccess: false, allowedUserIds: [userId] };
+
+  setCached(cacheKey, result, 60);
+  return result;
+}
+
+export function invalidateAccessControlCache(userId: string): void {
+  invalidateCache(`acl:${userId}`);
 }
 
 export function isUserIdAllowed(accessControl: AccessControlResult, targetUserId: string | null | undefined): boolean {

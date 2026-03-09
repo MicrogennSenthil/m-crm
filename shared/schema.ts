@@ -216,7 +216,12 @@ export const leads = pgTable("leads", {
   isExistingCustomer: boolean("is_existing_customer").default(false), // Flag to mark if this is an existing customer
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_leads_created_at").on(table.createdAt),
+  index("idx_leads_stage").on(table.stage),
+  index("idx_leads_sales_executive_id").on(table.salesExecutiveId),
+  index("idx_leads_customer_id").on(table.customerId),
+]);
 
 export const insertLeadSchema = createInsertSchema(leads).omit({
   id: true,
@@ -612,7 +617,12 @@ export const tickets = pgTable("tickets", {
   reminderNotes: text("reminder_notes"), // Notes about why reminder was set
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_tickets_created_at").on(table.createdAt),
+  index("idx_tickets_status").on(table.status),
+  index("idx_tickets_assigned_engineer_id").on(table.assignedEngineerId),
+  index("idx_tickets_customer_id").on(table.customerId),
+]);
 
 export const insertTicketSchema = createInsertSchema(tickets).omit({
   id: true,
