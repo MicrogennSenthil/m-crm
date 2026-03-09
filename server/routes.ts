@@ -934,9 +934,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Only returns active users for assignment purposes
   app.get("/api/users/support-assignable", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("users:support-assignable");
+      if (cached) return res.json(cached);
       let supportUsers = await storage.getSupportAssignableUsers();
-      // Filter out inactive users - they should not be assignable
       supportUsers = supportUsers.filter(u => u.isActive !== false);
+      setCached("users:support-assignable", supportUsers, 120);
       res.json(supportUsers);
     } catch (error) {
       console.error("Error fetching support assignable users:", error);
@@ -944,25 +946,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get users who can be assigned development tasks (users in Development department)
-  // Only returns active users for assignment purposes
   app.get("/api/users/development-assignable", isAuthenticated, async (req, res) => {
     try {
-      // Get Development department
+      const cached = getCached<any>("users:development-assignable");
+      if (cached) return res.json(cached);
       const devDepartment = await storage.getDepartmentByName("Development");
-      console.log("[Dev Assignable] Development department:", devDepartment?.id, devDepartment?.name);
-      if (!devDepartment) {
-        console.log("[Dev Assignable] No Development department found");
-        return res.json([]);
-      }
-      
-      // Get all users in Development department
+      if (!devDepartment) return res.json([]);
       const allUsers = await storage.getUsers();
-      const devUsers = allUsers.filter(u => 
-        u.departmentId === devDepartment.id && u.isActive !== false
-      );
-      console.log("[Dev Assignable] Found", devUsers.length, "developers:", devUsers.map(u => u.email));
-      
+      const devUsers = allUsers.filter(u => u.departmentId === devDepartment.id && u.isActive !== false);
+      setCached("users:development-assignable", devUsers, 120);
       res.json(devUsers);
     } catch (error) {
       console.error("Error fetching development assignable users:", error);
@@ -977,7 +969,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Customer Master routes
   app.get("/api/customers", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("customers:all");
+      if (cached) return res.json(cached);
       const customersList = await storage.getCustomers();
+      setCached("customers:all", customersList, 120);
       res.json(customersList);
     } catch (error) {
       console.error("Error fetching customers:", error);
@@ -985,10 +980,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get customers with lifecycle status for support ticket creation
   app.get("/api/customers/with-lifecycle", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("customers:with-lifecycle");
+      if (cached) return res.json(cached);
       const customersWithLifecycle = await storage.getCustomersWithLifecycle();
+      setCached("customers:with-lifecycle", customersWithLifecycle, 120);
       res.json(customersWithLifecycle);
     } catch (error) {
       console.error("Error fetching customers with lifecycle:", error);
@@ -1028,7 +1025,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New customer created: ${newCustomer.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("customers:");
       res.json(newCustomer);
     } catch (error: any) {
       console.error("Error creating customer:", error);
@@ -1050,7 +1048,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Customer updated: ${updated.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("customers:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating customer:", error);
@@ -1074,7 +1073,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Customer deleted: ${customer.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("customers:");
       res.json({ message: "Customer deleted successfully" });
     } catch (error) {
       console.error("Error deleting customer:", error);
@@ -1163,7 +1163,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Module Master routes
   app.get("/api/modules", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("modules:all");
+      if (cached) return res.json(cached);
       const modulesList = await storage.getModules();
+      setCached("modules:all", modulesList, 600);
       res.json(modulesList);
     } catch (error) {
       console.error("Error fetching modules:", error);
@@ -1203,7 +1206,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New module created: ${newModule.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("modules:");
       res.json(newModule);
     } catch (error: any) {
       console.error("Error creating module:", error);
@@ -1225,7 +1229,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Module updated: ${updated.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("modules:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating module:", error);
@@ -1262,11 +1267,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/all", isAuthenticated, async (req, res) => {
     try {
       const { includeInactive } = req.query;
+      const cacheKey = `users:all:${includeInactive === 'true' ? 'with-inactive' : 'active'}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       let usersList = await storage.getUsers();
-      // Filter out inactive users unless explicitly requested (for admin views)
       if (includeInactive !== 'true') {
         usersList = usersList.filter(u => u.isActive !== false);
       }
+      setCached(cacheKey, usersList, 60);
       res.json(usersList);
     } catch (error) {
       console.error("Error fetching all users:", error);
@@ -1304,7 +1312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Failed to send welcome email:", emailError);
         }
       }
-      
+
+      invalidateCache("users:");
       res.json(newUser);
     } catch (error: any) {
       console.error("Error creating user:", error);
@@ -1383,7 +1392,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `User updated: ${updated.firstName} ${updated.lastName}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("users:");
       res.json(updated);
     } catch (error: any) {
       console.error("Error updating user:", error);
@@ -1463,7 +1473,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `User deleted: ${user.firstName} ${user.lastName}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("users:");
       res.json({ message: "User deleted successfully" });
     } catch (error: any) {
       console.error("Error deleting user:", error);
@@ -1639,7 +1650,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Role routes (admin only for write operations)
   app.get("/api/user-roles", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("user-roles:all");
+      if (cached) return res.json(cached);
       const rolesList = await storage.getUserRoles();
+      setCached("user-roles:all", rolesList, 300);
       res.json(rolesList);
     } catch (error) {
       console.error("Error fetching user roles:", error);
@@ -1684,7 +1698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New user role created: ${newRole.displayName}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("user-roles:");
       res.json(newRole);
     } catch (error: any) {
       console.error("Error creating user role:", error);
@@ -1706,7 +1721,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `User role updated: ${updated.displayName}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("user-roles:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating user role:", error);
@@ -1889,7 +1905,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/departments", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("departments:all");
+      if (cached) return res.json(cached);
       const departmentsList = await storage.getDepartments();
+      setCached("departments:all", departmentsList, 300);
       res.json(departmentsList);
     } catch (error) {
       console.error("Error fetching departments:", error);
@@ -1929,7 +1948,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New department created: ${newDept.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("departments:");
       res.json(newDept);
     } catch (error: any) {
       console.error("Error creating department:", error);
@@ -1951,7 +1971,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Department updated: ${updated.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("departments:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating department:", error);
@@ -1975,7 +1996,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Department deleted: ${dept.name}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("departments:");
       res.json({ message: "Department deleted successfully" });
     } catch (error) {
       console.error("Error deleting department:", error);
@@ -2044,7 +2066,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/system-modules", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("system-modules:all");
+      if (cached) return res.json(cached);
       const modulesList = await storage.getSystemModules();
+      setCached("system-modules:all", modulesList, 600);
       res.json(modulesList);
     } catch (error) {
       console.error("Error fetching system modules:", error);
@@ -13049,7 +13074,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all contract types
   app.get("/api/contract-types", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
+      const cached = getCached<any>("contract-types:all");
+      if (cached) return res.json(cached);
       const types = await db.select().from(contractTypes).orderBy(contractTypes.sortOrder);
+      setCached("contract-types:all", types, 600);
       res.json(types);
     } catch (error) {
       console.error("Error fetching contract types:", error);
@@ -13084,7 +13112,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Contract type created: ${created.displayName}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contract-types:");
       res.json(created);
     } catch (error: any) {
       console.error("Error creating contract type:", error);
@@ -13114,7 +13143,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Contract type updated: ${updated.displayName}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contract-types:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating contract type:", error);
@@ -13139,7 +13169,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Contract type deleted: ${type.displayName}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contract-types:");
       res.json({ message: "Contract type deleted successfully" });
     } catch (error) {
       console.error("Error deleting contract type:", error);
