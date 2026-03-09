@@ -6458,68 +6458,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { status, priority, limit, assignedTo } = req.query;
       const authId = req.user?.claims?.sub;
+
+      // Cache key includes user + all filter params
+      const cacheKey = `tickets:${authId}:${status||''}:${priority||''}:${assignedTo||''}:${limit||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       
       // Use centralized access control helper
       const accessControl = await getAllowedUserIdsForUser(authId);
       
       // Build filters with access control
-      const filters: { status?: string; priority?: string; assignedEngineerIds?: string[] } = {
-        status: status as string,
-        priority: priority as string,
+      const filters: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number } = {
+        status: status as string || undefined,
+        priority: priority as string || undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
       };
       
       // Apply access control for non-admins
       if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
-        // If explicit assignedTo filter, validate it's allowed
         if (assignedTo) {
           if (accessControl.allowedUserIds.includes(assignedTo as string)) {
             filters.assignedEngineerIds = [assignedTo as string];
           } else {
-            // Ignore invalid filter, use allowed list
             filters.assignedEngineerIds = accessControl.allowedUserIds;
           }
         } else {
           filters.assignedEngineerIds = accessControl.allowedUserIds;
         }
       } else if (assignedTo) {
-        // Admin with explicit filter
         filters.assignedEngineerIds = [assignedTo as string];
       }
       
-      let ticketsList = await storage.getTickets(filters);
+      const ticketsList = await storage.getTickets(filters);
       
-      if (limit) {
-        ticketsList = ticketsList.slice(0, parseInt(limit as string));
-      }
-      
-      // Add development task info to each ticket
-      const developmentTasks = await storage.getDevelopmentTasks({});
-      const ticketDevTaskMap = new Map<string, { hasActiveDevelopmentTask: boolean; devTaskStatus: string; devTaskNumber: string }>();
-      for (const task of developmentTasks) {
-        if (task.sourceType === 'support' && task.sourceId) {
-          const sourceIdStr = String(task.sourceId); // Normalize to string for consistent lookup
-          const isActive = task.status !== 'completed' && task.status !== 'cancelled';
-          // Only store if this is an active task or no entry exists yet
-          if (!ticketDevTaskMap.has(sourceIdStr) || isActive) {
-            ticketDevTaskMap.set(sourceIdStr, {
-              hasActiveDevelopmentTask: isActive,
-              devTaskStatus: task.status,
-              devTaskNumber: task.taskNumber
-            });
+      // Get dev task map from cache (refreshed every 60s) to avoid loading all dev tasks per request
+      let ticketDevTaskMap = getCached<Map<string, { hasActiveDevelopmentTask: boolean; devTaskStatus: string; devTaskNumber: string }>>("devTaskMap");
+      if (!ticketDevTaskMap) {
+        const developmentTasks = await storage.getDevelopmentTasks({});
+        ticketDevTaskMap = new Map();
+        for (const task of developmentTasks) {
+          if (task.sourceType === 'support' && task.sourceId) {
+            const sourceIdStr = String(task.sourceId);
+            const isActive = task.status !== 'completed' && task.status !== 'cancelled';
+            if (!ticketDevTaskMap.has(sourceIdStr) || isActive) {
+              ticketDevTaskMap.set(sourceIdStr, {
+                hasActiveDevelopmentTask: isActive,
+                devTaskStatus: task.status,
+                devTaskNumber: task.taskNumber
+              });
+            }
           }
         }
+        setCached("devTaskMap", ticketDevTaskMap, 60);
       }
       
       const ticketsWithDevInfo = ticketsList.map(ticket => {
-        const ticketIdStr = String(ticket.id); // Normalize to string for consistent lookup
+        const ticketIdStr = String(ticket.id);
         return {
           ...ticket,
-          hasActiveDevelopmentTask: ticketDevTaskMap.get(ticketIdStr)?.hasActiveDevelopmentTask || false,
-          devTaskStatus: ticketDevTaskMap.get(ticketIdStr)?.devTaskStatus || null,
-          devTaskNumber: ticketDevTaskMap.get(ticketIdStr)?.devTaskNumber || null,
+          hasActiveDevelopmentTask: ticketDevTaskMap!.get(ticketIdStr)?.hasActiveDevelopmentTask || false,
+          devTaskStatus: ticketDevTaskMap!.get(ticketIdStr)?.devTaskStatus || null,
+          devTaskNumber: ticketDevTaskMap!.get(ticketIdStr)?.devTaskNumber || null,
         };
       });
       
+      setCached(cacheKey, ticketsWithDevInfo, 30);
       res.json(ticketsWithDevInfo);
     } catch (error) {
       console.error("Error fetching tickets:", error);
@@ -6579,7 +6582,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New ticket created: ${newTicket.ticketNumber} - ${newTicket.issueSummary}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("tickets:");
+      invalidateCache("my-department:");
+      invalidateCache("dashboard:");
       res.json(newTicket);
     } catch (error) {
       console.error("Error creating ticket:", error);
@@ -6648,7 +6654,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Ticket updated: ${updated.ticketNumber} - Status: ${updated.status}`,
         userId: req.user.claims.sub,
       });
-      
+
+      invalidateCache("tickets:");
+      invalidateCache("my-department:");
+      invalidateCache("dashboard:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating ticket:", error);
@@ -8916,6 +8925,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const authId = req.user.claims.sub;
       const { status, assignedTo, createdBy, view } = req.query;
+
+      // Cache key per user + filters
+      const cacheKey = `tasks:${authId}:${status||''}:${view||''}:${assignedTo||''}:${createdBy||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       
       // Fetch database user first - required for proper ID resolution
       const currentUser = await storage.getUser(authId);
@@ -8951,19 +8965,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Apply department-based filtering for non-admins
       if (!includeAll) {
         if (accessControl.hasFullAccess) {
-          // Admin viewing their own tasks (default view)
           taskFilters.userId = currentUser.id;
         } else if (accessControl.allowedUserIds && accessControl.allowedUserIds.length > 1) {
-          // Department manager - use userIds for department filtering
           taskFilters.userIds = accessControl.allowedUserIds;
         } else {
-          // Regular user - use single userId
           taskFilters.userId = currentUser.id;
         }
       }
       
       const taskList = await storage.getTasks(taskFilters);
       
+      setCached(cacheKey, taskList, 30);
       res.json(taskList);
     } catch (error) {
       console.error("Error fetching tasks:", error);
@@ -9122,7 +9134,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         metadata: { assignedTo: newTask.assignedTo },
       });
-      
+
+      invalidateCache("tasks:");
+      invalidateCache("my-department:");
       res.json(newTask);
     } catch (error) {
       console.error("Error creating task:", error);
@@ -9202,7 +9216,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: authId,
         metadata: { status: updatedTask.status },
       });
-      
+
+      invalidateCache("tasks:");
+      invalidateCache("my-department:");
       res.json(updatedTask);
     } catch (error) {
       console.error("Error updating task:", error);
