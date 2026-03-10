@@ -6244,6 +6244,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Implementation Dashboard stats
   app.get("/api/dashboard/implementation", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("dashboard:implementation");
+      if (cached) return res.json(cached);
+
       // Get all projects with modules and engineers
       const projectsList = await storage.getProjects({});
       
@@ -6313,7 +6316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         p.completionPercentage === 100 && (!p.handoff || p.handoff.status !== 'handed_off')
       ).length;
       
-      res.json({
+      const result = {
         projects: projectsWithDetails,
         stats: {
           totalProjects,
@@ -6322,7 +6325,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           completed,
           pendingHandoff,
         },
-      });
+      };
+      setCached("dashboard:implementation", result, 60);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching implementation dashboard:", error);
       res.status(500).json({ message: "Failed to fetch implementation dashboard" });
@@ -6361,9 +6366,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Support Dashboard API
   app.get("/api/dashboard/support", isAuthenticated, async (req, res) => {
     try {
-      const allTickets = await storage.getTickets({});
-      const users = await storage.getUsers();
-      const developmentTasks = await storage.getDevelopmentTasks({});
+      const cached = getCached<any>("dashboard:support");
+      if (cached) return res.json(cached);
+
+      const [allTickets, users, developmentTasks] = await Promise.all([
+        storage.getTickets({}),
+        storage.getUsers(),
+        storage.getDevelopmentTasks({}),
+      ]);
       
       // Create a map of ticket IDs to their development task status
       const ticketDevTaskMap = new Map<string, { hasPendingDev: boolean; devTaskStatus: string; devTaskNumber: string }>();
@@ -6432,7 +6442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
       
-      res.json({
+      const result = {
         stats: {
           totalTickets,
           assignedCount,
@@ -6449,7 +6459,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pendingDevelopmentCount,
         },
         tickets: ticketsWithAssignee,
-      });
+      };
+      setCached("dashboard:support", result, 60);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching support dashboard:", error);
       res.status(500).json({ message: "Failed to fetch support dashboard" });

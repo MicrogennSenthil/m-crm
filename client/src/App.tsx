@@ -23,13 +23,18 @@ import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
 import Home from "@/pages/home";
 
-// Lazy load all other pages — only downloaded when the user navigates there
-const Sales = lazy(() => import("@/pages/sales"));
-const Implementations = lazy(() => import("@/pages/implementations"));
-const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));
-const Support = lazy(() => import("@/pages/support"));
-const SupportDashboard = lazy(() => import("@/pages/support-dashboard"));
-const SalesDashboard = lazy(() => import("@/pages/sales-dashboard"));
+// Eagerly load frequently visited department pages — no spinner on navigation
+import Sales from "@/pages/sales";
+import Implementations from "@/pages/implementations";
+import ImplementationDashboard from "@/pages/implementation-dashboard";
+import Support from "@/pages/support";
+import SupportDashboard from "@/pages/support-dashboard";
+import SalesDashboard from "@/pages/sales-dashboard";
+import Tasks from "@/pages/tasks";
+import DevelopmentDashboard from "@/pages/development-dashboard";
+import DevelopmentTasks from "@/pages/development-tasks";
+
+// Lazy load infrequently visited pages
 const DepartmentUsers = lazy(() => import("@/pages/department-users"));
 const Reports = lazy(() => import("@/pages/reports"));
 const SalesReports = lazy(() => import("@/pages/reports-sales"));
@@ -43,7 +48,6 @@ const MarketingReports = lazy(() => import("@/pages/reports-marketing"));
 const SeedsReport = lazy(() => import("@/pages/seeds-report"));
 const Masters = lazy(() => import("@/pages/masters"));
 const Settings = lazy(() => import("@/pages/settings"));
-const Tasks = lazy(() => import("@/pages/tasks"));
 const TaskDetail = lazy(() => import("@/pages/task-detail"));
 const TodaysTasks = lazy(() => import("@/pages/todays-tasks"));
 const AdminUsers = lazy(() => import("@/pages/admin-users"));
@@ -59,8 +63,6 @@ const PointCategories = lazy(() => import("@/pages/admin/point-categories"));
 const AssignmentSettings = lazy(() => import("@/pages/admin/assignment-settings"));
 const DatabaseControl = lazy(() => import("@/pages/admin/database-control"));
 const SuperAdminDashboard = lazy(() => import("@/pages/super-admin-dashboard"));
-const DevelopmentDashboard = lazy(() => import("@/pages/development-dashboard"));
-const DevelopmentTasks = lazy(() => import("@/pages/development-tasks"));
 const AccountsContracts = lazy(() => import("@/pages/accounts-contracts"));
 const HRFeedback = lazy(() => import("@/pages/hr-feedback"));
 const MarketingDailyReport = lazy(() => import("@/pages/marketing-daily-report"));
