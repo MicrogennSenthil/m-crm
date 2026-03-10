@@ -1,6 +1,13 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+let openai: OpenAI | null = null;
+if (OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+} else {
+  console.warn("[Embeddings] OPENAI_API_KEY not set — Knowledge Base AI features disabled.");
+}
 
 export interface TextChunk {
   text: string;
@@ -12,6 +19,7 @@ export interface TextChunk {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
+  if (!openai) throw new Error("Knowledge Base AI is disabled: OPENAI_API_KEY not configured.");
   const response = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: text.trim(),
@@ -20,6 +28,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!openai) throw new Error("Knowledge Base AI is disabled: OPENAI_API_KEY not configured.");
   if (texts.length === 0) return [];
   
   const response = await openai.embeddings.create({
@@ -114,4 +123,8 @@ export function extractTextFromContent(content: string, contentType: string): st
 
 export function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+export function isOpenAIConfigured(): boolean {
+  return openai !== null;
 }
