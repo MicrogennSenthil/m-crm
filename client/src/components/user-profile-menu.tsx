@@ -10,9 +10,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
+import { queryClient } from "@/lib/queryClient";
 
 export function UserProfileMenu() {
   const { user } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/local-logout", { method: "POST" });
+    } catch {
+    } finally {
+      queryClient.clear();
+      window.location.href = "/auth/login";
+    }
+  };
 
   const getUserInitials = () => {
     if (!user) return "U";
@@ -71,11 +82,13 @@ export function UserProfileMenu() {
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <a href="/api/logout" className="cursor-pointer text-destructive" data-testid="button-logout">
-            <LogOut className="mr-2 h-4 w-4" />
-            <span>Log Out</span>
-          </a>
+        <DropdownMenuItem
+          onClick={handleLogout}
+          className="cursor-pointer text-destructive focus:text-destructive"
+          data-testid="button-logout"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Log Out</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
