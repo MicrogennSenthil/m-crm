@@ -334,6 +334,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).isLocalAuth = true;
       req.user = { claims: { sub: user.id } };
 
+      // Invalidate any stale auth caches for this user
+      invalidateCache(`auth:permissions:${user.id}`);
+      invalidateCache(`auth:user:${user.id}`);
+
       // Update last login in background (non-blocking)
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
       
@@ -822,8 +826,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Local logout
-  app.post("/api/auth/local-logout", async (req, res) => {
+  app.post("/api/auth/local-logout", async (req: any, res) => {
     try {
+      const userId = (req.session as any).userId || req.user?.claims?.sub;
+      if (userId) {
+        invalidateCache(`auth:permissions:${userId}`);
+        invalidateCache(`auth:user:${userId}`);
+      }
       req.session.destroy((err: any) => {
         if (err) {
           console.error("Error destroying session:", err);
@@ -841,10 +850,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const userCacheKey = `auth:user:${userId}`;
+      const cachedUser = getCached<any>(userCacheKey);
+      if (cachedUser) return res.json(cachedUser);
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      setCached(userCacheKey, user, 120);
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -856,34 +869,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/my-permissions", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub || (req.session as any).userId;
-      const user = await storage.getUser(userId);
+
+      const cacheKey = `auth:permissions:${userId}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
+      const [user, effectivePermissions, roleAssignments] = await Promise.all([
+        storage.getUser(userId),
+        storage.getUserEffectivePermissions(userId),
+        storage.getUserRoleAssignments(userId),
+      ]);
+
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
       const userIsSuperAdmin = isSuperAdmin(user.email || undefined);
-      
-      // Get effective permissions using the new role assignments system
-      const effectivePermissions = await storage.getUserEffectivePermissions(userId);
-      
-      // Get user's role assignments
-      const roleAssignments = await storage.getUserRoleAssignments(userId);
-      const assignedRoleIds = roleAssignments.filter(a => a.isActive).map(a => a.roleId);
-      
-      // Get role details
-      const assignedRoles = [];
-      for (const roleId of assignedRoleIds) {
-        const role = await storage.getUserRole(roleId);
-        if (role) {
-          assignedRoles.push({
-            id: role.id,
-            name: role.name,
-            displayName: role.displayName
-          });
-        }
-      }
-      
-      // Format permissions for frontend
+
+      // Role data is already embedded in the assignments — no extra DB calls needed
+      const assignedRoles = roleAssignments
+        .filter(a => a.isActive && a.role)
+        .map(a => ({
+          id: a.role!.id,
+          name: a.role!.name,
+          displayName: a.role!.displayName
+        }));
+
       const permissions = effectivePermissions.map(perm => ({
         moduleId: perm.module,
         moduleName: perm.module,
@@ -895,16 +906,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         source: perm.source
       }));
 
-      res.json({
+      const result = {
         userId: user.id,
         email: user.email,
-        legacyRole: user.role, // Keep for backward compatibility
+        legacyRole: user.role,
         assignedRoles,
         permissions,
         isSuperAdmin: userIsSuperAdmin,
-        // Super admin has all permissions
         hasAdminRole: userIsSuperAdmin || assignedRoles.some(r => r.name === 'admin') || user.role === 'admin'
-      });
+      };
+
+      setCached(cacheKey, result, 120);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching user permissions:", error);
       res.status(500).json({ message: "Failed to fetch user permissions" });
