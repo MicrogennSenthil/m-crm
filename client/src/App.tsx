@@ -21,9 +21,9 @@ import Landing from "@/pages/landing";
 import AuthLogin from "@/pages/auth-login";
 import AuthSignup from "@/pages/auth-signup";
 import AuthForgotPassword from "@/pages/auth-forgot-password";
+import Home from "@/pages/home";
 
 // Lazy load all other pages — only downloaded when the user navigates there
-const Home = lazy(() => import("@/pages/home"));
 const Sales = lazy(() => import("@/pages/sales"));
 const Implementations = lazy(() => import("@/pages/implementations"));
 const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));

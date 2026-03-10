@@ -7117,15 +7117,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let departmentMembers: any[] = [];
       
       if (departmentId) {
-        department = await storage.getDepartment(departmentId);
-        // Check if user is a department head using junction table
-        const headResult = await storage.isUserDepartmentHead(userId);
+        // Run department fetch and head check in parallel
+        const [dept, headResult] = await Promise.all([
+          storage.getDepartment(departmentId),
+          storage.isUserDepartmentHead(userId),
+        ]);
+        department = dept;
         isDepartmentHead = headResult.isDeptHead;
         
         // If department head, get all department members for their managed departments
         if (isDepartmentHead) {
-          const allUsers = await storage.getUsers();
-          const managedDepts = await storage.getDepartmentsByHead(userId);
+          const [allUsers, managedDepts] = await Promise.all([
+            storage.getUsers(),
+            storage.getDepartmentsByHead(userId),
+          ]);
           const managedDeptIds = new Set(managedDepts.map(d => d.id));
           departmentMembers = allUsers.filter(u => u.departmentId && managedDeptIds.has(u.departmentId) && u.id !== userId);
         }
@@ -7257,7 +7262,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/activities", isAuthenticated, async (req, res) => {
     try {
+      const cached = getCached<any>("dashboard:activities");
+      if (cached) return res.json(cached);
       const activities = await storage.getRecentActivities(20);
+      setCached("dashboard:activities", activities, 60);
       res.json(activities);
     } catch (error) {
       console.error("Error fetching activities:", error);
