@@ -6565,42 +6565,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all tickets - Everyone can see their own assigned tickets
   app.get("/api/tickets", isAuthenticated, async (req: any, res) => {
     try {
-      const { status, priority, limit, assignedTo } = req.query;
+      const { assignedTo, fromDate, toDate, search, category, statusTab, page, pageSize } = req.query;
       const authId = req.user?.claims?.sub;
 
       // Cache key includes user + all filter params
-      const cacheKey = `tickets:${authId}:${status||''}:${priority||''}:${assignedTo||''}:${limit||''}`;
+      const cacheKey = `tickets:v2:${authId}:${assignedTo||''}:${fromDate||''}:${toDate||''}:${search||''}:${category||''}:${statusTab||''}:${page||1}:${pageSize||50}`;
       const cached = getCached<any>(cacheKey);
       if (cached) return res.json(cached);
-      
-      // Use centralized access control helper
+
       const accessControl = await getAllowedUserIdsForUser(authId);
-      
-      // Build filters with access control
-      const filters: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number } = {
-        status: status as string || undefined,
-        priority: priority as string || undefined,
-        limit: limit ? parseInt(limit as string) : undefined,
-      };
-      
-      // Apply access control for non-admins
+
+      // Resolve assignedEngineerIds with access control
+      let assignedEngineerIds: string[] | undefined;
       if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
-        if (assignedTo) {
-          if (accessControl.allowedUserIds.includes(assignedTo as string)) {
-            filters.assignedEngineerIds = [assignedTo as string];
-          } else {
-            filters.assignedEngineerIds = accessControl.allowedUserIds;
-          }
+        if (assignedTo && assignedTo !== 'all') {
+          assignedEngineerIds = accessControl.allowedUserIds.includes(assignedTo as string)
+            ? [assignedTo as string]
+            : accessControl.allowedUserIds;
         } else {
-          filters.assignedEngineerIds = accessControl.allowedUserIds;
+          assignedEngineerIds = accessControl.allowedUserIds;
         }
-      } else if (assignedTo) {
-        filters.assignedEngineerIds = [assignedTo as string];
+      } else if (assignedTo && assignedTo !== 'all') {
+        assignedEngineerIds = [assignedTo as string];
       }
-      
-      const ticketsList = await storage.getTickets(filters);
-      
-      // Get dev task map from cache (refreshed every 60s) to avoid loading all dev tasks per request
+
+      const result = await storage.getTicketsPaginated({
+        assignedEngineerIds,
+        fromDate: fromDate ? new Date(fromDate as string) : undefined,
+        toDate: toDate ? new Date(toDate as string) : undefined,
+        search: search as string || undefined,
+        category: category as string || undefined,
+        statusTab: statusTab as string || undefined,
+        page: page ? parseInt(page as string) : 1,
+        pageSize: pageSize ? parseInt(pageSize as string) : 50,
+      });
+
+      // Attach dev task info (use cached map)
       let ticketDevTaskMap = getCached<Map<string, { hasActiveDevelopmentTask: boolean; devTaskStatus: string; devTaskNumber: string }>>("devTaskMap");
       if (!ticketDevTaskMap) {
         const developmentTasks = await storage.getDevelopmentTasks({});
@@ -6613,26 +6613,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ticketDevTaskMap.set(sourceIdStr, {
                 hasActiveDevelopmentTask: isActive,
                 devTaskStatus: task.status,
-                devTaskNumber: task.taskNumber
+                devTaskNumber: task.taskNumber,
               });
             }
           }
         }
         setCached("devTaskMap", ticketDevTaskMap, 60);
       }
-      
-      const ticketsWithDevInfo = ticketsList.map(ticket => {
-        const ticketIdStr = String(ticket.id);
+
+      const ticketsWithDevInfo = result.tickets.map(ticket => {
+        const info = ticketDevTaskMap!.get(String(ticket.id));
         return {
           ...ticket,
-          hasActiveDevelopmentTask: ticketDevTaskMap!.get(ticketIdStr)?.hasActiveDevelopmentTask || false,
-          devTaskStatus: ticketDevTaskMap!.get(ticketIdStr)?.devTaskStatus || null,
-          devTaskNumber: ticketDevTaskMap!.get(ticketIdStr)?.devTaskNumber || null,
+          hasActiveDevelopmentTask: info?.hasActiveDevelopmentTask || false,
+          devTaskStatus: info?.devTaskStatus || null,
+          devTaskNumber: info?.devTaskNumber || null,
         };
       });
-      
-      setCached(cacheKey, ticketsWithDevInfo, 30);
-      res.json(ticketsWithDevInfo);
+
+      const response = { tickets: ticketsWithDevInfo, total: result.total, counts: result.counts };
+      setCached(cacheKey, response, 20);
+      res.json(response);
     } catch (error) {
       console.error("Error fetching tickets:", error);
       res.status(500).json({ message: "Failed to fetch tickets" });

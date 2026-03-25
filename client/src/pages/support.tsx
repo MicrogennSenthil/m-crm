@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Search, ArrowUpDown, ChevronRight, Zap, Columns3, LayoutGrid, List, Bell, Volume2, VolumeX, Calendar as CalendarIcon, Filter } from "lucide-react";
-import { format, startOfDay, endOfDay, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useVoiceAlerts } from "@/providers/VoiceAlertProvider";
 import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ const getDisplayStatusConfig = (ticket: any) => {
 
 export default function Support() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [sortOrder, setSortOrder] = useState<string>("status");
@@ -93,7 +94,32 @@ export default function Support() {
     }
     return "table";
   });
-  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(50);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Build server-side query params from all active filters
+  const ticketQueryParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (categoryTab !== 'all') params.category = categoryTab;
+    if (selectedEmployee !== 'all') params.assignedTo = selectedEmployee;
+    if (dateFilterMode === 'range') {
+      if (fromDate) params.fromDate = startOfDay(fromDate).toISOString();
+      if (toDate) params.toDate = endOfDay(toDate).toISOString();
+    } else if (dateFilterMode === 'asOn' && asOnDate) {
+      params.toDate = endOfDay(asOnDate).toISOString();
+    }
+    // Only send statusTab for non-kanban (kanban groups by status itself)
+    if (layout !== 'kanban' && activeTab !== 'all') params.statusTab = activeTab;
+    params.page = String(currentPage);
+    params.pageSize = String(pageSize);
+    return params;
+  }, [debouncedSearch, categoryTab, selectedEmployee, dateFilterMode, fromDate, toDate, asOnDate, layout, activeTab, currentPage, pageSize]);
 
   // Voice alerts for support department
   const {
@@ -146,8 +172,8 @@ export default function Support() {
     }) || [];
   };
 
-  const { data: tickets, isLoading } = useQuery<Ticket[]>({
-    queryKey: ["/api/tickets"],
+  const { data: ticketData, isLoading } = useQuery<{ tickets: any[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number } }>({
+    queryKey: ["/api/tickets", ticketQueryParams],
   });
 
   // Fetch support-assignable employees for filtering
@@ -155,65 +181,30 @@ export default function Support() {
     queryKey: ["/api/users/support-assignable"],
   });
 
+  // Server already filtered - these are the loaded tickets
+  const loadedTickets = ticketData?.tickets || [];
+  const serverCounts = ticketData?.counts;
+
   // Resolved statuses for counting completed tickets
   const RESOLVED_STATUSES = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
-  
+
   // Helper to check if ticket is in development (level 3 OR has active development task)
   const isDevelopmentTicket = (t: any) => t.escalationLevel === 3 || t.hasActiveDevelopmentTask;
-  
-  // Helper to check if ticket passes date and employee filters
-  const passesDateAndEmployeeFilter = (ticket: any) => {
-    // Date filtering - always apply if dates are set
-    const ticketCreatedAt = ticket.createdAt;
-    if (ticketCreatedAt) {
-      const ticketDate = new Date(ticketCreatedAt);
-      // Check for valid date
-      if (!isNaN(ticketDate.getTime())) {
-        if (dateFilterMode === "asOn" && asOnDate) {
-          if (ticketDate > endOfDay(asOnDate)) return false;
-        } else if (dateFilterMode === "range") {
-          if (fromDate && ticketDate < startOfDay(fromDate)) return false;
-          if (toDate && ticketDate > endOfDay(toDate)) return false;
-        }
-      }
-    } else {
-      // If no createdAt and date filter is active, exclude the ticket
-      if (dateFilterMode === "asOn" && asOnDate) return false;
-      if (dateFilterMode === "range" && (fromDate || toDate)) return false;
-    }
-    
-    // Employee filtering
-    if (selectedEmployee !== "all") {
-      if (ticket.assignedEngineerId !== selectedEmployee) return false;
-    }
-    
-    return true;
-  };
 
-  // Apply date and employee filters first
-  const dateEmployeeFilteredTickets = tickets?.filter(passesDateAndEmployeeFilter) || [];
+  // Category counts - from server
+  const supportCount = serverCounts?.support ?? 0;
+  const developmentCount = serverCounts?.development ?? 0;
 
-  // Filter tickets by category (Support = level 1-2 with no dev task, Development = level 3 OR has active dev task)
-  const categoryFilteredTickets = dateEmployeeFilteredTickets.filter(t => {
-    if (categoryTab === "support") return !isDevelopmentTicket(t);
-    if (categoryTab === "development") return isDevelopmentTicket(t);
-    return true;
-  });
-
-  // Category counts (based on date/employee filtered tickets)
-  const supportCount = dateEmployeeFilteredTickets.filter(t => !isDevelopmentTicket(t)).length;
-  const developmentCount = dateEmployeeFilteredTickets.filter(t => isDevelopmentTicket(t)).length;
-  
-  // Calculate counts for status tabs (based on category-filtered tickets)
-  const allCount = categoryFilteredTickets.length;
-  const openCount = categoryFilteredTickets.filter(t => t.status === "open").length;
-  const inProgressCount = categoryFilteredTickets.filter(t => t.status === "in_progress" || t.status === "escalated" || t.status === "pending_customer").length;
-  const completedCount = categoryFilteredTickets.filter(t => RESOLVED_STATUSES.includes(t.status)).length;
-  // Reminders due today - tickets with reminder date matching today
+  // Status tab counts - from server
+  const allCount = serverCounts?.all ?? 0;
+  const openCount = serverCounts?.open ?? 0;
+  const inProgressCount = serverCounts?.inProgress ?? 0;
+  const completedCount = serverCounts?.completed ?? 0;
   const today = new Date().toDateString();
-  const remindersDueCount = categoryFilteredTickets.filter(t => 
-    t.reminderDate && new Date(t.reminderDate).toDateString() === today && !RESOLVED_STATUSES.includes(t.status)
-  ).length;
+  const remindersDueCount = serverCounts?.remindersDue ?? 0;
+
+  // categoryFilteredTickets = all loaded tickets (server already filtered by category/date/employee)
+  const categoryFilteredTickets = loadedTickets;
 
   // Status order for sorting: in_progress first, then open, then others, closed last
   const STATUS_ORDER: Record<string, number> = {
@@ -230,32 +221,8 @@ export default function Support() {
     return formatDistanceToNow(new Date(createdAt), { addSuffix: false });
   };
 
-  const filteredTickets = categoryFilteredTickets.filter((ticket) => {
-    // Tab filtering
-    if (activeTab === "open" && ticket.status !== "open") return false;
-    if (activeTab === "in_progress" && !["in_progress", "escalated", "pending_customer"].includes(ticket.status)) return false;
-    if (activeTab === "completed" && !RESOLVED_STATUSES.includes(ticket.status)) return false;
-    if (activeTab === "reminders_due" && (!ticket.reminderDate || new Date(ticket.reminderDate).toDateString() !== today || RESOLVED_STATUSES.includes(ticket.status))) return false;
-    
-    // Search filtering (date and employee filters already applied in categoryFilteredTickets)
-    if (!searchQuery) return true;
-    
-    const query = searchQuery.toLowerCase();
-    const priorityLabel = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG]?.label?.toLowerCase() || ticket.priority?.toLowerCase();
-    const statusLabel = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG]?.label?.toLowerCase() || ticket.status?.toLowerCase();
-    const escalationLabel = `l${ticket.escalationLevel}`;
-    const ageText = ticket.createdAt ? calculateAge(ticket.createdAt).toLowerCase() : "";
-    
-    return (
-      ticket.ticketNumber.toLowerCase().includes(query) ||
-      ticket.customerName.toLowerCase().includes(query) ||
-      ticket.issueSummary.toLowerCase().includes(query) ||
-      priorityLabel.includes(query) ||
-      statusLabel.includes(query) ||
-      escalationLabel.includes(query) ||
-      ageText.includes(query)
-    );
-  });
+  // Server already handles filtering - use loaded tickets directly
+  const filteredTickets = categoryFilteredTickets;
 
   // Sort tickets based on selected sort order
   const sortedTickets = [...(filteredTickets || [])].sort((a, b) => {
@@ -785,7 +752,7 @@ export default function Support() {
                   </TableRow>
                 ))
             ) : sortedTickets && sortedTickets.length > 0 ? (
-              paginateData(sortedTickets).map((ticket) => {
+              sortedTickets.map((ticket) => {
                 const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
                 const statusConfig = getDisplayStatusConfig(ticket);
                 const isAutoAssigned = (ticket as any).assignmentMethod === "auto";
@@ -868,12 +835,12 @@ export default function Support() {
           </TableBody>
         </Table>
         
-        {sortedTickets && sortedTickets.length > 0 && (
+        {(ticketData?.total ?? 0) > 0 && (
           <DataTablePagination
             currentPage={currentPage}
-            totalPages={getTotalPages(sortedTickets.length)}
+            totalPages={Math.ceil((ticketData?.total ?? 0) / pageSize)}
             pageSize={pageSize}
-            totalItems={sortedTickets.length}
+            totalItems={ticketData?.total ?? 0}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />

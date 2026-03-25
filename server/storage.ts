@@ -315,6 +315,7 @@ export interface IStorage {
 
   // Ticket operations
   getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]>;
+  getTicketsPaginated(filters: { assignedEngineerIds?: string[]; fromDate?: Date; toDate?: Date; search?: string; category?: string; statusTab?: string; page?: number; pageSize?: number; }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number; } }>;
   getTicket(id: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<InsertTicket>): Promise<Ticket>;
@@ -1758,6 +1759,78 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(maxLimit);
+  }
+
+  async getTicketsPaginated(filters: {
+    assignedEngineerIds?: string[];
+    fromDate?: Date;
+    toDate?: Date;
+    search?: string;
+    category?: string;
+    statusTab?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number } }> {
+    // Build base conditions (date range + employee + search + category)
+    const conditions: any[] = [];
+    if (filters.assignedEngineerIds && filters.assignedEngineerIds.length > 0) {
+      conditions.push(inArray(tickets.assignedEngineerId, filters.assignedEngineerIds));
+    }
+    if (filters.fromDate) conditions.push(gte(tickets.createdAt, filters.fromDate));
+    if (filters.toDate) conditions.push(lte(tickets.createdAt, filters.toDate));
+    if (filters.search) {
+      const s = `%${filters.search}%`;
+      conditions.push(or(ilike(tickets.ticketNumber, s), ilike(tickets.customerName, s), ilike(tickets.issueSummary, s)));
+    }
+    if (filters.category === 'support') conditions.push(sql`${tickets.escalationLevel} < 3`);
+    if (filters.category === 'development') conditions.push(sql`${tickets.escalationLevel} = 3`);
+
+    const baseWhere = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // statusTab adds additional filter on top of base
+    const tabConditions = [...conditions];
+    if (filters.statusTab === 'open') tabConditions.push(eq(tickets.status, 'open'));
+    if (filters.statusTab === 'in_progress') tabConditions.push(sql`${tickets.status} IN ('in_progress','escalated','pending_customer')`);
+    if (filters.statusTab === 'completed') tabConditions.push(sql`${tickets.status} IN ('closed','resolved','resolved_at_techteam','pending_feedback')`);
+    if (filters.statusTab === 'reminders_due') {
+      tabConditions.push(isNotNull(tickets.reminderDate));
+      tabConditions.push(sql`DATE(${tickets.reminderDate}) = CURRENT_DATE`);
+      tabConditions.push(sql`${tickets.status} NOT IN ('closed','resolved','resolved_at_techteam','pending_feedback')`);
+    }
+    const tabWhere = tabConditions.length > 0 ? and(...tabConditions) : undefined;
+
+    const pageSize = filters.pageSize || 50;
+    const page = filters.page || 1;
+    const offset = (page - 1) * pageSize;
+
+    // Run aggregate counts and paginated data in parallel
+    const [countResult, ticketRows] = await Promise.all([
+      db.select({
+        allCount: sql<number>`COUNT(*)`,
+        openCount: sql<number>`COUNT(CASE WHEN ${tickets.status} = 'open' THEN 1 END)`,
+        inProgressCount: sql<number>`COUNT(CASE WHEN ${tickets.status} IN ('in_progress','escalated','pending_customer') THEN 1 END)`,
+        completedCount: sql<number>`COUNT(CASE WHEN ${tickets.status} IN ('closed','resolved','resolved_at_techteam','pending_feedback') THEN 1 END)`,
+        remindersDueCount: sql<number>`COUNT(CASE WHEN ${tickets.reminderDate} IS NOT NULL AND DATE(${tickets.reminderDate}) = CURRENT_DATE AND ${tickets.status} NOT IN ('closed','resolved','resolved_at_techteam','pending_feedback') THEN 1 END)`,
+        supportCount: sql<number>`COUNT(CASE WHEN ${tickets.escalationLevel} < 3 THEN 1 END)`,
+        developmentCount: sql<number>`COUNT(CASE WHEN ${tickets.escalationLevel} = 3 THEN 1 END)`,
+      }).from(tickets).where(baseWhere),
+      db.select().from(tickets).where(tabWhere).orderBy(desc(tickets.createdAt)).limit(pageSize).offset(offset),
+    ]);
+
+    const c = countResult[0];
+    return {
+      tickets: ticketRows,
+      total: Number(c.allCount),
+      counts: {
+        all: Number(c.allCount),
+        open: Number(c.openCount),
+        inProgress: Number(c.inProgressCount),
+        completed: Number(c.completedCount),
+        remindersDue: Number(c.remindersDueCount),
+        support: Number(c.supportCount),
+        development: Number(c.developmentCount),
+      },
+    };
   }
 
   async getTicket(id: string): Promise<Ticket | undefined> {
