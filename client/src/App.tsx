@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -171,8 +171,11 @@ function AuthenticatedLayout() {
   );
 }
 
+const AUTH_PATHS = ["/auth/login", "/auth/signup", "/auth/forgot-password"];
+
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -195,6 +198,10 @@ function Router() {
         <Route component={Landing} />
       </Switch>
     );
+  }
+
+  if (AUTH_PATHS.includes(location)) {
+    return <Redirect to="/" />;
   }
 
   return <AuthenticatedLayout />;

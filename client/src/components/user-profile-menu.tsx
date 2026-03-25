@@ -9,19 +9,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, clearStoredUser } from "@/hooks/useAuth";
 import { queryClient } from "@/lib/queryClient";
 
 export function UserProfileMenu() {
   const { user } = useAuth();
 
   const handleLogout = async () => {
+    clearStoredUser();
+    queryClient.clear();
     try {
       await fetch("/api/auth/local-logout", { method: "POST" });
     } catch {
     } finally {
-      queryClient.clear();
-      window.location.href = "/auth/login";
+      window.location.replace("/auth/login");
     }
   };
 
