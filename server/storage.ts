@@ -169,7 +169,7 @@ import {
   type InsertSalesMonthlyTarget,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray, ilike, count } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -219,6 +219,15 @@ export interface IStorage {
 
   // Lead operations
   getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
+  getLeadsKanban(filters: {
+    search?: string;
+    city?: string;
+    area?: string;
+    leadSource?: string;
+    salesExecutiveId?: string;
+    salesExecutiveIds?: string[];
+    stageLimit?: number;
+  }): Promise<{ stages: Record<string, { leads: Lead[]; total: number }> }>;
   getLead(id: string): Promise<Lead | undefined>;
   createLead(lead: InsertLead, options?: { 
     skipStageHistory?: boolean;
@@ -1098,36 +1107,85 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Lead operations
-  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number }): Promise<Lead[]> {
+  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number; offset?: number; search?: string; city?: string; area?: string; leadSource?: string }): Promise<Lead[]> {
     const conditions: any[] = [];
-    // No default limit - return all leads unless explicitly limited
     const maxLimit = filters?.limit;
-    
-    if (filters?.stage) {
-      conditions.push(eq(leads.stage, filters.stage));
-    }
-    
-    if (filters?.salesExecutiveId) {
-      conditions.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
-    }
-    
+    const maxOffset = filters?.offset;
+
+    if (filters?.stage) conditions.push(eq(leads.stage, filters.stage));
+    if (filters?.salesExecutiveId) conditions.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
     if (filters?.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
       conditions.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
     }
-    
+    if (filters?.search) {
+      conditions.push(or(
+        ilike(leads.companyName, `%${filters.search}%`),
+        ilike(leads.contactPerson, `%${filters.search}%`),
+        ilike(leads.contactPhone, `%${filters.search}%`),
+        ilike(leads.contactEmail, `%${filters.search}%`),
+      ));
+    }
+    if (filters?.city) conditions.push(eq(leads.city, filters.city));
+    if (filters?.area) conditions.push(eq(leads.area, filters.area));
+    if (filters?.leadSource) conditions.push(eq(leads.leadSource, filters.leadSource));
+
     let query = db.select().from(leads);
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
-    
+    if (conditions.length > 0) query = query.where(and(...conditions)) as any;
     query = query.orderBy(desc(leads.createdAt)) as any;
-    
-    if (maxLimit) {
-      query = query.limit(maxLimit) as any;
-    }
-    
+    if (maxLimit) query = query.limit(maxLimit) as any;
+    if (maxOffset) query = query.offset(maxOffset) as any;
+
     return await query;
+  }
+
+  async getLeadsKanban(filters: {
+    search?: string;
+    city?: string;
+    area?: string;
+    leadSource?: string;
+    salesExecutiveId?: string;
+    salesExecutiveIds?: string[];
+    stageLimit?: number;
+  }): Promise<{ stages: Record<string, { leads: Lead[]; total: number }> }> {
+    const KANBAN_STAGES = ["seed", "lead", "demo_scheduled", "quote_sent", "negotiation", "closed_won"];
+    const stageLimit = filters.stageLimit || 50;
+
+    const buildConditions = (stage: string) => {
+      const conds: any[] = [eq(leads.stage, stage)];
+      if (filters.search) {
+        conds.push(or(
+          ilike(leads.companyName, `%${filters.search}%`),
+          ilike(leads.contactPerson, `%${filters.search}%`),
+          ilike(leads.contactPhone, `%${filters.search}%`),
+          ilike(leads.contactEmail, `%${filters.search}%`),
+        ));
+      }
+      if (filters.city) conds.push(eq(leads.city, filters.city));
+      if (filters.area) conds.push(eq(leads.area, filters.area));
+      if (filters.leadSource) conds.push(eq(leads.leadSource, filters.leadSource));
+      if (filters.salesExecutiveId) conds.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
+      if (filters.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
+        conds.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
+      }
+      return and(...conds);
+    };
+
+    const stageResults = await Promise.all(
+      KANBAN_STAGES.map(async (stage) => {
+        const where = buildConditions(stage);
+        const [stageLeads, [{ total }]] = await Promise.all([
+          db.select().from(leads).where(where).orderBy(desc(leads.createdAt)).limit(stageLimit),
+          db.select({ total: count() }).from(leads).where(where),
+        ]);
+        return { stage, leads: stageLeads, total: Number(total) };
+      })
+    );
+
+    const stages: Record<string, { leads: Lead[]; total: number }> = {};
+    for (const { stage, leads: stageLeads, total } of stageResults) {
+      stages[stage] = { leads: stageLeads, total };
+    }
+    return { stages };
   }
 
   async getLead(id: string): Promise<Lead | undefined> {

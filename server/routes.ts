@@ -3188,6 +3188,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Kanban-optimised endpoint: max 50 per stage + real total counts via parallel COUNT queries
+  app.get("/api/leads/kanban", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const { search, city, area, leadSource, salesExecutiveId, stageLimit, offset } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) return res.status(401).json({ message: "User not found" });
+
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
+
+      const result = await storage.getLeadsKanban({
+        search: search as string || undefined,
+        city: city && city !== "all" ? city as string : undefined,
+        area: area && area !== "all" ? area as string : undefined,
+        leadSource: leadSource && leadSource !== "all" ? leadSource as string : undefined,
+        salesExecutiveId: userFilter.userId,
+        salesExecutiveIds: userFilter.userIds,
+        stageLimit: stageLimit ? parseInt(stageLimit as string) : 50,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching kanban leads:", error);
+      res.status(500).json({ message: "Failed to fetch kanban data" });
+    }
+  });
+
+  // Load more for a specific stage
+  app.get("/api/leads/stage", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const { stage, search, city, area, leadSource, salesExecutiveId, limit = "50", offset = "0" } = req.query;
+      const authId = req.user.claims.sub || (req.session as any).userId;
+      const currentUser = await storage.getUser(authId);
+      if (!currentUser) return res.status(401).json({ message: "User not found" });
+
+      const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
+
+      const result = await storage.getLeads({
+        stage: stage as string,
+        salesExecutiveId: userFilter.userId,
+        salesExecutiveIds: userFilter.userIds,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        search: search as string || undefined,
+        city: city && city !== "all" ? city as string : undefined,
+        area: area && area !== "all" ? area as string : undefined,
+        leadSource: leadSource && leadSource !== "all" ? leadSource as string : undefined,
+      } as any);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching stage leads:", error);
+      res.status(500).json({ message: "Failed to fetch stage leads" });
+    }
+  });
+
   app.get("/api/leads/:id", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
       const lead = await storage.getLead(req.params.id);

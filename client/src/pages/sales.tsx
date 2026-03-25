@@ -79,8 +79,12 @@ const STAGES = [
 
 type LayoutType = "kanban" | "list" | "compact";
 
+type KanbanStageData = { leads: Lead[]; total: number };
+type KanbanData = { stages: Record<string, KanbanStageData> };
+
 export default function Sales() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [googleSheetsImportOpen, setGoogleSheetsImportOpen] = useState(false);
@@ -97,16 +101,48 @@ export default function Sales() {
   const [selectedArea, setSelectedArea] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [selectedLeadSource, setSelectedLeadSource] = useState<string>("all");
+  const [stageExtraLeads, setStageExtraLeads] = useState<Record<string, Lead[]>>({});
+  const [stageLoadingMore, setStageLoadingMore] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
+
+  // Debounce search to avoid firing a query on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset extra leads whenever filters change
+  useEffect(() => {
+    setStageExtraLeads({});
+  }, [debouncedSearch, selectedCity, selectedArea, selectedUser, selectedLeadSource]);
 
   const handleLayoutChange = (newLayout: LayoutType) => {
     setLayout(newLayout);
     localStorage.setItem("sales-layout", newLayout);
   };
 
-  const { data: leads, isLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads"],
+  // Kanban filters — sent server-side so only relevant leads are returned
+  const kanbanFilters = {
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(selectedCity !== "all" ? { city: selectedCity } : {}),
+    ...(selectedArea !== "all" ? { area: selectedArea } : {}),
+    ...(selectedUser !== "all" ? { salesExecutiveId: selectedUser } : {}),
+    ...(selectedLeadSource !== "all" ? { leadSource: selectedLeadSource } : {}),
+  };
+
+  // Kanban view: paginated server-side (50 per stage max + real totals)
+  const { data: kanbanData, isLoading: kanbanLoading } = useQuery<KanbanData>({
+    queryKey: ["/api/leads/kanban", kanbanFilters],
+    enabled: layout === "kanban",
   });
+
+  // List/compact view: load leads with a reasonable limit
+  const { data: leads, isLoading: leadsLoading } = useQuery<Lead[]>({
+    queryKey: ["/api/leads"],
+    enabled: layout !== "kanban",
+  });
+
+  const isLoading = layout === "kanban" ? kanbanLoading : leadsLoading;
 
   // Fetch users for filter dropdown
   const { data: users = [] } = useQuery<UserType[]>({
@@ -341,6 +377,7 @@ export default function Sales() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/kanban"] });
       toast({
         title: "Success",
         description: "Lead stage updated successfully",
@@ -459,22 +496,60 @@ export default function Sales() {
     }) || [];
   }, [leads, searchQuery, selectedCity, selectedArea, selectedUser, selectedLeadSource]);
 
-  const getLeadsByStage = (stageId: string) => {
+  // In kanban mode: use server-paginated data (50 per stage) + any extra loaded via "Load More"
+  // In list/compact mode: use client-filtered data
+  const getLeadsByStage = (stageId: string): Lead[] => {
+    const applyVisibilityFilter = (lead: Lead) => {
+      const leadAny = lead as any;
+      if (leadAny.interestStatus === "not_interested") return false;
+      if (stageId === "seed" && leadAny.isExistingCustomer === true) return false;
+      return true;
+    };
+
+    if (layout === "kanban") {
+      const base = kanbanData?.stages[stageId]?.leads || [];
+      const extra = stageExtraLeads[stageId] || [];
+      return [...base, ...extra].filter(applyVisibilityFilter);
+    }
+
     return filteredLeads?.filter((lead) => {
       if (lead.stage !== stageId) return false;
-      
-      const leadAny = lead as any;
-      
-      // Hide "not interested" leads from ALL stages (they only show in reports)
-      if (leadAny.interestStatus === "not_interested") return false;
-      
-      // For seeds stage, also hide "existing customer" seeds
-      if (stageId === "seed") {
-        if (leadAny.isExistingCustomer === true) return false;
-      }
-      
-      return true;
+      return applyVisibilityFilter(lead);
     }) || [];
+  };
+
+  // Real total count from server (for kanban); client count for other layouts
+  const getStageTotal = (stageId: string): number => {
+    if (layout === "kanban") return kanbanData?.stages[stageId]?.total || 0;
+    return getLeadsByStage(stageId).length;
+  };
+
+  // Returns true if there are more leads on the server than currently shown
+  const stageHasMore = (stageId: string): boolean => {
+    if (layout !== "kanban") return false;
+    const shown = getLeadsByStage(stageId).length;
+    const total = kanbanData?.stages[stageId]?.total || 0;
+    return shown < total;
+  };
+
+  const handleLoadMore = async (stageId: string) => {
+    setStageLoadingMore(prev => ({ ...prev, [stageId]: true }));
+    try {
+      const currentShown = (kanbanData?.stages[stageId]?.leads.length || 0) + (stageExtraLeads[stageId]?.length || 0);
+      const params = new URLSearchParams({
+        stage: stageId,
+        limit: "50",
+        offset: String(currentShown),
+        ...Object.fromEntries(Object.entries(kanbanFilters).map(([k, v]) => [k, String(v)])),
+      });
+      const resp = await fetch(`/api/leads/stage?${params}`, { credentials: "include" });
+      const newLeads: Lead[] = await resp.json();
+      setStageExtraLeads(prev => ({ ...prev, [stageId]: [...(prev[stageId] || []), ...newLeads] }));
+    } catch {
+      toast({ title: "Error", description: "Failed to load more leads", variant: "destructive" });
+    } finally {
+      setStageLoadingMore(prev => ({ ...prev, [stageId]: false }));
+    }
   };
 
   // Calculate total value for a stage
@@ -893,7 +968,6 @@ export default function Sales() {
             </Badge>
           </Button>
           {STAGES.map((stage) => {
-            const stageLeads = getLeadsByStage(stage.id);
             const stageValue = getStageTotalValue(stage.id);
             return (
               <Button
@@ -908,7 +982,7 @@ export default function Sales() {
                 <span className="hidden sm:inline">{stage.title}</span>
                 <span className="sm:hidden">{stage.title.split(' ')[0]}</span>
                 <Badge variant="secondary" className="ml-2">
-                  {stageLeads.length}
+                  {getStageTotal(stage.id)}
                 </Badge>
                 {stageValue > 0 && (
                   <Badge variant="outline" className="ml-1 text-green-600 border-green-300">
@@ -1048,7 +1122,7 @@ export default function Sales() {
                   <h3 className="font-semibold text-xs sm:text-sm truncate">{stage.title}</h3>
                   <div className="ml-auto flex items-center gap-1 flex-shrink-0">
                     <Badge variant="secondary" className="text-xs">
-                      {stageLeads.length}
+                      {getStageTotal(stage.id)}
                     </Badge>
                     {getStageTotalValue(stage.id) > 0 && (
                       <Badge variant="outline" className="text-xs text-green-600 border-green-300">
@@ -1170,6 +1244,21 @@ export default function Sales() {
                         No leads
                       </CardContent>
                     </Card>
+                  )}
+                  {stageHasMore(stage.id) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => handleLoadMore(stage.id)}
+                      disabled={stageLoadingMore[stage.id]}
+                      data-testid={`button-load-more-${stage.id}`}
+                    >
+                      {stageLoadingMore[stage.id] ? (
+                        <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                      ) : null}
+                      Load more ({getStageTotal(stage.id) - getLeadsByStage(stage.id).length} remaining)
+                    </Button>
                   )}
                 </div>
               </div>
