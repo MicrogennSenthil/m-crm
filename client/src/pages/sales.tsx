@@ -39,6 +39,7 @@ import type { Lead, FollowUp, User as UserType } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { DataTablePagination, usePagination } from "@/components/ui/data-table-pagination";
 
 interface FollowUpWithLead extends FollowUp {
   leadCompanyName: string | null;
@@ -121,6 +122,14 @@ export default function Sales() {
     localStorage.setItem("sales-layout", newLayout);
   };
 
+  // Pagination state for list/compact view
+  const { currentPage, pageSize, setCurrentPage, handlePageChange, handlePageSizeChange, getTotalPages } = usePagination(50);
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCity, selectedArea, selectedUser, selectedLeadSource, selectedStage]);
+
   // Kanban filters — sent server-side so only relevant leads are returned
   const kanbanFilters = {
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
@@ -130,17 +139,31 @@ export default function Sales() {
     ...(selectedLeadSource !== "all" ? { leadSource: selectedLeadSource } : {}),
   };
 
+  // List/compact filters — all filters pushed to server
+  const listFilters = {
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(selectedCity !== "all" ? { city: selectedCity } : {}),
+    ...(selectedArea !== "all" ? { area: selectedArea } : {}),
+    ...(selectedUser !== "all" ? { salesExecutiveId: selectedUser } : {}),
+    ...(selectedLeadSource !== "all" ? { leadSource: selectedLeadSource } : {}),
+    ...(selectedStage ? { stage: selectedStage } : {}),
+    page: currentPage,
+    pageSize,
+  };
+
   // Kanban view: paginated server-side (50 per stage max + real totals)
   const { data: kanbanData, isLoading: kanbanLoading } = useQuery<KanbanData>({
     queryKey: ["/api/leads/kanban", kanbanFilters],
     enabled: layout === "kanban",
   });
 
-  // List/compact view: load leads with a reasonable limit
-  const { data: leads, isLoading: leadsLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads"],
+  // List/compact view: server-side paginated with all filters
+  const { data: leadsData, isLoading: leadsLoading } = useQuery<{ leads: Lead[]; total: number }>({
+    queryKey: ["/api/leads", listFilters],
     enabled: layout !== "kanban",
   });
+  const leads = leadsData?.leads || [];
+  const leadsTotal = leadsData?.total || 0;
 
   const isLoading = layout === "kanban" ? kanbanLoading : leadsLoading;
 
@@ -149,7 +172,7 @@ export default function Sales() {
     if (layout === "kanban" && kanbanData) {
       return Object.values(kanbanData.stages).flatMap(s => s.leads);
     }
-    return leads || [];
+    return leads;
   }, [layout, kanbanData, leads]);
 
   // Fetch users for filter dropdown
@@ -411,39 +434,14 @@ export default function Sales() {
     },
   });
 
-  // Extract unique cities, areas, and lead sources for filter dropdowns
-  const uniqueCities = useMemo(() => {
-    const cities = new Set<string>();
-    leads?.forEach((lead) => {
-      if (lead.city && lead.city.trim()) {
-        cities.add(lead.city.trim());
-      }
-    });
-    return Array.from(cities).sort();
-  }, [leads]);
-
-  const uniqueAreas = useMemo(() => {
-    const areas = new Set<string>();
-    leads?.forEach((lead) => {
-      if (lead.area && lead.area.trim()) {
-        if (selectedCity === "all" || lead.city === selectedCity) {
-          areas.add(lead.area.trim());
-        }
-      }
-    });
-    return Array.from(areas).sort();
-  }, [leads, selectedCity]);
-
-  const uniqueLeadSources = useMemo(() => {
-    const sources = new Set<string>();
-    leads?.forEach((lead) => {
-      const displaySource = lead.leadSource === "other" && (lead as any).customLeadSource
-        ? (lead as any).customLeadSource.trim()
-        : lead.leadSource?.trim();
-      if (displaySource) sources.add(displaySource);
-    });
-    return Array.from(sources).sort();
-  }, [leads]);
+  // Fetch distinct filter options (cities, areas, lead sources) from server
+  const { data: filterOptions } = useQuery<{ cities: string[]; areas: string[]; leadSources: string[] }>({
+    queryKey: ["/api/leads/filter-options"],
+    staleTime: 2 * 60 * 1000,
+  });
+  const uniqueCities = filterOptions?.cities || [];
+  const uniqueAreas = filterOptions?.areas || [];
+  const uniqueLeadSources = filterOptions?.leadSources || [];
 
   // Clear filters function
   const clearAllFilters = () => {
@@ -464,45 +462,8 @@ export default function Sales() {
     searchQuery !== "",
   ].filter(Boolean).length;
 
-  const filteredLeads = useMemo(() => {
-    return leads?.filter((lead) => {
-      // Search query filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          lead.companyName.toLowerCase().includes(query) ||
-          lead.contactPerson?.toLowerCase().includes(query) ||
-          lead.contactPhone?.toLowerCase().includes(query) ||
-          lead.contactEmail?.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-
-      // City filter
-      if (selectedCity !== "all" && lead.city !== selectedCity) {
-        return false;
-      }
-
-      // Area filter
-      if (selectedArea !== "all" && lead.area !== selectedArea) {
-        return false;
-      }
-
-      // User filter
-      if (selectedUser !== "all" && lead.salesExecutiveId !== selectedUser) {
-        return false;
-      }
-
-      // Lead source filter
-      if (selectedLeadSource !== "all") {
-        const displaySource = lead.leadSource === "other" && (lead as any).customLeadSource
-          ? (lead as any).customLeadSource.trim()
-          : lead.leadSource?.trim();
-        if (displaySource !== selectedLeadSource) return false;
-      }
-
-      return true;
-    }) || [];
-  }, [leads, searchQuery, selectedCity, selectedArea, selectedUser, selectedLeadSource]);
+  // Leads are already filtered server-side — use directly
+  const filteredLeads = leads;
 
   // In kanban mode: use server-paginated data (50 per stage) + any extra loaded via "Load More"
   // In list/compact mode: use client-filtered data
@@ -948,7 +909,7 @@ export default function Sales() {
                 {/* Results Count */}
                 <div className="space-y-2 flex items-end">
                   <div className="text-sm text-muted-foreground">
-                    Showing <span className="font-medium text-foreground">{filteredLeads.length}</span> of {leads?.length || 0} leads
+                    Showing <span className="font-medium text-foreground">{leads.length}</span> of <span className="font-medium text-foreground">{leadsTotal}</span> leads
                   </div>
                 </div>
               </div>
@@ -969,10 +930,10 @@ export default function Sales() {
           >
             <span>All</span>
             <Badge variant="secondary" className="ml-2">
-              {leads?.length || 0}
+              {leadsTotal}
             </Badge>
             <Badge variant="outline" className="ml-1 text-green-600 border-green-300">
-              ₹{formatCompactCurrency(leads?.reduce((sum, l) => sum + (l.estimatedValue || 0), 0) || 0)}
+              ₹{formatCompactCurrency(leads.reduce((sum, l) => sum + (l.estimatedValue || 0), 0) || 0)}
             </Badge>
           </Button>
           {STAGES.map((stage) => {
@@ -1441,6 +1402,19 @@ export default function Sales() {
               </div>
             );
           })}
+
+          {/* Compact view pagination */}
+          {leadsTotal > pageSize && (
+            <DataTablePagination
+              currentPage={currentPage}
+              totalPages={getTotalPages(leadsTotal)}
+              pageSize={pageSize}
+              totalItems={leadsTotal}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={[25, 50, 100]}
+            />
+          )}
         </div>
       )}
 
@@ -1597,6 +1571,19 @@ export default function Sales() {
               </Card>
             );
           })}
+
+          {/* List view pagination */}
+          {leadsTotal > pageSize && (
+            <DataTablePagination
+              currentPage={currentPage}
+              totalPages={getTotalPages(leadsTotal)}
+              pageSize={pageSize}
+              totalItems={leadsTotal}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={[25, 50, 100]}
+            />
+          )}
         </div>
       )}
 

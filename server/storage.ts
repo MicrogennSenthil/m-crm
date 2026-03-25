@@ -219,6 +219,7 @@ export interface IStorage {
 
   // Lead operations
   getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
+  getLeadsPaginated(filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; search?: string; city?: string; area?: string; leadSource?: string; page?: number; pageSize?: number; }): Promise<{ leads: Lead[]; total: number }>;
   getLeadsKanban(filters: {
     search?: string;
     city?: string;
@@ -1137,6 +1138,49 @@ export class DatabaseStorage implements IStorage {
     if (maxOffset) query = query.offset(maxOffset) as any;
 
     return await query;
+  }
+
+  async getLeadsPaginated(filters: {
+    stage?: string;
+    salesExecutiveId?: string;
+    salesExecutiveIds?: string[];
+    search?: string;
+    city?: string;
+    area?: string;
+    leadSource?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ leads: Lead[]; total: number }> {
+    const conditions: any[] = [];
+    if (filters.stage) conditions.push(eq(leads.stage, filters.stage));
+    if (filters.salesExecutiveId) conditions.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
+    if (filters.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
+      conditions.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
+    }
+    if (filters.search) {
+      const s = `%${filters.search}%`;
+      conditions.push(or(
+        ilike(leads.companyName, s),
+        ilike(leads.contactPerson, s),
+        ilike(leads.contactPhone, s),
+        ilike(leads.contactEmail, s),
+      ));
+    }
+    if (filters.city) conditions.push(eq(leads.city, filters.city));
+    if (filters.area) conditions.push(eq(leads.area, filters.area));
+    if (filters.leadSource) conditions.push(eq(leads.leadSource, filters.leadSource));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const pageSize = filters.pageSize || 50;
+    const page = filters.page || 1;
+    const offset = (page - 1) * pageSize;
+
+    const [[{ total }], rows] = await Promise.all([
+      db.select({ total: count() }).from(leads).where(where),
+      db.select().from(leads).where(where).orderBy(desc(leads.createdAt)).limit(pageSize).offset(offset),
+    ]);
+
+    return { leads: rows, total: Number(total) };
   }
 
   async getLeadsKanban(filters: {

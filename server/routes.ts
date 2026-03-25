@@ -8,7 +8,7 @@ import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalid
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
-import { eq, sql, and, desc, or, ilike, inArray } from "drizzle-orm";
+import { eq, sql, and, desc, or, ilike, inArray, isNotNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   insertCustomerSchema,
@@ -3152,39 +3152,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Lead routes
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
-      const { stage, salesExecutiveId, limit } = req.query;
+      const { stage, salesExecutiveId, search, city, area, leadSource, page, pageSize } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
-      
-      // Fetch database user first - required for proper ID resolution
+
+      const cacheKey = `leads:list:${authId}:${stage||''}:${salesExecutiveId||''}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${page||1}:${pageSize||50}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const currentUser = await storage.getUser(authId);
-      if (!currentUser) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      // Use the database user ID (not auth ID) for access control
+      if (!currentUser) return res.status(401).json({ message: "User not found" });
+
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
-      
-      // Build filters - enforce access control
-      const filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] } = {
-        stage: stage as string,
-      };
-      
       const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
-      if (userFilter.userId) {
-        filters.salesExecutiveId = userFilter.userId;
-      } else if (userFilter.userIds) {
-        filters.salesExecutiveIds = userFilter.userIds;
-      }
-      
-      const leadsList = await storage.getLeads({
-        ...filters,
-        limit: limit ? parseInt(limit as string) : undefined,
+
+      const result = await storage.getLeadsPaginated({
+        stage: stage as string || undefined,
+        salesExecutiveId: userFilter.userId,
+        salesExecutiveIds: userFilter.userIds,
+        search: search as string || undefined,
+        city: city && city !== "all" ? city as string : undefined,
+        area: area && area !== "all" ? area as string : undefined,
+        leadSource: leadSource && leadSource !== "all" ? leadSource as string : undefined,
+        page: page ? parseInt(page as string) : 1,
+        pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
 
-      res.json(leadsList);
+      setCached(cacheKey, result, 20);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching leads:", error);
       res.status(500).json({ message: "Failed to fetch leads" });
+    }
+  });
+
+  // Distinct filter options (cities, areas, lead sources) for dropdown population
+  app.get("/api/leads/filter-options", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
+    try {
+      const cacheKey = "leads:filter-options";
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
+      const [cities, areas, sources] = await Promise.all([
+        db.selectDistinct({ city: leads.city }).from(leads).where(isNotNull(leads.city)).orderBy(leads.city),
+        db.selectDistinct({ area: leads.area }).from(leads).where(isNotNull(leads.area)).orderBy(leads.area),
+        db.selectDistinct({ leadSource: leads.leadSource, customLeadSource: leads.customLeadSource }).from(leads).where(isNotNull(leads.leadSource)),
+      ]);
+
+      const result = {
+        cities: cities.map(r => r.city).filter(Boolean),
+        areas: areas.map(r => r.area).filter(Boolean),
+        leadSources: [...new Set(sources.map(r =>
+          r.leadSource === "other" && r.customLeadSource ? r.customLeadSource.trim() : r.leadSource?.trim()
+        ).filter(Boolean))].sort(),
+      };
+
+      setCached(cacheKey, result, 120); // cache for 2 minutes
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching filter options:", error);
+      res.status(500).json({ message: "Failed to fetch filter options" });
     }
   });
 
@@ -3349,6 +3375,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `New lead created: ${newLead.companyName}`,
         userId: req.user.claims.sub,
       });
+
+      // Invalidate list/filter caches so next load reflects new lead
+      invalidateCache("leads:list:");
+      invalidateCache("leads:filter-options");
       
       res.json(newLead);
     } catch (error: any) {
@@ -3624,6 +3654,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: activityDescription,
         userId: req.user.claims.sub,
       });
+
+      invalidateCache("leads:list:");
       
       res.json(updated);
     } catch (error) {
@@ -3667,6 +3699,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       console.log(`[Seed Delete] Deleted seed ${lead.companyName} (${leadId}), import status reset for re-import`);
+
+      invalidateCache("leads:list:");
+      invalidateCache("leads:filter-options");
       
       res.json({ success: true, message: "Seed deleted successfully" });
     } catch (error) {
