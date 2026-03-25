@@ -3191,8 +3191,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Kanban-optimised endpoint: max 50 per stage + real total counts via parallel COUNT queries
   app.get("/api/leads/kanban", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
-      const { search, city, area, leadSource, salesExecutiveId, stageLimit, offset } = req.query;
+      const { search, city, area, leadSource, salesExecutiveId, stageLimit } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
+
+      const cacheKey = `leads:kanban:${authId}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${salesExecutiveId||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const currentUser = await storage.getUser(authId);
       if (!currentUser) return res.status(401).json({ message: "User not found" });
 
@@ -3209,6 +3214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stageLimit: stageLimit ? parseInt(stageLimit as string) : 50,
       });
 
+      setCached(cacheKey, result, 30);
       res.json(result);
     } catch (error) {
       console.error("Error fetching kanban leads:", error);

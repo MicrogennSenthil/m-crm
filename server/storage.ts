@@ -1151,40 +1151,79 @@ export class DatabaseStorage implements IStorage {
     const KANBAN_STAGES = ["seed", "lead", "demo_scheduled", "quote_sent", "negotiation", "closed_won"];
     const stageLimit = filters.stageLimit || 50;
 
-    const buildConditions = (stage: string) => {
-      const conds: any[] = [eq(leads.stage, stage)];
-      if (filters.search) {
-        conds.push(or(
-          ilike(leads.companyName, `%${filters.search}%`),
-          ilike(leads.contactPerson, `%${filters.search}%`),
-          ilike(leads.contactPhone, `%${filters.search}%`),
-          ilike(leads.contactEmail, `%${filters.search}%`),
-        ));
-      }
-      if (filters.city) conds.push(eq(leads.city, filters.city));
-      if (filters.area) conds.push(eq(leads.area, filters.area));
-      if (filters.leadSource) conds.push(eq(leads.leadSource, filters.leadSource));
-      if (filters.salesExecutiveId) conds.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
-      if (filters.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
-        conds.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
-      }
-      return and(...conds);
-    };
+    // Build shared base conditions (no stage filter — applied across all stages)
+    const baseConds: any[] = [inArray(leads.stage, KANBAN_STAGES)];
+    if (filters.search) {
+      baseConds.push(or(
+        ilike(leads.companyName, `%${filters.search}%`),
+        ilike(leads.contactPerson, `%${filters.search}%`),
+        ilike(leads.contactPhone, `%${filters.search}%`),
+        ilike(leads.contactEmail, `%${filters.search}%`),
+      ));
+    }
+    if (filters.city) baseConds.push(eq(leads.city, filters.city));
+    if (filters.area) baseConds.push(eq(leads.area, filters.area));
+    if (filters.leadSource) baseConds.push(eq(leads.leadSource, filters.leadSource));
+    if (filters.salesExecutiveId) baseConds.push(eq(leads.salesExecutiveId, filters.salesExecutiveId));
+    if (filters.salesExecutiveIds && filters.salesExecutiveIds.length > 0) {
+      baseConds.push(inArray(leads.salesExecutiveId, filters.salesExecutiveIds));
+    }
+    const baseWhere = and(...baseConds);
 
-    const stageResults = await Promise.all(
-      KANBAN_STAGES.map(async (stage) => {
-        const where = buildConditions(stage);
-        const [stageLeads, [{ total }]] = await Promise.all([
-          db.select().from(leads).where(where).orderBy(desc(leads.createdAt)).limit(stageLimit),
-          db.select({ total: count() }).from(leads).where(where),
-        ]);
-        return { stage, leads: stageLeads, total: Number(total) };
-      })
-    );
+    // 2 queries instead of 12: one for counts, one for paginated leads via ROW_NUMBER()
+    const [countRows, pagedRows] = await Promise.all([
+      // Query 1: stage counts
+      db.select({ stage: leads.stage, total: count() })
+        .from(leads)
+        .where(baseWhere)
+        .groupBy(leads.stage),
+      // Query 2: top N leads per stage using ROW_NUMBER() window function
+      db.execute(sql`
+        SELECT * FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY stage ORDER BY created_at DESC) AS rn
+          FROM leads
+          WHERE ${baseWhere}
+        ) ranked
+        WHERE rn <= ${stageLimit}
+        ORDER BY stage, created_at DESC
+      `),
+    ]);
 
+    // Build stages map
     const stages: Record<string, { leads: Lead[]; total: number }> = {};
-    for (const { stage, leads: stageLeads, total } of stageResults) {
-      stages[stage] = { leads: stageLeads, total };
+    for (const stage of KANBAN_STAGES) {
+      stages[stage] = { leads: [], total: 0 };
+    }
+    for (const row of countRows) {
+      if (row.stage && stages[row.stage]) {
+        stages[row.stage].total = Number(row.total);
+      }
+    }
+    for (const row of pagedRows.rows as any[]) {
+      const stage = row.stage as string;
+      if (stage && stages[stage]) {
+        // Map snake_case DB columns to camelCase Lead type
+        stages[stage].leads.push({
+          id: row.id,
+          companyName: row.company_name,
+          contactPerson: row.contact_person,
+          contactEmail: row.contact_email,
+          contactPhone: row.contact_phone,
+          stage: row.stage,
+          salesExecutiveId: row.sales_executive_id,
+          city: row.city,
+          area: row.area,
+          leadSource: row.lead_source,
+          customLeadSource: row.custom_lead_source,
+          estimatedValue: row.estimated_value,
+          notes: row.notes,
+          photoUrl: row.photo_url,
+          followUpDate: row.follow_up_date,
+          daysInStage: row.days_in_stage,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        } as Lead);
+      }
     }
     return { stages };
   }

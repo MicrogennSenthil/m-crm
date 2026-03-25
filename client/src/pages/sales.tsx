@@ -144,6 +144,14 @@ export default function Sales() {
 
   const isLoading = layout === "kanban" ? kanbanLoading : leadsLoading;
 
+  // Flat list of leads for lookups (works in all layouts)
+  const allLeadsForLookup = useMemo(() => {
+    if (layout === "kanban" && kanbanData) {
+      return Object.values(kanbanData.stages).flatMap(s => s.leads);
+    }
+    return leads || [];
+  }, [layout, kanbanData, leads]);
+
   // Fetch users for filter dropdown
   const { data: users = [] } = useQuery<UserType[]>({
     queryKey: ["/api/users"],
@@ -1022,7 +1030,7 @@ export default function Sales() {
                   .map((_, i) => <Skeleton key={i} className="h-20 w-full" />)
               ) : todayFollowups.length > 0 ? (
                 todayFollowups.map((followup) => {
-                  const lead = leads?.find(l => l.id === followup.leadId);
+                  const lead = allLeadsForLookup.find(l => l.id === followup.leadId);
                   return (
                     <Card
                       key={followup.id}
@@ -1286,7 +1294,7 @@ export default function Sales() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {todayFollowups.map((followup) => {
-                  const lead = leads?.find(l => l.id === followup.leadId);
+                  const lead = allLeadsForLookup.find(l => l.id === followup.leadId);
                   return (
                     <Card
                       key={followup.id}
@@ -1451,7 +1459,7 @@ export default function Sales() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {todayFollowups.map((followup) => {
-                  const lead = leads?.find(l => l.id === followup.leadId);
+                  const lead = allLeadsForLookup.find(l => l.id === followup.leadId);
                   return (
                     <div
                       key={followup.id}
