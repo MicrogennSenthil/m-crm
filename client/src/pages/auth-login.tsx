@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { storeUser } from "@/hooks/useAuth";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,12 @@ export default function AuthLogin() {
       return response.json();
     },
     onSuccess: (data) => {
+      storeUser(data.user);
       toast({
         title: "Login Successful",
         description: `Welcome back, ${data.user.firstName}!`,
       });
       setLocation("/");
-      window.location.reload();
     },
     onError: (error: any) => {
       toast({
