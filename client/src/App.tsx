@@ -11,6 +11,7 @@ import { VoiceAlertProvider } from "@/providers/VoiceAlertProvider";
 import { UserProfileMenu } from "@/components/user-profile-menu";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNav } from "@/components/bottom-nav";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
@@ -112,6 +113,7 @@ function AuthenticatedLayout() {
             </div>
           </header>
           <main className="flex-1 overflow-auto p-3 sm:p-6 pb-20 md:pb-6">
+            <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Switch>
                 <Route path="/" component={Home} />
@@ -161,6 +163,7 @@ function AuthenticatedLayout() {
                 <Route component={Home} />
               </Switch>
             </Suspense>
+            </ErrorBoundary>
           </main>
           <BottomNav />
         </SidebarInset>
@@ -188,13 +191,17 @@ function Router() {
 
   if (!isAuthenticated) {
     return (
-      <Switch>
-        <Route path="/auth/login" component={AuthLogin} />
-        <Route path="/auth/signup" component={AuthSignup} />
-        <Route path="/auth/forgot-password" component={AuthForgotPassword} />
-        <Route path="/" component={Landing} />
-        <Route component={Landing} />
-      </Switch>
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Switch>
+            <Route path="/auth/login" component={AuthLogin} />
+            <Route path="/auth/signup" component={AuthSignup} />
+            <Route path="/auth/forgot-password" component={AuthForgotPassword} />
+            <Route path="/" component={Landing} />
+            <Route component={Landing} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
