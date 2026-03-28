@@ -15,15 +15,11 @@ import { queryClient } from "@/lib/queryClient";
 export function UserProfileMenu() {
   const { user } = useAuth();
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     clearStoredUser();
     queryClient.clear();
-    try {
-      await fetch("/api/auth/local-logout", { method: "POST" });
-    } catch {
-    } finally {
-      window.location.replace("/auth/login");
-    }
+    fetch("/api/auth/local-logout", { method: "POST" }).catch(() => {});
+    window.location.replace("/auth/login");
   };
 
   const getUserInitials = () => {
