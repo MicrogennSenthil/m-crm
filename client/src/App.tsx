@@ -15,26 +15,24 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
 
-// Eagerly load critical auth/landing pages
+// Only keep truly small/critical pages eager
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import AuthLogin from "@/pages/auth-login";
-import AuthSignup from "@/pages/auth-signup";
-import AuthForgotPassword from "@/pages/auth-forgot-password";
-import Home from "@/pages/home";
 
-// Eagerly load frequently visited department pages — no spinner on navigation
-import Sales from "@/pages/sales";
-import Implementations from "@/pages/implementations";
-import ImplementationDashboard from "@/pages/implementation-dashboard";
-import Support from "@/pages/support";
-import SupportDashboard from "@/pages/support-dashboard";
-import SalesDashboard from "@/pages/sales-dashboard";
-import Tasks from "@/pages/tasks";
-import DevelopmentDashboard from "@/pages/development-dashboard";
-import DevelopmentTasks from "@/pages/development-tasks";
-
-// Lazy load infrequently visited pages
+// Lazy load everything else to minimise the initial JS bundle
+const AuthSignup = lazy(() => import("@/pages/auth-signup"));
+const AuthForgotPassword = lazy(() => import("@/pages/auth-forgot-password"));
+const Home = lazy(() => import("@/pages/home"));
+const Sales = lazy(() => import("@/pages/sales"));
+const Implementations = lazy(() => import("@/pages/implementations"));
+const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));
+const Support = lazy(() => import("@/pages/support"));
+const SupportDashboard = lazy(() => import("@/pages/support-dashboard"));
+const SalesDashboard = lazy(() => import("@/pages/sales-dashboard"));
+const Tasks = lazy(() => import("@/pages/tasks"));
+const DevelopmentDashboard = lazy(() => import("@/pages/development-dashboard"));
+const DevelopmentTasks = lazy(() => import("@/pages/development-tasks"));
 const DepartmentUsers = lazy(() => import("@/pages/department-users"));
 const Reports = lazy(() => import("@/pages/reports"));
 const SalesReports = lazy(() => import("@/pages/reports-sales"));
