@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2, User, Target } from "lucide-react";
+import { Plus, Search, Filter, Upload, Clock, Phone, AlertTriangle, Calendar, RefreshCw, LayoutGrid, List, Columns, FileSpreadsheet, Shield, MapPin, Camera, X, Volume2, User, Target, GripVertical } from "lucide-react";
 import { Link } from "wouter";
 import { useFollowupVoiceAlerts } from "@/hooks/use-speech";
 import { format } from "date-fns";
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { LeadForm } from "@/components/lead-form";
 import { LeadDetailModal } from "@/components/lead-detail-modal";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { LeadImportDialog } from "@/components/lead-import-dialog";
 import { GoogleSheetsImportDialog } from "@/components/google-sheets-import-dialog";
 import { WebhookAuthSettingsDialog } from "@/components/webhook-auth-settings";
@@ -1134,14 +1135,22 @@ export default function Sales() {
                     stageLeads.map((lead) => (
                       <Card
                         key={lead.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, lead.id)}
-                        className="cursor-move hover-elevate active-elevate-2"
+                        className="cursor-pointer hover-elevate active-elevate-2"
                         onClick={() => setSelectedLead(lead)}
                         data-testid={`card-lead-${lead.id}`}
                       >
                         <CardHeader className="p-2 sm:p-3 space-y-0.5">
                           <div className="flex items-start gap-2">
+                            {/* Drag handle — only this element triggers drag */}
+                            <div
+                              draggable
+                              onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, lead.id); }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-0.5 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground flex-shrink-0"
+                              title="Drag to move stage"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </div>
                             {lead.photoUrl ? (
                               <img
                                 src={lead.photoUrl}
@@ -1614,11 +1623,13 @@ export default function Sales() {
 
       {/* Lead Detail Modal */}
       {selectedLead && (
-        <LeadDetailModal
-          lead={selectedLead}
-          open={!!selectedLead}
-          onClose={() => setSelectedLead(null)}
-        />
+        <ErrorBoundary key={selectedLead.id} onReset={() => setSelectedLead(null)}>
+          <LeadDetailModal
+            lead={selectedLead}
+            open={!!selectedLead}
+            onClose={() => setSelectedLead(null)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Reschedule Demo Dialog */}
