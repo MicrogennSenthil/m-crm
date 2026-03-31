@@ -170,10 +170,35 @@ export default function Sales() {
   // Flat list of leads for lookups (works in all layouts)
   const allLeadsForLookup = useMemo(() => {
     if (layout === "kanban" && kanbanData) {
-      return Object.values(kanbanData.stages).flatMap(s => s.leads);
+      const kanbanLeads = Object.values(kanbanData.stages).flatMap(s => s.leads);
+      const extraLeads = Object.values(stageExtraLeads).flat();
+      const seen = new Set<string>();
+      return [...kanbanLeads, ...extraLeads].filter(l => {
+        if (seen.has(l.id)) return false;
+        seen.add(l.id);
+        return true;
+      });
     }
     return leads;
-  }, [layout, kanbanData, leads]);
+  }, [layout, kanbanData, leads, stageExtraLeads]);
+
+  // Opens a lead detail modal — looks up in current data first, falls back to API fetch
+  const openLeadModal = useCallback(async (leadId: string) => {
+    const found = allLeadsForLookup.find(l => l.id === leadId);
+    if (found) {
+      setSelectedLead(found);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, { credentials: "include" });
+      if (res.ok) {
+        const lead = await res.json();
+        setSelectedLead(lead);
+      }
+    } catch {
+      // silently ignore — lead could not be loaded
+    }
+  }, [allLeadsForLookup]);
 
   // Fetch users for filter dropdown
   const { data: users = [] } = useQuery<UserType[]>({
@@ -996,7 +1021,7 @@ export default function Sales() {
                     <Card
                       key={followup.id}
                       className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
-                      onClick={() => lead && setSelectedLead(lead)}
+                      onClick={() => openLeadModal(followup.leadId)}
                       data-testid={`card-followup-${followup.id}`}
                     >
                       <CardContent className="p-2 sm:p-3 space-y-1.5">
@@ -1260,7 +1285,7 @@ export default function Sales() {
                     <Card
                       key={followup.id}
                       className={`cursor-pointer hover-elevate ${followup.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''}`}
-                      onClick={() => lead && setSelectedLead(lead)}
+                      onClick={() => openLeadModal(followup.leadId)}
                       data-testid={`card-followup-compact-${followup.id}`}
                     >
                       <CardContent className="p-4 space-y-2">
@@ -1438,7 +1463,7 @@ export default function Sales() {
                     <div
                       key={followup.id}
                       className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer hover-elevate ${followup.isOverdue ? 'bg-red-50 dark:bg-red-900/20' : 'bg-muted/50'}`}
-                      onClick={() => lead && setSelectedLead(lead)}
+                      onClick={() => openLeadModal(followup.leadId)}
                       data-testid={`row-followup-${followup.id}`}
                     >
                       {followup.isOverdue ? (
