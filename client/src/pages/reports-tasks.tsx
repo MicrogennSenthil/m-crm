@@ -53,7 +53,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { Task, User, Department } from "@shared/schema";
-import { format, subDays, isWithinInterval, isPast, isToday, startOfDay, endOfDay } from "date-fns";
+import { format, isPast, isToday } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "pending" | "completed" | "overdue";
@@ -145,7 +145,13 @@ export default function TasksReports() {
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const { data: tasks, isLoading } = useQuery<TaskWithDetails[]>({
-    queryKey: ["/api/reports/tasks"],
+    queryKey: ["/api/reports/tasks", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+      assignedTo: selectedAssignee !== "all" ? selectedAssignee : undefined,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      priority: selectedPriority !== "all" ? selectedPriority : undefined,
+    }],
   });
 
   const { data: users } = useQuery<User[]>({
@@ -172,45 +178,17 @@ export default function TasksReports() {
     return isPast(new Date(task.dueDate)) && !isToday(new Date(task.dueDate));
   };
 
+  // Date, assignedTo, status, priority are filtered server-side via query params.
+  // Only apply search client-side.
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
-    
-    return tasks.filter(task => {
-      if (fromDate && toDate && task.createdAt) {
-        // Parse the date string and normalize to local date for comparison
-        const createdAtStr = String(task.createdAt);
-        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const taskDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(taskDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
-      
-      if (selectedAssignee !== "all" && task.assignedTo !== selectedAssignee) {
-        return false;
-      }
-
-      if (selectedStatus !== "all" && task.status !== selectedStatus) {
-        return false;
-      }
-
-      if (selectedPriority !== "all" && task.priority !== selectedPriority) {
-        return false;
-      }
-      
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          task.title?.toLowerCase().includes(query) ||
-          task.description?.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-      
-      return true;
-    });
-  }, [tasks, fromDate, toDate, selectedAssignee, selectedStatus, selectedPriority, searchQuery]);
+    if (!searchQuery) return tasks;
+    const query = searchQuery.toLowerCase();
+    return tasks.filter(task =>
+      task.title?.toLowerCase().includes(query) ||
+      task.description?.toLowerCase().includes(query)
+    );
+  }, [tasks, searchQuery]);
 
   const tabFilteredTasks = useMemo(() => {
     if (activeTab === "all") return filteredTasks;

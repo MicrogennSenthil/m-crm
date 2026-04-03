@@ -8304,30 +8304,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tasks Reports - Get all tasks with user details
   app.get("/api/reports/tasks", isAuthenticated, async (req, res) => {
     try {
-      const allTasks = await db
-        .select()
-        .from(tasks)
-        .orderBy(desc(tasks.createdAt));
-      
-      // Enrich with user details
-      const enrichedTasks = await Promise.all(allTasks.map(async (task) => {
-        let createdByUser, assignedToUser;
-        
-        if (task.createdBy) {
-          createdByUser = await db.select().from(users).where(eq(users.id, task.createdBy)).limit(1);
-        }
-        if (task.assignedTo) {
-          assignedToUser = await db.select().from(users).where(eq(users.id, task.assignedTo)).limit(1);
-        }
-        
-        return {
-          ...task,
-          createdByUser: createdByUser?.[0] || null,
-          assignedToUser: assignedToUser?.[0] || null,
-        };
+      const { fromDate, toDate, assignedTo, status, priority } = req.query;
+      const cacheKey = `tasks:report:${fromDate||''}:${toDate||''}:${assignedTo||''}:${status||''}:${priority||''}`;
+      const cached = getCachedData<any[]>(cacheKey);
+      if (cached) return res.json(cached);
+
+      // Build SQL conditions
+      const conditions: any[] = [];
+      if (fromDate) conditions.push(gte(tasks.createdAt, new Date(fromDate as string)));
+      if (toDate) {
+        const end = new Date(toDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(tasks.createdAt, end));
+      }
+      if (assignedTo && assignedTo !== "all") conditions.push(eq(tasks.assignedTo, assignedTo as string));
+      if (status && status !== "all") conditions.push(eq(tasks.status, status as string));
+      if (priority && priority !== "all") conditions.push(eq(tasks.priority, priority as string));
+
+      // 1 query: all tasks (SQL filtered)
+      let taskQuery = db.select().from(tasks).orderBy(desc(tasks.createdAt)) as any;
+      if (conditions.length > 0) taskQuery = taskQuery.where(and(...conditions));
+      const allTasks = await taskQuery;
+
+      if (allTasks.length === 0) {
+        setCachedData(cacheKey, []);
+        return res.json([]);
+      }
+
+      // 1 bulk query for all user lookups (createdBy + assignedTo combined)
+      const userIds = [...new Set([
+        ...allTasks.map((t: any) => t.createdBy).filter(Boolean),
+        ...allTasks.map((t: any) => t.assignedTo).filter(Boolean),
+      ])];
+
+      const usersData = userIds.length > 0
+        ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, userIds as string[]))
+        : [];
+
+      const userMap = new Map(usersData.map((u: any) => [u.id, u]));
+
+      const enriched = allTasks.map((task: any) => ({
+        ...task,
+        createdByUser: task.createdBy ? (userMap.get(task.createdBy) || null) : null,
+        assignedToUser: task.assignedTo ? (userMap.get(task.assignedTo) || null) : null,
       }));
-      
-      res.json(enrichedTasks);
+
+      setCachedData(cacheKey, enriched);
+      res.json(enriched);
     } catch (error) {
       console.error("Error fetching tasks reports:", error);
       res.status(500).json({ message: "Failed to fetch tasks reports" });
