@@ -916,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasAdminRole: userIsSuperAdmin || assignedRoles.some(r => r.name === 'admin') || user.role === 'admin'
       };
 
-      setCached(cacheKey, result, 120);
+      setCached(cacheKey, result, 600);
       res.json(result);
     } catch (error) {
       console.error("Error fetching user permissions:", error);
@@ -1714,6 +1714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       invalidateCache("user-roles:");
+      invalidateCache("roles:all");
       res.json(newRole);
     } catch (error: any) {
       console.error("Error creating user role:", error);
@@ -1737,6 +1738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       invalidateCache("user-roles:");
+      invalidateCache("roles:all");
       res.json(updated);
     } catch (error) {
       console.error("Error updating user role:", error);
@@ -2117,6 +2119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      invalidateCache("modules:all");
       res.json(newModule);
     } catch (error) {
       console.error("Error creating system module:", error);
@@ -2136,6 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      invalidateCache("modules:all");
       res.json(updated);
     } catch (error) {
       console.error("Error updating system module:", error);
@@ -2160,6 +2164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      invalidateCache("modules:all");
       res.json({ message: "System module deleted successfully" });
     } catch (error) {
       console.error("Error deleting system module:", error);

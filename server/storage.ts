@@ -170,6 +170,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, isNull, inArray, ilike, count } from "drizzle-orm";
+import { getCached, setCached, invalidateCache } from "./cache";
 
 // Interface for storage operations
 export interface IStorage {
@@ -965,7 +966,11 @@ export class DatabaseStorage implements IStorage {
 
   // User Role operations (Master data)
   async getUserRoles(): Promise<UserRole[]> {
-    return await db.select().from(userRoles).orderBy(userRoles.name);
+    const cached = getCached<UserRole[]>("roles:all");
+    if (cached) return cached;
+    const result = await db.select().from(userRoles).orderBy(userRoles.name);
+    setCached("roles:all", result, 600);
+    return result;
   }
 
   async getUserRole(id: string): Promise<UserRole | undefined> {
@@ -3155,7 +3160,11 @@ export class DatabaseStorage implements IStorage {
 
   // System Module operations
   async getSystemModules(): Promise<SystemModule[]> {
-    return await db.select().from(systemModules).orderBy(systemModules.sortOrder);
+    const cached = getCached<SystemModule[]>("modules:all");
+    if (cached) return cached;
+    const result = await db.select().from(systemModules).orderBy(systemModules.sortOrder);
+    setCached("modules:all", result, 600);
+    return result;
   }
 
   async getSystemModule(id: string): Promise<SystemModule | undefined> {
@@ -3188,15 +3197,19 @@ export class DatabaseStorage implements IStorage {
       : db.select().from(userRoleAssignments).where(eq(userRoleAssignments.isActive, true));
     
     const assignments = await query;
-    
-    const enriched = await Promise.all(
-      assignments.map(async (assignment) => {
-        const [role] = await db.select().from(userRoles).where(eq(userRoles.id, assignment.roleId));
-        return { ...assignment, role };
-      })
-    );
-    
-    return enriched;
+    if (assignments.length === 0) return [];
+
+    // Bulk fetch all roles in one query instead of N individual lookups
+    const roleIds = [...new Set(assignments.map(a => a.roleId).filter(Boolean))];
+    const rolesData = roleIds.length > 0
+      ? await db.select().from(userRoles).where(inArray(userRoles.id, roleIds))
+      : [];
+    const roleMap = new Map(rolesData.map(r => [r.id, r]));
+
+    return assignments.map(assignment => ({
+      ...assignment,
+      role: roleMap.get(assignment.roleId),
+    }));
   }
 
   async getUserRoleAssignment(id: string): Promise<UserRoleAssignment | undefined> {

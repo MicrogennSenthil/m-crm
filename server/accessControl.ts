@@ -24,7 +24,7 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
       hasFullAccess: false,
       allowedUserIds: [],
     };
-    setCached(cacheKey, result, 30);
+    setCached(cacheKey, result, 600);
     return result;
   }
   
@@ -42,7 +42,7 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
     ? { isSuperAdmin, isAdmin, hasFullAccess: true, allowedUserIds: undefined }
     : { isSuperAdmin, isAdmin, hasFullAccess: false, allowedUserIds: [userId] };
 
-  setCached(cacheKey, result, 60);
+  setCached(cacheKey, result, 600);
   return result;
 }
 
