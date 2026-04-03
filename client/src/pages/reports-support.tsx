@@ -126,9 +126,10 @@ export default function SupportReports() {
   const [emailSubject, setEmailSubject] = useState("Support Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
-  const { data: tickets, isLoading: ticketsLoading } = useQuery<Ticket[]>({
-    queryKey: ["/api/tickets"],
+  const { data: ticketsData, isLoading: ticketsLoading } = useQuery<{ tickets: Ticket[]; total: number; counts: any }>({
+    queryKey: ["/api/tickets", { pageSize: 5000 }],
   });
+  const tickets = ticketsData?.tickets ?? [];
 
   const { data: customers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
