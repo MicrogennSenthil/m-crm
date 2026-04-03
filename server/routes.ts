@@ -5063,10 +5063,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project routes
   app.get("/api/projects", isAuthenticated, requirePermission('projects', 'view'), async (req: any, res) => {
     try {
-      const { status } = req.query;
+      const { status, fromDate, toDate } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
       
-      const cacheKey = `projects:list:${authId}:${status||''}`;
+      const cacheKey = `projects:list:${authId}:${status||''}:${fromDate||''}:${toDate||''}`;
       const cached = getCached<any>(cacheKey);
       if (cached) return res.json(cached);
 
@@ -5080,8 +5080,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
       
       // Build filters with access control
-      const filters: { status?: string; engineerIds?: string[] } = {
+      const filters: { status?: string; engineerIds?: string[]; fromDate?: Date; toDate?: Date } = {
         status: status as string,
+        fromDate: fromDate ? new Date(fromDate as string) : undefined,
+        toDate: toDate ? new Date(toDate as string) : undefined,
       };
       
       if (!accessControl.hasFullAccess && accessControl.allowedUserIds) {
@@ -5089,21 +5091,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const projectsList = await storage.getProjects(filters);
-      
-      // Batch fetch all users needed instead of N+1 queries
-      const allAssignments = await Promise.all(
-        projectsList.map((p) => storage.getProjectEngineers(p.id))
-      );
-      const allEngineerIds = [...new Set(allAssignments.flat().map((a) => a.engineerId))];
-      const allEngineers = await Promise.all(allEngineerIds.map((id) => storage.getUser(id)));
-      const engineerMap = new Map(allEngineers.filter(Boolean).map((u) => [u!.id, u!]));
 
-      const projectsWithEngineers = projectsList.map((project, i) => ({
+      // Single query for ALL project engineers, then single query for ALL user records
+      const projectIds = projectsList.map((p) => p.id);
+      const [allAssignments, ] = await Promise.all([
+        storage.getProjectEngineersForProjects(projectIds),
+        Promise.resolve(),
+      ]);
+      const allEngineerIds = [...new Set(allAssignments.map((a) => a.engineerId))];
+      const allEngineers = await storage.getUsersByIds(allEngineerIds);
+      const engineerMap = new Map(allEngineers.map((u) => [u.id, u]));
+
+      // Group assignments by project
+      const assignmentsByProject = new Map<string, typeof allAssignments>();
+      for (const a of allAssignments) {
+        if (!assignmentsByProject.has(a.projectId)) assignmentsByProject.set(a.projectId, []);
+        assignmentsByProject.get(a.projectId)!.push(a);
+      }
+
+      const projectsWithEngineers = projectsList.map((project) => ({
         ...project,
-        engineers: allAssignments[i].map((a) => engineerMap.get(a.engineerId)).filter(Boolean),
+        engineers: (assignmentsByProject.get(project.id) || [])
+          .map((a) => engineerMap.get(a.engineerId))
+          .filter(Boolean),
       }));
-      
-      setCached(cacheKey, projectsWithEngineers, 60);
+
+      setCached(cacheKey, projectsWithEngineers, 300); // 5 min cache
       res.json(projectsWithEngineers);
     } catch (error) {
       console.error("Error fetching projects:", error);

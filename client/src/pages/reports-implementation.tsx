@@ -52,7 +52,7 @@ import {
   Building,
 } from "lucide-react";
 import type { Project, Customer } from "@shared/schema";
-import { format, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { format, subDays } from "date-fns";
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
@@ -124,7 +124,10 @@ export default function ImplementationReports() {
   const [emailBody, setEmailBody] = useState("");
 
   const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
+    queryKey: ["/api/projects", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+    }],
   });
 
   const { data: customers } = useQuery<Customer[]>({
@@ -147,38 +150,17 @@ export default function ImplementationReports() {
 
   const filteredProjects = useMemo(() => {
     if (!projects) return [];
-    
+    // Dates are filtered server-side; only apply client-side filters for customer, status, search
     return projects.filter(project => {
-      if (fromDate && toDate && project.createdAt) {
-        // Parse the date string and normalize to local date for comparison
-        const createdAtStr = String(project.createdAt);
-        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const projectDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(projectDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
-      
-      if (selectedCustomer !== "all" && project.customerId !== selectedCustomer) {
-        return false;
-      }
-      
-      if (selectedStatus !== "all" && project.status !== selectedStatus) {
-        return false;
-      }
-      
+      if (selectedCustomer !== "all" && project.customerId !== selectedCustomer) return false;
+      if (selectedStatus !== "all" && project.status !== selectedStatus) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        return (
-          project.clientName?.toLowerCase().includes(query)
-        );
+        return project.clientName?.toLowerCase().includes(query);
       }
-      
       return true;
     });
-  }, [projects, fromDate, toDate, selectedCustomer, selectedStatus, searchQuery]);
+  }, [projects, selectedCustomer, selectedStatus, searchQuery]);
 
   const reportData = useMemo(() => {
     const freshProjects = filteredProjects.filter(p => p.status === "planning");

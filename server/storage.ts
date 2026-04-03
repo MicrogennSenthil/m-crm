@@ -175,6 +175,7 @@ import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray, ilike, count } fr
 export interface IStorage {
   // User operations (required for Replit Auth and Local Auth)
   getUser(id: string): Promise<User | undefined>;
+  getUsersByIds(ids: string[]): Promise<User[]>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<{ user: User; isNew: boolean }>;
@@ -281,6 +282,7 @@ export interface IStorage {
 
   // Project Engineer operations
   getProjectEngineers(projectId: string): Promise<ProjectEngineer[]>;
+  getProjectEngineersForProjects(projectIds: string[]): Promise<ProjectEngineer[]>;
   assignEngineer(assignment: InsertProjectEngineer): Promise<ProjectEngineer>;
   removeEngineer(id: string): Promise<void>;
 
@@ -689,6 +691,11 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
+  }
+
+  async getUsersByIds(ids: string[]): Promise<User[]> {
+    if (!ids.length) return [];
+    return await db.select().from(users).where(inArray(users.id, ids));
   }
 
   async upsertUser(userData: UpsertUser): Promise<{ user: User; isNew: boolean }> {
@@ -1521,12 +1528,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Project operations
-  async getProjects(filters?: { status?: string; engineerIds?: string[]; limit?: number }): Promise<Project[]> {
+  async getProjects(filters?: { status?: string; engineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Project[]> {
     const conditions: any[] = [];
     const maxLimit = filters?.limit || 200; // Default limit for performance
     
     if (filters?.status) {
       conditions.push(eq(projects.status, filters.status));
+    }
+
+    if (filters?.fromDate) {
+      conditions.push(gte(projects.createdAt, filters.fromDate));
+    }
+
+    if (filters?.toDate) {
+      const end = new Date(filters.toDate);
+      end.setHours(23, 59, 59, 999);
+      conditions.push(lte(projects.createdAt, end));
     }
     
     // Filter by engineers assigned to projects
@@ -1608,6 +1625,14 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(projectEngineers)
       .where(eq(projectEngineers.projectId, projectId));
+  }
+
+  async getProjectEngineersForProjects(projectIds: string[]): Promise<ProjectEngineer[]> {
+    if (!projectIds.length) return [];
+    return await db
+      .select()
+      .from(projectEngineers)
+      .where(inArray(projectEngineers.projectId, projectIds));
   }
 
   async assignEngineer(assignment: InsertProjectEngineer): Promise<ProjectEngineer> {
