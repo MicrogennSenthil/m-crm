@@ -6648,22 +6648,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
 
-      // Attach dev task info (use cached map)
+      // Attach dev task info — lightweight query, no user/customer enrichment needed
       let ticketDevTaskMap = getCached<Map<string, { hasActiveDevelopmentTask: boolean; devTaskStatus: string; devTaskNumber: string }>>("devTaskMap");
       if (!ticketDevTaskMap) {
-        const developmentTasks = await storage.getDevelopmentTasks({});
+        const devTaskRows = await db
+          .select({
+            sourceId: sql<string>`source_id`,
+            status: sql<string>`status`,
+            taskNumber: sql<string>`task_number`,
+          })
+          .from(sql`development_tasks`)
+          .where(sql`source_type = 'support' AND source_id IS NOT NULL`);
+
         ticketDevTaskMap = new Map();
-        for (const task of developmentTasks) {
-          if (task.sourceType === 'support' && task.sourceId) {
-            const sourceIdStr = String(task.sourceId);
-            const isActive = task.status !== 'completed' && task.status !== 'cancelled';
-            if (!ticketDevTaskMap.has(sourceIdStr) || isActive) {
-              ticketDevTaskMap.set(sourceIdStr, {
-                hasActiveDevelopmentTask: isActive,
-                devTaskStatus: task.status,
-                devTaskNumber: task.taskNumber,
-              });
-            }
+        for (const task of devTaskRows) {
+          const sourceIdStr = String(task.sourceId);
+          const isActive = task.status !== 'completed' && task.status !== 'cancelled';
+          if (!ticketDevTaskMap.has(sourceIdStr) || isActive) {
+            ticketDevTaskMap.set(sourceIdStr, {
+              hasActiveDevelopmentTask: isActive,
+              devTaskStatus: task.status,
+              devTaskNumber: task.taskNumber,
+            });
           }
         }
         setCached("devTaskMap", ticketDevTaskMap, 60);

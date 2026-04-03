@@ -2749,39 +2749,40 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(tasks.createdAt))
       .limit(maxLimit);
 
-    // Enrich with user details and comment counts
-    const enrichedTasks = await Promise.all(
-      taskList.map(async (task) => {
-        const [creator] = task.createdBy 
-          ? await db.select().from(users).where(eq(users.id, task.createdBy))
-          : [undefined];
-        
-        const [assignee] = task.assignedTo 
-          ? await db.select().from(users).where(eq(users.id, task.assignedTo))
-          : [undefined];
+    if (taskList.length === 0) return [];
 
-        let mentionedUserDetails: User[] = [];
-        if (task.mentionedUsers && task.mentionedUsers.length > 0) {
-          mentionedUserDetails = await db
-            .select()
-            .from(users)
-            .where(sql`${users.id} IN (${sql.join(task.mentionedUsers.map(id => sql`${id}`), sql`, `)})`);
-        }
+    // Collect all unique user IDs (creators + assignees + mentioned)
+    const allMentioned = taskList.flatMap(t => t.mentionedUsers || []);
+    const allUserIds = [...new Set([
+      ...taskList.map(t => t.createdBy).filter(Boolean) as string[],
+      ...taskList.map(t => t.assignedTo).filter(Boolean) as string[],
+      ...allMentioned,
+    ])];
 
-        const [commentCount] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(taskComments)
-          .where(eq(taskComments.taskId, task.id));
+    // Bulk fetch users + comment counts in parallel
+    const [usersData, commentCounts] = await Promise.all([
+      allUserIds.length > 0
+        ? db.select().from(users).where(inArray(users.id, allUserIds))
+        : Promise.resolve([]),
+      db
+        .select({ taskId: taskComments.taskId, count: sql<number>`count(*)` })
+        .from(taskComments)
+        .where(inArray(taskComments.taskId, taskList.map(t => t.id)))
+        .groupBy(taskComments.taskId),
+    ]);
 
-        return {
-          ...task,
-          creator,
-          assignee,
-          mentionedUserDetails,
-          commentsCount: Number(commentCount?.count || 0),
-        };
-      })
-    );
+    const userMap = new Map(usersData.map(u => [u.id, u]));
+    const commentCountMap = new Map(commentCounts.map(c => [c.taskId, Number(c.count)]));
+
+    const enrichedTasks = taskList.map(task => ({
+      ...task,
+      creator: task.createdBy ? (userMap.get(task.createdBy) as User | undefined) : undefined,
+      assignee: task.assignedTo ? (userMap.get(task.assignedTo) as User | undefined) : undefined,
+      mentionedUserDetails: (task.mentionedUsers || [])
+        .map(uid => userMap.get(uid))
+        .filter(Boolean) as User[],
+      commentsCount: commentCountMap.get(task.id) || 0,
+    }));
 
     return enrichedTasks;
   }
