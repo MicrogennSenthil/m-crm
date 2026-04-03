@@ -12,6 +12,7 @@ import { registerRoutes } from "./routes";
 import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
 import { startModuleContractReminderScheduler } from "./moduleContractReminderScheduler";
 import { storage } from "./storage";
+import { setCached } from "./cache";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -127,5 +128,26 @@ export default async function runApp(
     
     // Start the module contract reminder scheduler (checks daily)
     startModuleContractReminderScheduler();
+
+    // Pre-warm global (non-user-specific) caches so first login is fast
+    setTimeout(async () => {
+      try {
+        const [customers, modules, users, dashStats, activities] = await Promise.all([
+          storage.getCustomers().catch(() => null),
+          storage.getModules().catch(() => null),
+          storage.getUsers().catch(() => null),
+          storage.getDashboardStats().catch(() => null),
+          storage.getRecentActivities(20).catch(() => null),
+        ]);
+        if (customers) setCached("customers:all", customers, 600);
+        if (modules) setCached("modules:all", modules, 600);
+        if (users) setCached("users:all:active", users.filter((u: any) => u.isActive !== false), 300);
+        if (dashStats) setCached("dashboard:stats", dashStats, 300);
+        if (activities) setCached("dashboard:activities", activities, 300);
+        log("[Warmup] Global caches pre-warmed", "scheduler");
+      } catch (e) {
+        log(`[Warmup] Pre-warm skipped: ${e}`, "scheduler");
+      }
+    }, 3000); // 3s delay — let DB connections fully settle first
   });
 }

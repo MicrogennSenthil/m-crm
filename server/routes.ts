@@ -1287,7 +1287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (includeInactive !== 'true') {
         usersList = usersList.filter(u => u.isActive !== false);
       }
-      setCached(cacheKey, usersList, 60);
+      setCached(cacheKey, usersList, 300);
       res.json(usersList);
     } catch (error) {
       console.error("Error fetching all users:", error);
@@ -3179,7 +3179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
 
-      setCached(cacheKey, result, 20);
+      setCached(cacheKey, result, 120);
       res.json(result);
     } catch (error) {
       console.error("Error fetching leads:", error);
@@ -3242,7 +3242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stageLimit: stageLimit ? parseInt(stageLimit as string) : 50,
       });
 
-      setCached(cacheKey, result, 30);
+      setCached(cacheKey, result, 120);
       res.json(result);
     } catch (error) {
       console.error("Error fetching kanban leads:", error);
@@ -6429,7 +6429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pendingHandoff,
         },
       };
-      setCached("dashboard:implementation", result, 60);
+      setCached("dashboard:implementation", result, 300);
       res.json(result);
     } catch (error) {
       console.error("Error fetching implementation dashboard:", error);
@@ -6563,7 +6563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         tickets: ticketsWithAssignee,
       };
-      setCached("dashboard:support", result, 60);
+      setCached("dashboard:support", result, 300);
       res.json(result);
     } catch (error) {
       console.error("Error fetching support dashboard:", error);
@@ -6672,7 +6672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         }
-        setCached("devTaskMap", ticketDevTaskMap, 60);
+        setCached("devTaskMap", ticketDevTaskMap, 300);
       }
 
       const ticketsWithDevInfo = result.tickets.map(ticket => {
@@ -6686,7 +6686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const response = { tickets: ticketsWithDevInfo, total: result.total, counts: result.counts };
-      setCached(cacheKey, response, 20);
+      setCached(cacheKey, response, 300);
       res.json(response);
     } catch (error) {
       console.error("Error fetching tickets:", error);
@@ -7248,7 +7248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cached = getCached<any>("dashboard:stats");
       if (cached) return res.json(cached);
       const stats = await storage.getDashboardStats();
-      setCached("dashboard:stats", stats, 120);
+      setCached("dashboard:stats", stats, 300);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
@@ -7411,7 +7411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Dashboard] Department stats for ${user.email}: ${department?.name || 'No department'}, isHead: ${isDepartmentHead}`);
       
-      setCached(cacheKey, departmentStats, 60);
+      setCached(cacheKey, departmentStats, 300);
       res.json(departmentStats);
     } catch (error) {
       console.error("Error fetching department dashboard:", error);
@@ -7424,7 +7424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cached = getCached<any>("dashboard:activities");
       if (cached) return res.json(cached);
       const activities = await storage.getRecentActivities(20);
-      setCached("dashboard:activities", activities, 60);
+      setCached("dashboard:activities", activities, 300);
       res.json(activities);
     } catch (error) {
       console.error("Error fetching activities:", error);
@@ -9234,7 +9234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const taskList = await storage.getTasks(taskFilters);
       
-      setCached(cacheKey, taskList, 30);
+      setCached(cacheKey, taskList, 300);
       res.json(taskList);
     } catch (error) {
       console.error("Error fetching tasks:", error);
@@ -12734,7 +12734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tasks = tasks.filter(t => String(t.sourceId) === sourceIdStr);
       }
       
-      if (cacheKey) setCached(cacheKey, tasks, 30);
+      if (cacheKey) setCached(cacheKey, tasks, 300);
       res.json(tasks);
     } catch (error) {
       console.error("Error fetching development tasks:", error);
