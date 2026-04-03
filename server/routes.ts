@@ -4667,51 +4667,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/seeds/report", isAuthenticated, async (req: any, res) => {
     try {
       const { interestStatus, fromDate, toDate, stage } = req.query;
-      
-      // Get all leads
-      const allLeads = await storage.getLeads();
-      
-      // Filter by stage (default to seed only if no stage specified)
-      let seeds = allLeads;
-      if (stage && stage !== "all") {
-        seeds = seeds.filter(lead => lead.stage === stage);
-      } else if (!stage) {
-        // Default to seeds only for backward compatibility
-        seeds = seeds.filter(lead => lead.stage === "seed");
-      }
-      
-      // Filter by interest status
-      if (interestStatus === "interested") {
-        seeds = seeds.filter(seed => (seed as any).interestStatus === "interested");
-      } else if (interestStatus === "followup") {
-        seeds = seeds.filter(seed => (seed as any).interestStatus === "followup");
-      } else if (interestStatus === "not_interested") {
-        seeds = seeds.filter(seed => (seed as any).interestStatus === "not_interested");
-      } else if (interestStatus === "undecided") {
-        seeds = seeds.filter(seed => !(seed as any).interestStatus);
-      }
-      
-      // Filter by date range
-      if (fromDate) {
-        const from = new Date(fromDate as string);
-        seeds = seeds.filter(seed => seed.createdAt && new Date(seed.createdAt) >= from);
-      }
-      if (toDate) {
-        const to = new Date(toDate as string);
-        to.setHours(23, 59, 59, 999);
-        seeds = seeds.filter(seed => seed.createdAt && new Date(seed.createdAt) <= to);
-      }
-      
-      // Get sales executives for display
-      const allUsers = await storage.getUsers();
+
+      const cacheKey = `seeds:report:${stage||'seed'}:${interestStatus||''}:${fromDate||''}:${toDate||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
+      // Build SQL filters — no more loading all 3873 leads into memory
+      const stageFilter = (stage && stage !== "all") ? stage as string : "seed";
+      const interestFilter = interestStatus as string | undefined;
+
+      const seeds = await storage.getLeads({
+        stage: stageFilter,
+        interestStatus: interestFilter === "undecided" ? null : (interestFilter || undefined),
+        fromDate: fromDate ? new Date(fromDate as string) : undefined,
+        toDate: toDate ? new Date(toDate as string) : undefined,
+      });
+
+      // Single query for all users needed
+      const salesExecIds = [...new Set(seeds.map(s => s.salesExecutiveId).filter(Boolean) as string[])];
+      const allUsers = salesExecIds.length > 0 ? await storage.getUsersByIds(salesExecIds) : [];
       const usersMap = new Map(allUsers.map(u => [u.id, u]));
-      
-      const seedsWithDetails = seeds.map(seed => ({
+
+      const result = seeds.map(seed => ({
         ...seed,
         salesExecutive: seed.salesExecutiveId ? usersMap.get(seed.salesExecutiveId) : null,
       }));
-      
-      res.json(seedsWithDetails);
+
+      setCached(cacheKey, result, 120); // 2 min cache
+      res.json(result);
     } catch (error) {
       console.error("Error fetching seeds report:", error);
       res.status(500).json({ message: "Failed to fetch seeds report" });
@@ -4723,42 +4706,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { days = "7" } = req.query;
       const daysAhead = parseInt(days as string) || 7;
-      
+
+      const cacheKey = `seeds:followup:${daysAhead}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const futureDate = new Date(today);
       futureDate.setDate(futureDate.getDate() + daysAhead);
-      
-      // Get all seeds with next followup dates
-      // Only show seeds that are: interested, NOT existing customers, and have followup dates
-      const allLeads = await storage.getLeads();
-      const seedsWithFollowups = allLeads.filter(lead => {
-        if (lead.stage !== "seed") return false;
-        if ((lead as any).interestStatus !== "interested" && (lead as any).interestStatus !== "followup") return false;
-        if ((lead as any).isExistingCustomer === true) return false; // Exclude existing customers from followups
-        if (!(lead as any).nextFollowupDate) return false;
-        
-        const followupDate = new Date((lead as any).nextFollowupDate);
-        return followupDate >= today && followupDate <= futureDate;
+
+      // SQL filtering: stage=seed, has followup date in range, interested or followup status
+      const seedsWithFollowups = await storage.getLeads({
+        stage: "seed",
+        hasFollowupDate: true,
+        followupFrom: today,
+        followupTo: futureDate,
       });
-      
-      // Get sales executives for display
-      const allUsers = await storage.getUsers();
+
+      // Post-filter: exclude existing customers and non-interested statuses (not worth extra SQL join)
+      const filtered = seedsWithFollowups.filter(lead =>
+        ((lead as any).interestStatus === "interested" || (lead as any).interestStatus === "followup") &&
+        (lead as any).isExistingCustomer !== true
+      );
+
+      const salesExecIds = [...new Set(filtered.map(s => s.salesExecutiveId).filter(Boolean) as string[])];
+      const allUsers = salesExecIds.length > 0 ? await storage.getUsersByIds(salesExecIds) : [];
       const usersMap = new Map(allUsers.map(u => [u.id, u]));
-      
-      const seedsWithDetails = seedsWithFollowups.map(seed => ({
-        ...seed,
-        salesExecutive: seed.salesExecutiveId ? usersMap.get(seed.salesExecutiveId) : null,
-      }));
-      
-      // Sort by followup date
-      seedsWithDetails.sort((a, b) => {
-        const dateA = new Date((a as any).nextFollowupDate);
-        const dateB = new Date((b as any).nextFollowupDate);
-        return dateA.getTime() - dateB.getTime();
-      });
-      
-      res.json(seedsWithDetails);
+
+      const result = filtered
+        .map(seed => ({
+          ...seed,
+          salesExecutive: seed.salesExecutiveId ? usersMap.get(seed.salesExecutiveId) : null,
+        }))
+        .sort((a, b) =>
+          new Date((a as any).nextFollowupDate).getTime() - new Date((b as any).nextFollowupDate).getTime()
+        );
+
+      setCached(cacheKey, result, 120); // 2 min cache
+      res.json(result);
     } catch (error) {
       console.error("Error fetching seed followup reminders:", error);
       res.status(500).json({ message: "Failed to fetch followup reminders" });

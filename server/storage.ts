@@ -169,7 +169,7 @@ import {
   type InsertSalesMonthlyTarget,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, sql, isNotNull, inArray, ilike, count } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, sql, isNotNull, isNull, inArray, ilike, count } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -219,7 +219,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
 
   // Lead operations
-  getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
+  getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; interestStatus?: string | null; fromDate?: Date; toDate?: Date; followupFrom?: Date; followupTo?: Date; isExistingCustomer?: boolean; hasFollowupDate?: boolean }): Promise<Lead[]>;
   getLeadsPaginated(filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; search?: string; city?: string; area?: string; leadSource?: string; fromDate?: Date; toDate?: Date; page?: number; pageSize?: number; }): Promise<{ leads: Lead[]; total: number }>;
   getLeadsKanban(filters: {
     search?: string;
@@ -1116,7 +1116,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Lead operations
-  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number; offset?: number; search?: string; city?: string; area?: string; leadSource?: string }): Promise<Lead[]> {
+  async getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; limit?: number; offset?: number; search?: string; city?: string; area?: string; leadSource?: string; interestStatus?: string | null; fromDate?: Date; toDate?: Date; followupFrom?: Date; followupTo?: Date; isExistingCustomer?: boolean; hasFollowupDate?: boolean }): Promise<Lead[]> {
     const conditions: any[] = [];
     const maxLimit = filters?.limit;
     const maxOffset = filters?.offset;
@@ -1137,6 +1137,30 @@ export class DatabaseStorage implements IStorage {
     if (filters?.city) conditions.push(eq(leads.city, filters.city));
     if (filters?.area) conditions.push(eq(leads.area, filters.area));
     if (filters?.leadSource) conditions.push(eq(leads.leadSource, filters.leadSource));
+
+    // Interest status: null means "undecided"
+    if (filters && 'interestStatus' in filters) {
+      if (filters.interestStatus === null || filters.interestStatus === 'undecided') {
+        conditions.push(isNull(leads.interestStatus));
+      } else if (filters.interestStatus) {
+        conditions.push(eq(leads.interestStatus, filters.interestStatus));
+      }
+    }
+
+    // Date range on createdAt
+    if (filters?.fromDate) conditions.push(gte(leads.createdAt, filters.fromDate));
+    if (filters?.toDate) {
+      const end = new Date(filters.toDate);
+      end.setHours(23, 59, 59, 999);
+      conditions.push(lte(leads.createdAt, end));
+    }
+
+    // Date range on nextFollowupDate
+    if (filters?.followupFrom) conditions.push(gte(leads.nextFollowupDate, filters.followupFrom));
+    if (filters?.followupTo) conditions.push(lte(leads.nextFollowupDate, filters.followupTo));
+
+    // Has a followup date set
+    if (filters?.hasFollowupDate === true) conditions.push(isNotNull(leads.nextFollowupDate));
 
     let query = db.select().from(leads);
     if (conditions.length > 0) query = query.where(and(...conditions)) as any;
