@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,9 +122,15 @@ export default function SupportReports() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
-  const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
+  const { currentPage, pageSize, setCurrentPage, handlePageChange, handlePageSizeChange } = usePagination(10);
   const [emailSubject, setEmailSubject] = useState("Support Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
+
+  // Reset to page 1 whenever any filter changes
+  useEffect(() => { setCurrentPage(1); }, [fromDate, toDate, selectedEngineer, searchQuery, selectedStatus, selectedPriority, selectedCustomer, activeTab, setCurrentPage]);
+
+  // Map activeTab to server-side statusTab param
+  const statusTabParam = activeTab === "fresh" ? "open" : activeTab === "pending" ? "in_progress" : activeTab === "completed" ? "completed" : undefined;
 
   const { data: ticketsData, isLoading: ticketsLoading } = useQuery<{ tickets: Ticket[]; total: number; counts: any }>({
     queryKey: ["/api/tickets", {
@@ -132,10 +138,17 @@ export default function SupportReports() {
       toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
       assignedTo: selectedEngineer !== "all" ? selectedEngineer : undefined,
       search: searchQuery || undefined,
-      pageSize: 1000,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      priority: selectedPriority !== "all" ? selectedPriority : undefined,
+      customerId: selectedCustomer !== "all" ? selectedCustomer : undefined,
+      statusTab: statusTabParam,
+      page: currentPage,
+      pageSize: pageSize,
     }],
   });
   const tickets = ticketsData?.tickets ?? [];
+  const serverTotal = ticketsData?.total ?? 0;
+  const serverCounts = ticketsData?.counts;
 
   const { data: customers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -172,53 +185,18 @@ export default function SupportReports() {
     },
   });
 
-  const filteredTickets = useMemo(() => {
-    if (!tickets) return [];
-    
-    return tickets.filter(ticket => {
-      // Date, engineer, and search filters are handled server-side via query params
+  // All filtering is server-side — tickets is already the current page's data
+  const reportData = tickets;
 
-      if (selectedCustomer !== "all" && ticket.customerId !== selectedCustomer) {
-        return false;
-      }
-      
-      if (selectedStatus !== "all" && ticket.status !== selectedStatus) {
-        return false;
-      }
-      
-      if (selectedPriority !== "all" && ticket.priority !== selectedPriority) {
-        return false;
-      }
-      
-      return true;
-    });
-  }, [tickets, selectedCustomer, selectedStatus, selectedPriority]);
-
-  const reportData = useMemo(() => {
-    const freshTickets = filteredTickets.filter(t => t.status === "open");
-    const pendingTickets = filteredTickets.filter(t => 
-      t.status === "in_progress" || t.status === "escalated"
-    );
-    const completedTickets = filteredTickets.filter(t => 
-      t.status === "resolved" || t.status === "closed"
-    );
-    
-    switch (activeTab) {
-      case "fresh": return freshTickets;
-      case "pending": return pendingTickets;
-      case "completed": return completedTickets;
-      default: return filteredTickets;
-    }
-  }, [filteredTickets, activeTab]);
-
-  const stats = useMemo(() => ({
-    fresh: filteredTickets.filter(t => t.status === "open").length,
-    pending: filteredTickets.filter(t => t.status === "in_progress" || t.status === "escalated").length,
-    completed: filteredTickets.filter(t => t.status === "resolved" || t.status === "closed").length,
-    all: filteredTickets.length,
-    critical: filteredTickets.filter(t => t.priority === "critical").length,
-    escalated: filteredTickets.filter(t => t.status === "escalated").length,
-  }), [filteredTickets]);
+  // Use server-computed counts for stats (across ALL matching records, not just current page)
+  const stats = {
+    fresh: serverCounts?.open ?? 0,
+    pending: serverCounts?.inProgress ?? 0,
+    completed: serverCounts?.completed ?? 0,
+    all: serverCounts?.all ?? serverTotal,
+    critical: 0,
+    escalated: 0,
+  };
 
   const getCustomerName = (customerId: string | null | undefined) => {
     if (!customerId || !customers) return "-";
@@ -545,7 +523,7 @@ export default function SupportReports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginateData(reportData).map(ticket => (
+                      {reportData.map(ticket => (
                         <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`}>
                           <TableCell className="font-mono font-medium">{ticket.ticketNumber}</TableCell>
                           <TableCell className="max-w-[200px] truncate">{ticket.issueSummary}</TableCell>
@@ -573,12 +551,12 @@ export default function SupportReports() {
                       ))}
                     </TableBody>
                   </Table>
-                  {reportData.length > 0 && (
+                  {serverTotal > 0 && (
                     <DataTablePagination
                       currentPage={currentPage}
-                      totalPages={getTotalPages(reportData.length)}
+                      totalPages={Math.ceil(serverTotal / pageSize)}
                       pageSize={pageSize}
-                      totalItems={reportData.length}
+                      totalItems={serverTotal}
                       onPageChange={handlePageChange}
                       onPageSizeChange={handlePageSizeChange}
                     />
@@ -626,7 +604,7 @@ export default function SupportReports() {
             <div className="p-3 bg-muted rounded-md text-sm">
               <p className="font-medium mb-1">Report Summary:</p>
               <p className="text-muted-foreground">
-                {reportData.length} records from {fromDate ? format(fromDate, "MMM dd") : "all time"} to {toDate ? format(toDate, "MMM dd, yyyy") : "present"}
+                {serverTotal} records from {fromDate ? format(fromDate, "MMM dd") : "all time"} to {toDate ? format(toDate, "MMM dd, yyyy") : "present"}
               </p>
             </div>
           </div>

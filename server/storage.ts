@@ -316,7 +316,7 @@ export interface IStorage {
 
   // Ticket operations
   getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]>;
-  getTicketsPaginated(filters: { assignedEngineerIds?: string[]; fromDate?: Date; toDate?: Date; search?: string; category?: string; statusTab?: string; page?: number; pageSize?: number; }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number; } }>;
+  getTicketsPaginated(filters: { assignedEngineerIds?: string[]; fromDate?: Date; toDate?: Date; search?: string; category?: string; statusTab?: string; status?: string; priority?: string; customerId?: string; page?: number; pageSize?: number; }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number; } }>;
   getTicket(id: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<InsertTicket>): Promise<Ticket>;
@@ -1859,6 +1859,9 @@ export class DatabaseStorage implements IStorage {
     search?: string;
     category?: string;
     statusTab?: string;
+    status?: string;
+    priority?: string;
+    customerId?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number } }> {
@@ -1875,15 +1878,22 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters.category === 'support') conditions.push(sql`${tickets.escalationLevel} < 3`);
     if (filters.category === 'development') conditions.push(sql`${tickets.escalationLevel} = 3`);
+    if (filters.priority) conditions.push(eq(tickets.priority, filters.priority as any));
+    if (filters.customerId) conditions.push(eq(tickets.customerId, filters.customerId));
 
     const baseWhere = conditions.length > 0 ? and(...conditions) : undefined;
 
-    // statusTab adds additional filter on top of base
+    // statusTab and granular status add additional filter on top of base
     const tabConditions = [...conditions];
-    if (filters.statusTab === 'open') tabConditions.push(eq(tickets.status, 'open'));
-    if (filters.statusTab === 'in_progress') tabConditions.push(sql`${tickets.status} IN ('in_progress','escalated','pending_customer')`);
-    if (filters.statusTab === 'completed') tabConditions.push(sql`${tickets.status} IN ('closed','resolved','resolved_at_techteam','pending_feedback')`);
-    if (filters.statusTab === 'reminders_due') {
+    if (filters.status) {
+      tabConditions.push(eq(tickets.status, filters.status as any));
+    } else if (filters.statusTab === 'open') {
+      tabConditions.push(eq(tickets.status, 'open'));
+    } else if (filters.statusTab === 'in_progress') {
+      tabConditions.push(sql`${tickets.status} IN ('in_progress','escalated','pending_customer')`);
+    } else if (filters.statusTab === 'completed') {
+      tabConditions.push(sql`${tickets.status} IN ('closed','resolved','resolved_at_techteam','pending_feedback')`);
+    } else if (filters.statusTab === 'reminders_due') {
       tabConditions.push(isNotNull(tickets.reminderDate));
       tabConditions.push(sql`DATE(${tickets.reminderDate}) = CURRENT_DATE`);
       tabConditions.push(sql`${tickets.status} NOT IN ('closed','resolved','resolved_at_techteam','pending_feedback')`);

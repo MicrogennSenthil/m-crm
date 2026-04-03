@@ -6611,11 +6611,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all tickets - Everyone can see their own assigned tickets
   app.get("/api/tickets", isAuthenticated, async (req: any, res) => {
     try {
-      const { assignedTo, fromDate, toDate, search, category, statusTab, page, pageSize } = req.query;
+      const { assignedTo, fromDate, toDate, search, category, statusTab, status, priority, customerId, page, pageSize } = req.query;
       const authId = req.user?.claims?.sub;
 
       // Cache key includes user + all filter params
-      const cacheKey = `tickets:v2:${authId}:${assignedTo||''}:${fromDate||''}:${toDate||''}:${search||''}:${category||''}:${statusTab||''}:${page||1}:${pageSize||50}`;
+      const cacheKey = `tickets:v2:${authId}:${assignedTo||''}:${fromDate||''}:${toDate||''}:${search||''}:${category||''}:${statusTab||''}:${status||''}:${priority||''}:${customerId||''}:${page||1}:${pageSize||50}`;
       const cached = getCached<any>(cacheKey);
       if (cached) return res.json(cached);
 
@@ -6642,6 +6642,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search: search as string || undefined,
         category: category as string || undefined,
         statusTab: statusTab as string || undefined,
+        status: status && status !== 'all' ? status as string : undefined,
+        priority: priority && priority !== 'all' ? priority as string : undefined,
+        customerId: customerId && customerId !== 'all' ? customerId as string : undefined,
         page: page ? parseInt(page as string) : 1,
         pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
