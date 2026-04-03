@@ -219,7 +219,7 @@ export interface IStorage {
 
   // Lead operations
   getLeads(filters?: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[] }): Promise<Lead[]>;
-  getLeadsPaginated(filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; search?: string; city?: string; area?: string; leadSource?: string; page?: number; pageSize?: number; }): Promise<{ leads: Lead[]; total: number }>;
+  getLeadsPaginated(filters: { stage?: string; salesExecutiveId?: string; salesExecutiveIds?: string[]; search?: string; city?: string; area?: string; leadSource?: string; fromDate?: Date; toDate?: Date; page?: number; pageSize?: number; }): Promise<{ leads: Lead[]; total: number }>;
   getLeadsKanban(filters: {
     search?: string;
     city?: string;
@@ -1148,6 +1148,8 @@ export class DatabaseStorage implements IStorage {
     city?: string;
     area?: string;
     leadSource?: string;
+    fromDate?: Date;
+    toDate?: Date;
     page?: number;
     pageSize?: number;
   }): Promise<{ leads: Lead[]; total: number }> {
@@ -1169,6 +1171,12 @@ export class DatabaseStorage implements IStorage {
     if (filters.city) conditions.push(eq(leads.city, filters.city));
     if (filters.area) conditions.push(eq(leads.area, filters.area));
     if (filters.leadSource) conditions.push(eq(leads.leadSource, filters.leadSource));
+    if (filters.fromDate) conditions.push(gte(leads.createdAt, filters.fromDate));
+    if (filters.toDate) {
+      const end = new Date(filters.toDate);
+      end.setHours(23, 59, 59, 999);
+      conditions.push(lte(leads.createdAt, end));
+    }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const pageSize = filters.pageSize || 50;

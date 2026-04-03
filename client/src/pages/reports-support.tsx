@@ -113,7 +113,7 @@ export default function SupportReports() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportType>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
+  const [fromDate, setFromDate] = useState<Date | undefined>(subDays(new Date(), 30));
   const [toDate, setToDate] = useState<Date | undefined>(new Date());
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -127,7 +127,13 @@ export default function SupportReports() {
   const [emailBody, setEmailBody] = useState("");
 
   const { data: ticketsData, isLoading: ticketsLoading } = useQuery<{ tickets: Ticket[]; total: number; counts: any }>({
-    queryKey: ["/api/tickets", { pageSize: 5000 }],
+    queryKey: ["/api/tickets", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+      assignedTo: selectedEngineer !== "all" ? selectedEngineer : undefined,
+      search: searchQuery || undefined,
+      pageSize: 1000,
+    }],
   });
   const tickets = ticketsData?.tickets ?? [];
 
@@ -170,18 +176,8 @@ export default function SupportReports() {
     if (!tickets) return [];
     
     return tickets.filter(ticket => {
-      if (fromDate && toDate && ticket.createdAt) {
-        // Parse the date string and normalize to local date for comparison
-        const createdAtStr = String(ticket.createdAt);
-        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const ticketDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(ticketDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
-      
+      // Date, engineer, and search filters are handled server-side via query params
+
       if (selectedCustomer !== "all" && ticket.customerId !== selectedCustomer) {
         return false;
       }
@@ -194,22 +190,9 @@ export default function SupportReports() {
         return false;
       }
       
-      if (selectedEngineer !== "all" && ticket.assignedEngineerId !== selectedEngineer) {
-        return false;
-      }
-      
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-          ticket.ticketNumber?.toLowerCase().includes(query) ||
-          ticket.issueSummary?.toLowerCase().includes(query) ||
-          ticket.issueDescription?.toLowerCase().includes(query)
-        );
-      }
-      
       return true;
     });
-  }, [tickets, fromDate, toDate, selectedCustomer, selectedStatus, selectedPriority, selectedEngineer, searchQuery]);
+  }, [tickets, selectedCustomer, selectedStatus, selectedPriority]);
 
   const reportData = useMemo(() => {
     const freshTickets = filteredTickets.filter(t => t.status === "open");

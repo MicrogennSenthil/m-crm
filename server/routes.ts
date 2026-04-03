@@ -3152,10 +3152,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Lead routes
   app.get("/api/leads", isAuthenticated, requirePermission('leads', 'view'), async (req: any, res) => {
     try {
-      const { stage, salesExecutiveId, search, city, area, leadSource, page, pageSize } = req.query;
+      const { stage, salesExecutiveId, search, city, area, leadSource, fromDate, toDate, page, pageSize } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
 
-      const cacheKey = `leads:list:${authId}:${stage||''}:${salesExecutiveId||''}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${page||1}:${pageSize||50}`;
+      const cacheKey = `leads:list:${authId}:${stage||''}:${salesExecutiveId||''}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${fromDate||''}:${toDate||''}:${page||1}:${pageSize||50}`;
       const cached = getCached<any>(cacheKey);
       if (cached) return res.json(cached);
 
@@ -3173,6 +3173,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         city: city && city !== "all" ? city as string : undefined,
         area: area && area !== "all" ? area as string : undefined,
         leadSource: leadSource && leadSource !== "all" ? leadSource as string : undefined,
+        fromDate: fromDate ? new Date(fromDate as string) : undefined,
+        toDate: toDate ? new Date(toDate as string) : undefined,
         page: page ? parseInt(page as string) : 1,
         pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
@@ -5064,6 +5066,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
       
+      const cacheKey = `projects:list:${authId}:${status||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       // Fetch database user first - required for proper ID resolution
       const currentUser = await storage.getUser(authId);
       if (!currentUser) {
@@ -5084,21 +5090,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const projectsList = await storage.getProjects(filters);
       
-      // Attach engineers to each project
-      const projectsWithEngineers = await Promise.all(
-        projectsList.map(async (project) => {
-          const engineerAssignments = await storage.getProjectEngineers(project.id);
-          const engineerIds = engineerAssignments.map((a) => a.engineerId);
-          const engineers = await Promise.all(
-            engineerIds.map((id) => storage.getUser(id))
-          );
-          return {
-            ...project,
-            engineers: engineers.filter((e) => e !== undefined),
-          };
-        })
+      // Batch fetch all users needed instead of N+1 queries
+      const allAssignments = await Promise.all(
+        projectsList.map((p) => storage.getProjectEngineers(p.id))
       );
+      const allEngineerIds = [...new Set(allAssignments.flat().map((a) => a.engineerId))];
+      const allEngineers = await Promise.all(allEngineerIds.map((id) => storage.getUser(id)));
+      const engineerMap = new Map(allEngineers.filter(Boolean).map((u) => [u!.id, u!]));
+
+      const projectsWithEngineers = projectsList.map((project, i) => ({
+        ...project,
+        engineers: allAssignments[i].map((a) => engineerMap.get(a.engineerId)).filter(Boolean),
+      }));
       
+      setCached(cacheKey, projectsWithEngineers, 60);
       res.json(projectsWithEngineers);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -12598,6 +12603,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!currentUser) {
         return res.status(401).json({ message: "User not found" });
       }
+
+      // Cache only when not filtering by sourceId (sourceId lookups are highly specific)
+      const cacheKey = !sourceId
+        ? `devtasks:${currentUser.id}:${status||''}:${sourceType||''}:${priority||''}:${isOverdue||''}`
+        : null;
+      if (cacheKey) {
+        const cached = getCached<any>(cacheKey);
+        if (cached) return res.json(cached);
+      }
       
       // Use the database user ID (not auth ID) for access control
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
@@ -12625,6 +12639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tasks = tasks.filter(t => String(t.sourceId) === sourceIdStr);
       }
       
+      if (cacheKey) setCached(cacheKey, tasks, 30);
       res.json(tasks);
     } catch (error) {
       console.error("Error fetching development tasks:", error);

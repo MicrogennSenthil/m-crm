@@ -114,7 +114,7 @@ export default function SalesReports() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportType>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
+  const [fromDate, setFromDate] = useState<Date | undefined>(subDays(new Date(), 30));
   const [toDate, setToDate] = useState<Date | undefined>(new Date());
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedStage, setSelectedStage] = useState<string>("all");
@@ -125,9 +125,14 @@ export default function SalesReports() {
   const [emailSubject, setEmailSubject] = useState("Sales Report - M-CRM");
   const [emailBody, setEmailBody] = useState("");
 
-  const { data: leads, isLoading: leadsLoading } = useQuery<Lead[]>({
-    queryKey: ["/api/leads"],
+  const { data: leadsData, isLoading: leadsLoading } = useQuery<{ leads: Lead[]; total: number }>({
+    queryKey: ["/api/leads", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+      pageSize: 1000,
+    }],
   });
+  const leads = leadsData?.leads ?? [];
 
   const { data: customers } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -156,17 +161,7 @@ export default function SalesReports() {
         return false;
       }
       
-      if (fromDate && toDate && lead.createdAt) {
-        // Parse the date string and normalize to local date for comparison
-        const createdAtStr = String(lead.createdAt);
-        const datePart = createdAtStr.includes('T') ? createdAtStr.split('T')[0] : createdAtStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const leadDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(leadDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
+      // Date filtering is handled server-side via query params
       
       if (selectedCustomer !== "all" && lead.customerId !== selectedCustomer) {
         return false;
@@ -192,7 +187,7 @@ export default function SalesReports() {
       
       return true;
     });
-  }, [leads, fromDate, toDate, selectedCustomer, selectedStage, selectedSource, searchQuery]);
+  }, [leads, selectedCustomer, selectedStage, selectedSource, searchQuery]);
 
   const reportData = useMemo(() => {
     const freshCalls = filteredLeads.filter(l => l.stage === "new" || l.stage === "contacted");
