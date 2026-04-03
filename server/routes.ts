@@ -8237,34 +8237,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Accounts Reports - Get all contracts with customer and contract type details
   app.get("/api/reports/accounts", isAuthenticated, async (req, res) => {
     try {
-      const allContracts = await db
-        .select()
-        .from(customerContracts)
-        .orderBy(desc(customerContracts.createdAt));
-      
-      // Enrich with customer and contract type details
-      const enrichedContracts = await Promise.all(allContracts.map(async (contract) => {
-        let customer, contractType, createdByUser;
-        
-        if (contract.customerId) {
-          customer = await db.select().from(customers).where(eq(customers.id, contract.customerId)).limit(1);
-        }
-        if (contract.contractTypeId) {
-          contractType = await db.select().from(contractTypes).where(eq(contractTypes.id, contract.contractTypeId)).limit(1);
-        }
-        if (contract.createdBy) {
-          createdByUser = await db.select().from(users).where(eq(users.id, contract.createdBy)).limit(1);
-        }
-        
-        return {
-          ...contract,
-          customer: customer?.[0] || null,
-          contractType: contractType?.[0] || null,
-          createdByUser: createdByUser?.[0] || null,
-        };
+      const { fromDate, toDate, customerId, contractTypeId } = req.query;
+      const cacheKey = `accounts:report:${fromDate||''}:${toDate||''}:${customerId||''}:${contractTypeId||''}`;
+      const cached = getCachedData<any[]>(cacheKey);
+      if (cached) return res.json(cached);
+
+      // Build SQL conditions
+      const conditions: any[] = [];
+      if (fromDate) conditions.push(gte(customerContracts.startDate, new Date(fromDate as string)));
+      if (toDate) {
+        const end = new Date(toDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(customerContracts.startDate, end));
+      }
+      if (customerId && customerId !== "all") conditions.push(eq(customerContracts.customerId, customerId as string));
+      if (contractTypeId && contractTypeId !== "all") conditions.push(eq(customerContracts.contractTypeId, contractTypeId as string));
+
+      // 1 query: all contracts (SQL filtered)
+      let contractQuery = db.select().from(customerContracts).orderBy(desc(customerContracts.createdAt)) as any;
+      if (conditions.length > 0) contractQuery = contractQuery.where(and(...conditions));
+      const allContracts = await contractQuery;
+
+      if (allContracts.length === 0) {
+        setCachedData(cacheKey, []);
+        return res.json([]);
+      }
+
+      // 3 bulk queries for related data
+      const customerIds = [...new Set(allContracts.map((c: any) => c.customerId).filter(Boolean))];
+      const contractTypeIds = [...new Set(allContracts.map((c: any) => c.contractTypeId).filter(Boolean))];
+      const createdByIds = [...new Set(allContracts.map((c: any) => c.createdBy).filter(Boolean))];
+
+      const [customersData, contractTypesData, usersData] = await Promise.all([
+        customerIds.length > 0
+          ? db.select().from(customers).where(inArray(customers.id, customerIds as string[]))
+          : Promise.resolve([]),
+        contractTypeIds.length > 0
+          ? db.select().from(contractTypes).where(inArray(contractTypes.id, contractTypeIds as string[]))
+          : Promise.resolve([]),
+        createdByIds.length > 0
+          ? db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, createdByIds as string[]))
+          : Promise.resolve([]),
+      ]);
+
+      // Build lookup maps
+      const customerMap = new Map(customersData.map((c: any) => [c.id, c]));
+      const contractTypeMap = new Map(contractTypesData.map((ct: any) => [ct.id, ct]));
+      const userMap = new Map(usersData.map((u: any) => [u.id, u]));
+
+      // Assemble enriched contracts
+      const enriched = allContracts.map((contract: any) => ({
+        ...contract,
+        customer: contract.customerId ? (customerMap.get(contract.customerId) || null) : null,
+        contractType: contract.contractTypeId ? (contractTypeMap.get(contract.contractTypeId) || null) : null,
+        createdByUser: contract.createdBy ? (userMap.get(contract.createdBy) || null) : null,
       }));
-      
-      res.json(enrichedContracts);
+
+      setCachedData(cacheKey, enriched);
+      res.json(enriched);
     } catch (error) {
       console.error("Error fetching accounts reports:", error);
       res.status(500).json({ message: "Failed to fetch accounts reports" });

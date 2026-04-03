@@ -54,7 +54,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { CustomerContract, Customer, ContractType, User } from "@shared/schema";
-import { format, subDays, isWithinInterval, differenceInDays, addDays, startOfDay, endOfDay } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "active" | "expiring" | "expired";
@@ -139,7 +139,12 @@ export default function AccountsReports() {
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const { data: contracts, isLoading } = useQuery<ContractWithDetails[]>({
-    queryKey: ["/api/reports/accounts"],
+    queryKey: ["/api/reports/accounts", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+      customerId: selectedCustomer !== "all" ? selectedCustomer : undefined,
+      contractTypeId: selectedContractType !== "all" ? selectedContractType : undefined,
+    }],
   });
 
   const { data: customers } = useQuery<Customer[]>({
@@ -174,47 +179,24 @@ export default function AccountsReports() {
     return "active";
   };
 
+  // Date, customer, contractType are filtered server-side via query params.
+  // Only apply status and search client-side.
   const filteredContracts = useMemo(() => {
     if (!contracts) return [];
-    
     return contracts.filter(contract => {
-      if (fromDate && toDate && contract.startDate) {
-        // Parse the date string and normalize to local date for comparison
-        const startDateStr = String(contract.startDate);
-        const datePart = startDateStr.includes('T') ? startDateStr.split('T')[0] : startDateStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const contractDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(contractDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
-      
-      if (selectedCustomer !== "all" && contract.customerId !== selectedCustomer) {
-        return false;
-      }
-
-      if (selectedContractType !== "all" && contract.contractTypeId !== selectedContractType) {
-        return false;
-      }
-
       const status = getContractStatus(contract);
-      if (selectedStatus !== "all" && status !== selectedStatus) {
-        return false;
-      }
-      
+      if (selectedStatus !== "all" && status !== selectedStatus) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        const matchesSearch = 
+        return (
           contract.contractNumber?.toLowerCase().includes(query) ||
           contract.customer?.name?.toLowerCase().includes(query) ||
-          contract.contactPerson?.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
+          contract.contactPerson?.toLowerCase().includes(query)
+        );
       }
-      
       return true;
     });
-  }, [contracts, fromDate, toDate, selectedCustomer, selectedContractType, selectedStatus, searchQuery]);
+  }, [contracts, selectedStatus, searchQuery]);
 
   const tabFilteredContracts = useMemo(() => {
     if (activeTab === "all") return filteredContracts;
