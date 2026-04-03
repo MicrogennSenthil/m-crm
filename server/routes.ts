@@ -8,7 +8,7 @@ import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalid
 import { db } from "./db";
 import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
-import { eq, sql, and, desc, or, ilike, inArray, isNotNull } from "drizzle-orm";
+import { eq, sql, and, desc, or, ilike, inArray, isNotNull, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
   insertCustomerSchema,
@@ -6907,33 +6907,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all feedback for reports (with ticket and user details)
   app.get("/api/feedback/all", isAuthenticated, async (req, res) => {
     try {
-      const allFeedback = await db
-        .select()
-        .from(feedback)
-        .orderBy(desc(feedback.submittedAt));
-      
-      // Enrich with user and ticket details
-      const enrichedFeedback = await Promise.all(allFeedback.map(async (fb) => {
-        let submittedBy, completedBy, ticket;
-        
-        if (fb.submittedById) {
-          submittedBy = await storage.getUser(fb.submittedById);
-        }
-        if (fb.completedById) {
-          completedBy = await storage.getUser(fb.completedById);
-        }
-        if (fb.ticketId) {
-          const ticketData = await storage.getTicket(fb.ticketId);
-          if (ticketData) {
-            const customer = ticketData.customerId ? await storage.getCustomer(ticketData.customerId) : undefined;
-            ticket = { ...ticketData, customer };
-          }
-        }
-        
-        return { ...fb, submittedBy, completedBy, ticket };
-      }));
-      
-      res.json(enrichedFeedback);
+      const { fromDate, toDate, customerId, workStatus, rating, satisfied } = req.query;
+
+      const cacheKey = `feedback:all:${fromDate||''}:${toDate||''}:${customerId||''}:${workStatus||''}:${rating||''}:${satisfied||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
+      // Build SQL WHERE conditions on the feedback table directly
+      const conditions: any[] = [];
+      if (fromDate) conditions.push(gte(feedback.submittedAt, new Date(fromDate as string)));
+      if (toDate) {
+        const end = new Date(toDate as string);
+        end.setHours(23, 59, 59, 999);
+        conditions.push(lte(feedback.submittedAt, end));
+      }
+      if (workStatus) conditions.push(eq(feedback.workStatus, workStatus as string));
+      if (rating) conditions.push(eq(feedback.rating, parseInt(rating as string)));
+      if (satisfied === "true") conditions.push(eq(feedback.satisfied, true));
+      if (satisfied === "false") conditions.push(eq(feedback.satisfied, false));
+
+      let feedbackQuery = db.select().from(feedback).orderBy(desc(feedback.submittedAt)) as any;
+      if (conditions.length > 0) feedbackQuery = feedbackQuery.where(and(...conditions));
+      const allFeedback = await feedbackQuery;
+
+      // Collect unique IDs for bulk fetches — 4 queries total instead of N×4
+      const userIds = [...new Set([
+        ...allFeedback.map((f: any) => f.submittedById),
+        ...allFeedback.map((f: any) => f.completedById),
+      ].filter(Boolean) as string[])];
+      const ticketIds = [...new Set(allFeedback.map((f: any) => f.ticketId).filter(Boolean) as string[])];
+
+      const [allUsers, allTickets] = await Promise.all([
+        storage.getUsersByIds(userIds),
+        storage.getTicketsByIds(ticketIds),
+      ]);
+
+      const customerIds = [...new Set(allTickets.map(t => t.customerId).filter(Boolean) as string[])];
+      const allCustomers = await storage.getCustomersByIds(customerIds);
+
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+      const ticketMap = new Map(allTickets.map(t => [t.id, t]));
+      const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+
+      const enrichedFeedback = allFeedback.map((fb: any) => {
+        const ticketData = fb.ticketId ? ticketMap.get(fb.ticketId) : undefined;
+        return {
+          ...fb,
+          submittedBy: fb.submittedById ? userMap.get(fb.submittedById) : null,
+          completedBy: fb.completedById ? userMap.get(fb.completedById) : null,
+          ticket: ticketData
+            ? { ...ticketData, customer: ticketData.customerId ? customerMap.get(ticketData.customerId) : undefined }
+            : undefined,
+        };
+      });
+
+      // Filter by customerId after join (since customerId is on the ticket, not feedback)
+      const result = customerId
+        ? enrichedFeedback.filter((fb: any) => fb.ticket?.customerId === customerId)
+        : enrichedFeedback;
+
+      setCached(cacheKey, result, 120); // 2 min cache
+      res.json(result);
     } catch (error) {
       console.error("Error fetching all feedback:", error);
       res.status(500).json({ message: "Failed to fetch feedback" });

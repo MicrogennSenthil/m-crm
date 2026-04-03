@@ -54,7 +54,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { Feedback, User, Ticket, Customer } from "@shared/schema";
-import { format, subDays, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
+import { format } from "date-fns";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportType = "all" | "satisfied" | "unsatisfied" | "reopened";
@@ -140,7 +140,13 @@ export default function FeedbackReports() {
   const { currentPage, pageSize, handlePageChange, handlePageSizeChange, paginateData, getTotalPages } = usePagination(10);
 
   const { data: feedbackList, isLoading } = useQuery<FeedbackWithDetails[]>({
-    queryKey: ["/api/feedback/all"],
+    queryKey: ["/api/feedback/all", {
+      fromDate: fromDate ? format(fromDate, "yyyy-MM-dd") : undefined,
+      toDate: toDate ? format(toDate, "yyyy-MM-dd") : undefined,
+      customerId: selectedCustomer !== "all" ? selectedCustomer : undefined,
+      workStatus: selectedWorkStatus !== "all" ? selectedWorkStatus : undefined,
+      rating: selectedRating !== "all" ? selectedRating : undefined,
+    }],
   });
 
   const { data: customers } = useQuery<Customer[]>({
@@ -161,47 +167,19 @@ export default function FeedbackReports() {
     },
   });
 
+  // Date, customer, workStatus, rating are filtered server-side via query params
+  // Only apply client-side search here
   const filteredFeedback = useMemo(() => {
     if (!feedbackList) return [];
-    
-    return feedbackList.filter(fb => {
-      if (fromDate && toDate && fb.submittedAt) {
-        // Parse the date string and normalize to local date for comparison
-        const submittedAtStr = String(fb.submittedAt);
-        const datePart = submittedAtStr.includes('T') ? submittedAtStr.split('T')[0] : submittedAtStr.split(' ')[0];
-        const [year, month, day] = datePart.split('-').map(Number);
-        const feedbackDate = new Date(year, month - 1, day);
-        
-        if (!isWithinInterval(feedbackDate, { start: startOfDay(fromDate), end: endOfDay(toDate) })) {
-          return false;
-        }
-      }
-      
-      if (selectedCustomer !== "all" && fb.ticket?.customerId !== selectedCustomer) {
-        return false;
-      }
-      
-      if (selectedWorkStatus !== "all" && fb.workStatus !== selectedWorkStatus) {
-        return false;
-      }
-      
-      if (selectedRating !== "all" && fb.rating?.toString() !== selectedRating) {
-        return false;
-      }
-      
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-          fb.ticket?.customer?.name?.toLowerCase().includes(query) ||
-          fb.comments?.toLowerCase().includes(query) ||
-          fb.clientContactPerson?.toLowerCase().includes(query) ||
-          fb.workDescription?.toLowerCase().includes(query)
-        );
-      }
-      
-      return true;
-    });
-  }, [feedbackList, fromDate, toDate, selectedCustomer, selectedWorkStatus, selectedRating, searchQuery]);
+    if (!searchQuery) return feedbackList;
+    const query = searchQuery.toLowerCase();
+    return feedbackList.filter(fb =>
+      fb.ticket?.customer?.name?.toLowerCase().includes(query) ||
+      fb.comments?.toLowerCase().includes(query) ||
+      fb.clientContactPerson?.toLowerCase().includes(query) ||
+      fb.workDescription?.toLowerCase().includes(query)
+    );
+  }, [feedbackList, searchQuery]);
 
   const reportData = useMemo(() => {
     switch (activeTab) {

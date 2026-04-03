@@ -213,6 +213,7 @@ export interface IStorage {
   getCustomers(): Promise<Customer[]>;
   getCustomersWithLifecycle(): Promise<CustomerWithLifecycle[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomersByIds(ids: string[]): Promise<Customer[]>;
   getCustomerByName(name: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer>;
@@ -320,6 +321,7 @@ export interface IStorage {
   getTickets(filters?: { status?: string; priority?: string; assignedEngineerIds?: string[]; limit?: number; fromDate?: Date; toDate?: Date }): Promise<Ticket[]>;
   getTicketsPaginated(filters: { assignedEngineerIds?: string[]; fromDate?: Date; toDate?: Date; search?: string; category?: string; statusTab?: string; status?: string; priority?: string; customerId?: string; page?: number; pageSize?: number; }): Promise<{ tickets: Ticket[]; total: number; counts: { all: number; open: number; inProgress: number; completed: number; remindersDue: number; support: number; development: number; } }>;
   getTicket(id: string): Promise<Ticket | undefined>;
+  getTicketsByIds(ids: string[]): Promise<Ticket[]>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<InsertTicket>): Promise<Ticket>;
 
@@ -1090,6 +1092,11 @@ export class DatabaseStorage implements IStorage {
   async getCustomer(id: string): Promise<Customer | undefined> {
     const [customer] = await db.select().from(customers).where(eq(customers.id, id));
     return customer;
+  }
+
+  async getCustomersByIds(ids: string[]): Promise<Customer[]> {
+    if (!ids.length) return [];
+    return await db.select().from(customers).where(inArray(customers.id, ids));
   }
 
   async getCustomerByName(name: string): Promise<Customer | undefined> {
@@ -1986,6 +1993,11 @@ export class DatabaseStorage implements IStorage {
   async getTicket(id: string): Promise<Ticket | undefined> {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
     return ticket;
+  }
+
+  async getTicketsByIds(ids: string[]): Promise<Ticket[]> {
+    if (!ids.length) return [];
+    return await db.select().from(tickets).where(inArray(tickets.id, ids));
   }
 
   async createTicket(ticket: InsertTicket): Promise<Ticket> {
