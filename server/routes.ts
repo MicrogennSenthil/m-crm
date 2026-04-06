@@ -5744,6 +5744,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      invalidateCache("tickets:");
+      invalidateCache("dashboard:");
       res.json(newTicket);
     } catch (error) {
       console.error("Error reopening ticket:", error);
@@ -7025,6 +7027,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.claims.sub,
       });
       
+      invalidateCache("tickets:");
+      invalidateCache("dashboard:");
       res.json(updated);
     } catch (error) {
       console.error("Error escalating ticket:", error);
@@ -7239,7 +7243,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updated.issueSummary
         );
       }
-      
+
+      // Bust all ticket list caches so the list immediately shows "closed"
+      invalidateCache("tickets:");
+      invalidateCache("dashboard:");
       res.json(updated);
     } catch (error) {
       console.error("Error closing ticket:", error);
