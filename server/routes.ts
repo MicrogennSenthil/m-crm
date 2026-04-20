@@ -16013,7 +16013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // =====================
 
   // Marketing Dashboard - Get summary metrics
-  app.get("/api/marketing/dashboard", isAuthenticated, requirePermission("marketing_dashboard", "view"), async (req, res) => {
+  app.get("/api/marketing/dashboard", isAuthenticated, requirePermission("digital_marketing", "view"), async (req, res) => {
     try {
       const cached = getCached<any>("marketing:dashboard");
       if (cached) return res.json(cached);

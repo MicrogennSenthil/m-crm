@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Table,
   TableBody,
@@ -121,14 +122,39 @@ export default function MarketingDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
+      <div className="space-y-6 p-2" data-testid="loading-spinner">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6 space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card><CardContent className="pt-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+          <Card><CardContent className="pt-6"><Skeleton className="h-48 w-full" /></CardContent></Card>
+        </div>
+        <Card><CardContent className="pt-6 space-y-3">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+        </CardContent></Card>
       </div>
     );
   }
 
   if (error || !dashboard) {
-    const isAccessDenied = (error as any)?.message?.includes("403") || (error as any)?.message?.includes("Access denied");
+    const errMsg = (error as any)?.message || "";
+    const isAccessDenied =
+      errMsg.includes("403") ||
+      errMsg.toLowerCase().includes("access denied") ||
+      errMsg.toLowerCase().includes("no permissions") ||
+      errMsg.toLowerCase().includes("forbidden");
     
     if (isAccessDenied) {
       return (
@@ -136,7 +162,7 @@ export default function MarketingDashboard() {
           <AlertTriangle className="h-16 w-16 text-amber-500" />
           <h2 className="text-xl font-semibold" data-testid="text-access-denied">Access Denied</h2>
           <p className="text-muted-foreground text-center max-w-md">
-            You don't have permission to access the Marketing Dashboard.
+            You don't have permission to access the Marketing Dashboard. Contact your administrator to request access.
           </p>
           <Button variant="outline" onClick={() => window.history.back()} data-testid="button-go-back">
             Go Back
@@ -146,8 +172,14 @@ export default function MarketingDashboard() {
     }
     
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <p className="text-muted-foreground">Failed to load dashboard data</p>
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
+        <AlertTriangle className="h-12 w-12 text-destructive" />
+        <p className="text-muted-foreground text-center max-w-md">
+          {errMsg || "Failed to load dashboard data. Please try refreshing the page."}
+        </p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
       </div>
     );
   }
