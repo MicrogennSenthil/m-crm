@@ -166,6 +166,7 @@ export default async function runApp(
         if (leadResult) setCached("leads:list:shared::::::::::1:50", leadResult, 600);
         // projects:list:${prefix}:${status}:${fromDate}:${toDate}
         if (projectsList) setCached("projects:list:shared:::", projectsList, 900);
+
         log("[Warmup] Shared list caches pre-warmed", "scheduler");
       } catch (e) {
         log(`[Warmup] Shared list pre-warm skipped: ${e}`, "scheduler");

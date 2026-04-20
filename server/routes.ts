@@ -5800,6 +5800,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isSuperAdmin && !isAdmin && !isSalesExec && !isSalesHead && !isDeptHead) {
         return res.status(403).json({ message: "Access denied. Sales dashboard requires admin, sales executive, sales head, or department head role." });
       }
+
+      // Check cache (key is per-user + filters)
+      const salesCacheKey = `dashboard:sales:${userId}:${executiveIdFilter || ''}:${startDateFilter || ''}:${endDateFilter || ''}`;
+      const salesCached = getCached<any>(salesCacheKey);
+      if (salesCached) return res.json(salesCached);
       
       // Get users first for department filtering
       const allUsers = await storage.getUsers();
@@ -6107,7 +6112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return new Date(a.followUpDate).getTime() - new Date(b.followUpDate).getTime();
       });
       
-      res.json({
+      const salesDashResult = {
         stats: {
           totalSalesCount,
           totalSalesValue,
@@ -6145,7 +6150,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         leads: leadsWithSalesExec,
         followUps: followUpsWithLead,
-      });
+      };
+      // Cache per-user (with filters) for 5 minutes
+      setCached(salesCacheKey, salesDashResult, 300);
+      res.json(salesDashResult);
     } catch (error) {
       console.error("Error fetching sales dashboard:", error);
       res.status(500).json({ message: "Failed to fetch sales dashboard" });
@@ -6454,7 +6462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pendingHandoff,
         },
       };
-      setCached("dashboard:implementation", result, 300);
+      setCached("dashboard:implementation", result, 900);
       res.json(result);
     } catch (error) {
       console.error("Error fetching implementation dashboard:", error);
@@ -6497,69 +6505,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cached = getCached<any>("dashboard:support");
       if (cached) return res.json(cached);
 
-      const [allTickets, users, developmentTasks] = await Promise.all([
-        storage.getTickets({}),
+      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+
+      // Single aggregate query for all stats — avoids fetching 2800+ rows into JS
+      const [statsRows, recentTickets, users, devTaskRows] = await Promise.all([
+        db.select({
+          totalTickets: sql<number>`COUNT(*)`,
+          assignedCount: sql<number>`COUNT(CASE WHEN assigned_engineer_id IS NOT NULL THEN 1 END)`,
+          unassignedCount: sql<number>`COUNT(CASE WHEN assigned_engineer_id IS NULL AND status NOT IN ('closed','resolved','resolved_at_techteam','pending_feedback') THEN 1 END)`,
+          openCount: sql<number>`COUNT(CASE WHEN status = 'open' THEN 1 END)`,
+          inProcessCount: sql<number>`COUNT(CASE WHEN status = 'in_progress' THEN 1 END)`,
+          completedCount: sql<number>`COUNT(CASE WHEN status IN ('closed','resolved','resolved_at_techteam','pending_feedback') THEN 1 END)`,
+          completedTodayCount: sql<number>`COUNT(CASE WHEN status IN ('closed','resolved','resolved_at_techteam','pending_feedback') AND (closed_at >= ${todayStart} OR updated_at >= ${todayStart}) THEN 1 END)`,
+          reopenedCount: sql<number>`COUNT(CASE WHEN status = 'reopened' OR reopened_from_ticket_id IS NOT NULL THEN 1 END)`,
+          pendingCustomerCount: sql<number>`COUNT(CASE WHEN status = 'pending_customer' THEN 1 END)`,
+          escalatedCount: sql<number>`COUNT(CASE WHEN status = 'escalated' OR (escalation_level IS NOT NULL AND escalation_level > 1) THEN 1 END)`,
+          reassignedCount: sql<number>`COUNT(CASE WHEN assigned_engineer_id IS NOT NULL AND updated_at IS NOT NULL AND created_at IS NOT NULL AND EXTRACT(EPOCH FROM (updated_at - created_at)) > 60 THEN 1 END)`,
+          longProcessingCount: sql<number>`COUNT(CASE WHEN status = 'in_progress' AND updated_at < ${thirtyMinAgo} THEN 1 END)`,
+        }).from(tickets),
+        // Only fetch the 100 most recent tickets for the display list
+        db.select().from(tickets).orderBy(desc(tickets.createdAt)).limit(100),
         storage.getUsers(),
-        storage.getDevelopmentTasks({}),
+        db.select({
+          sourceId: sql<string>`source_id`,
+          status: sql<string>`status`,
+          taskNumber: sql<string>`task_number`,
+        }).from(sql`development_tasks`).where(sql`source_type = 'support' AND source_id IS NOT NULL`),
       ]);
-      
-      // Create a map of ticket IDs to their development task status
+
+      const s = statsRows[0];
+
+      // Build dev task map
       const ticketDevTaskMap = new Map<string, { hasPendingDev: boolean; devTaskStatus: string; devTaskNumber: string }>();
-      for (const task of developmentTasks) {
-        if (task.sourceType === 'support' && task.sourceId) {
-          const isPending = task.status !== 'completed';
-          ticketDevTaskMap.set(task.sourceId, {
-            hasPendingDev: isPending,
-            devTaskStatus: task.status,
-            devTaskNumber: task.taskNumber
-          });
+      for (const task of devTaskRows) {
+        const isPending = task.status !== 'completed' && task.status !== 'cancelled';
+        if (!ticketDevTaskMap.has(task.sourceId) || isPending) {
+          ticketDevTaskMap.set(task.sourceId, { hasPendingDev: isPending, devTaskStatus: task.status, devTaskNumber: task.taskNumber });
         }
       }
-      
-      // Calculate stats
-      const totalTickets = allTickets.length;
-      const assignedCount = allTickets.filter(t => t.assignedEngineerId).length;
-      // Unassigned should exclude closed/resolved tickets since they don't need assignment
-      const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
-      const unassignedCount = allTickets.filter(t => !t.assignedEngineerId && !resolvedStatuses.includes(t.status)).length;
-      const inProcessCount = allTickets.filter(t => t.status === 'in_progress').length;
-      
-      // Calculate completed counts - all time and today only (includes all resolved variants)
-      const completedCount = allTickets.filter(t => resolvedStatuses.includes(t.status)).length;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const completedTodayCount = allTickets.filter(t => 
-        resolvedStatuses.includes(t.status) && 
-        (t.closedAt && new Date(t.closedAt) >= today || t.updatedAt && new Date(t.updatedAt) >= today)
-      ).length;
-      const reopenedCount = allTickets.filter(t => t.status === 'reopened' || t.reopenedFromTicketId).length;
-      const openCount = allTickets.filter(t => t.status === 'open').length;
-      const pendingCustomerCount = allTickets.filter(t => t.status === 'pending_customer').length;
-      const escalatedCount = allTickets.filter(t => t.status === 'escalated' || (t.escalationLevel && t.escalationLevel > 1)).length;
-      
-      // Count tickets with pending development work
-      const pendingDevelopmentCount = allTickets.filter(t => {
-        const devInfo = ticketDevTaskMap.get(t.id);
-        return devInfo && devInfo.hasPendingDev;
-      }).length;
-      
-      // Calculate reassigned tickets - those where assignment changed (check activity log or estimate)
-      // For now, we can count tickets that have been updated and have an assignment
-      const reassignedCount = allTickets.filter(t => 
-        t.assignedEngineerId && t.updatedAt && t.createdAt && 
-        new Date(t.updatedAt).getTime() > new Date(t.createdAt).getTime() + 60000
-      ).length;
-      
-      // More than 30 min processing - tickets in_progress for more than 30 minutes
-      const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
-      const longProcessingCount = allTickets.filter(t => 
-        t.status === 'in_progress' && 
-        t.updatedAt && new Date(t.updatedAt) < thirtyMinAgo
-      ).length;
-      
-      // Add user info and development task info to tickets for display
-      const ticketsWithAssignee = allTickets.map(ticket => {
-        const assignee = users.find(u => u.id === ticket.assignedEngineerId);
+
+      // Count pending dev tickets from the aggregate (approximate using dev task map)
+      const pendingDevTicketIds = new Set([...ticketDevTaskMap.entries()].filter(([, v]) => v.hasPendingDev).map(([k]) => k));
+      const pendingDevelopmentCount = pendingDevTicketIds.size;
+
+      // Build user map for display
+      const userMap = new Map(users.map(u => [u.id, u]));
+
+      const ticketsWithAssignee = recentTickets.map(ticket => {
+        const assignee = ticket.assignedEngineerId ? userMap.get(ticket.assignedEngineerId) : null;
         const devInfo = ticketDevTaskMap.get(ticket.id);
         return {
           ...ticket,
@@ -6569,26 +6563,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           devTaskNumber: devInfo?.devTaskNumber || null,
         };
       });
-      
+
       const result = {
         stats: {
-          totalTickets,
-          assignedCount,
-          unassignedCount,
-          openCount,
-          inProcessCount,
-          completedCount,
-          completedTodayCount,
-          pendingCustomerCount,
-          escalatedCount,
-          reassignedCount,
-          reopenedCount,
-          longProcessingCount,
+          totalTickets: Number(s.totalTickets),
+          assignedCount: Number(s.assignedCount),
+          unassignedCount: Number(s.unassignedCount),
+          openCount: Number(s.openCount),
+          inProcessCount: Number(s.inProcessCount),
+          completedCount: Number(s.completedCount),
+          completedTodayCount: Number(s.completedTodayCount),
+          pendingCustomerCount: Number(s.pendingCustomerCount),
+          escalatedCount: Number(s.escalatedCount),
+          reassignedCount: Number(s.reassignedCount),
+          reopenedCount: Number(s.reopenedCount),
+          longProcessingCount: Number(s.longProcessingCount),
           pendingDevelopmentCount,
         },
         tickets: ticketsWithAssignee,
       };
-      setCached("dashboard:support", result, 300);
+      setCached("dashboard:support", result, 900);
       res.json(result);
     } catch (error) {
       console.error("Error fetching support dashboard:", error);
@@ -6607,24 +6601,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }
-      
-      const allTickets = await storage.getTickets({});
-      
-      // Filter to tickets assigned to current user using database ID (include all statuses for dashboard display)
-      const myTickets = allTickets.filter(t => t.assignedEngineerId === user.id);
-      
-      // Sort: open/in_progress first, then by created date
-      const resolvedStatuses = ['closed', 'resolved', 'resolved_at_techteam', 'pending_feedback'];
-      myTickets.sort((a, b) => {
-        const aOpen = !resolvedStatuses.includes(a.status);
-        const bOpen = !resolvedStatuses.includes(b.status);
-        if (aOpen && !bOpen) return -1;
-        if (!aOpen && bOpen) return 1;
-        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-      });
-      
+
+      const cacheKey = `tickets:my-assigned:${user.id}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) {
+        console.log(`[Tickets] Found ${cached.length} assigned tickets for user ${user.email} (cached)`);
+        return res.json(cached);
+      }
+
+      // Filter directly in DB — no need to load all 2800+ tickets
+      const myTickets = await db.select().from(tickets)
+        .where(eq(tickets.assignedEngineerId, user.id))
+        .orderBy(
+          sql`CASE WHEN status IN ('closed','resolved','resolved_at_techteam','pending_feedback') THEN 1 ELSE 0 END`,
+          desc(tickets.createdAt)
+        )
+        .limit(200);
+
       console.log(`[Tickets] Found ${myTickets.length} assigned tickets for user ${user.email} (db id: ${user.id})`);
-      
+      setCached(cacheKey, myTickets, 300);
       res.json(myTickets);
     } catch (error) {
       console.error("Error fetching user's assigned tickets:", error);
@@ -7149,9 +7144,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If client not satisfied, reopen as Level 2 ticket
       if (reopenedByHr && workStatus === 'not_completed') {
-        // Create new Level 2 ticket
-        const count = await storage.getTickets({});
-        const newTicketNumber = `TKT-${String(count.length + 1).padStart(6, '0')}`;
+        // Create new Level 2 ticket — use DB count, not full fetch
+        const [countRow] = await db.select({ count: sql<number>`count(*)` }).from(tickets);
+        const newTicketNumber = `TKT-${String(Number(countRow.count) + 1).padStart(6, '0')}`;
         
         const newTicket = await storage.createTicket({
           customerId: ticket.customerId,
@@ -7195,22 +7190,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get reopened tickets for dashboard notifications
   app.get("/api/tickets/reopened", isAuthenticated, async (req: any, res) => {
     try {
-      const allTickets = await storage.getTickets({});
-      const reopenedTickets = allTickets.filter(t => t.reopenedFromTicketId !== null);
-      
-      // Attach engineer details
-      const withDetails = await Promise.all(
-        reopenedTickets.map(async (ticket) => {
-          const assignee = ticket.assignedEngineerId 
-            ? await storage.getUser(ticket.assignedEngineerId) 
-            : null;
-          return {
-            ...ticket,
-            assigneeName: assignee ? `${assignee.firstName} ${assignee.lastName}` : null,
-          };
-        })
-      );
-      
+      const cached = getCached<any>("tickets:reopened");
+      if (cached) return res.json(cached);
+
+      // Filter directly in DB — no need to load all tickets
+      const reopenedTickets = await db.select().from(tickets)
+        .where(isNotNull(tickets.reopenedFromTicketId))
+        .orderBy(desc(tickets.createdAt))
+        .limit(100);
+
+      // Attach engineer details using cached user list
+      const allUsers = await storage.getUsers();
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+      const withDetails = reopenedTickets.map(ticket => {
+        const assignee = ticket.assignedEngineerId ? userMap.get(ticket.assignedEngineerId) : null;
+        return {
+          ...ticket,
+          assigneeName: assignee ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() : null,
+        };
+      });
+
+      setCached("tickets:reopened", withDetails, 300);
       res.json(withDetails);
     } catch (error) {
       console.error("Error fetching reopened tickets:", error);
