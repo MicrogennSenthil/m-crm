@@ -13478,45 +13478,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/customer-contracts", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const { customerId, status, contractTypeId, expiringDays } = req.query;
-      
-      let query = db.select({
-        contract: customerContracts,
-        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
-        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
-        customerModules: sql<string[]>`(SELECT selected_modules FROM customers WHERE id = ${customerContracts.customerId})`,
-        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
-      }).from(customerContracts);
-      
-      const conditions = [];
-      if (customerId) {
-        conditions.push(eq(customerContracts.customerId, customerId as string));
+
+      // Cache the unfiltered list for 5 minutes — filtered views are fast since they just slice the cached array
+      const isUnfiltered = !customerId && !status && !contractTypeId && !expiringDays;
+      if (isUnfiltered) {
+        const cached = getCached<any>("contracts:list");
+        if (cached) return res.json(cached);
       }
-      if (status) {
-        conditions.push(eq(customerContracts.status, status as string));
-      }
-      if (contractTypeId) {
-        conditions.push(eq(customerContracts.contractTypeId, contractTypeId as string));
-      }
-      
-      if (conditions.length > 0) {
-        const { and } = await import('drizzle-orm');
-        query = query.where(and(...conditions)) as typeof query;
-      }
-      
-      let contracts = await query;
-      
+
+      // Use proper JOINs instead of correlated subqueries (much faster)
+      const conditions: any[] = [];
+      if (customerId)     conditions.push(eq(customerContracts.customerId,    customerId as string));
+      if (status)         conditions.push(eq(customerContracts.status,         status as string));
+      if (contractTypeId) conditions.push(eq(customerContracts.contractTypeId, contractTypeId as string));
+
+      let contractsResult = await db.select({
+        contract:         customerContracts,
+        customerName:     customers.name,
+        customerCity:     customers.city,
+        customerModules:  customers.selectedModules,
+        contractTypeName: contractTypes.displayName,
+      })
+        .from(customerContracts)
+        .leftJoin(customers,     eq(customerContracts.customerId,    customers.id))
+        .leftJoin(contractTypes, eq(customerContracts.contractTypeId, contractTypes.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(customerContracts.createdAt));
+
       // Filter by expiring within X days if specified
       if (expiringDays) {
         const days = parseInt(expiringDays as string);
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + days);
-        contracts = contracts.filter(c => {
+        contractsResult = contractsResult.filter(c => {
           const endDate = new Date(c.contract.endDate);
           return endDate <= futureDate && endDate >= new Date();
         });
       }
-      
-      res.json(contracts);
+
+      if (isUnfiltered) setCached("contracts:list", contractsResult, 300);
+      res.json(contractsResult);
     } catch (error) {
       console.error("Error fetching customer contracts:", error);
       res.status(500).json({ message: "Failed to fetch customer contracts" });
@@ -13621,7 +13622,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Customer contract created: ${contractNumber}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contracts:");
       res.json(created);
     } catch (error: any) {
       console.error("Error creating customer contract:", error);
@@ -13833,7 +13835,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Customer contract updated: ${updated.contractNumber}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contracts:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating customer contract:", error);
@@ -13858,7 +13861,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Customer contract deleted: ${contract.contractNumber}`,
         userId: req.user?.id,
       });
-      
+
+      invalidateCache("contracts:");
       res.json({ message: "Contract deleted successfully" });
     } catch (error) {
       console.error("Error deleting customer contract:", error);
@@ -13870,25 +13874,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/contracts/expiring", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
+      const cacheKey = `contracts:expiring:${days}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + days);
-      
-      const { and, gte, lte } = await import('drizzle-orm');
-      
+
       const expiringContracts = await db.select({
-        contract: customerContracts,
-        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
-        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
-        customerModules: sql<string[]>`(SELECT selected_modules FROM customers WHERE id = ${customerContracts.customerId})`,
-        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+        contract:         customerContracts,
+        customerName:     customers.name,
+        customerCity:     customers.city,
+        customerModules:  customers.selectedModules,
+        contractTypeName: contractTypes.displayName,
       })
         .from(customerContracts)
+        .leftJoin(customers,     eq(customerContracts.customerId,    customers.id))
+        .leftJoin(contractTypes, eq(customerContracts.contractTypeId, contractTypes.id))
         .where(and(
           gte(customerContracts.endDate, new Date()),
           lte(customerContracts.endDate, futureDate),
           eq(customerContracts.status, 'active')
         ));
-      
+
+      setCached(cacheKey, expiringContracts, 300);
       res.json(expiringContracts);
     } catch (error) {
       console.error("Error fetching expiring contracts:", error);
@@ -14031,20 +14040,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get contracts needing follow-up (for accounts team)
   app.get("/api/contracts/pending-followup", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
-      const { lte, or, isNull } = await import('drizzle-orm');
+      const cached = getCached<any>("contracts:pending-followup");
+      if (cached) return res.json(cached);
+
       const today = new Date();
+      const { or: drizzleOr, isNull: drizzleIsNull, lte: drizzleLte } = await import('drizzle-orm');
       
       const pendingFollowups = await db.select({
-        contract: customerContracts,
-        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
-        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+        contract:         customerContracts,
+        customerName:     customers.name,
+        contractTypeName: contractTypes.displayName,
       })
         .from(customerContracts)
-        .where(or(
-          lte(customerContracts.nextFollowupDate, today),
-          isNull(customerContracts.nextFollowupDate)
+        .leftJoin(customers,     eq(customerContracts.customerId,    customers.id))
+        .leftJoin(contractTypes, eq(customerContracts.contractTypeId, contractTypes.id))
+        .where(drizzleOr(
+          drizzleLte(customerContracts.nextFollowupDate, today),
+          drizzleIsNull(customerContracts.nextFollowupDate)
         ));
-      
+
+      setCached("contracts:pending-followup", pendingFollowups, 300);
       res.json(pendingFollowups);
     } catch (error) {
       console.error("Error fetching pending follow-ups:", error);
@@ -14055,36 +14070,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get contracts grouped by renewal month (for month-wise renewal view)
   app.get("/api/contracts/renewals-by-month", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
-      const { gte, and } = await import('drizzle-orm');
-      const today = new Date();
       const monthsAhead = parseInt(req.query.months as string) || 12;
+      const cacheKey = `contracts:renewals-by-month:${monthsAhead}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
+      const today = new Date();
       const futureDate = new Date();
       futureDate.setMonth(futureDate.getMonth() + monthsAhead);
-      
+
       const allContracts = await db.select({
-        contract: customerContracts,
-        customerName: sql<string>`(SELECT name FROM customers WHERE id = ${customerContracts.customerId})`,
-        customerCity: sql<string>`(SELECT city FROM customers WHERE id = ${customerContracts.customerId})`,
-        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
+        contract:         customerContracts,
+        customerName:     customers.name,
+        customerCity:     customers.city,
+        contractTypeName: contractTypes.displayName,
       })
         .from(customerContracts)
+        .leftJoin(customers,     eq(customerContracts.customerId,    customers.id))
+        .leftJoin(contractTypes, eq(customerContracts.contractTypeId, contractTypes.id))
         .where(and(
           gte(customerContracts.endDate, today),
           sql`${customerContracts.endDate} <= ${futureDate}`
         ))
         .orderBy(customerContracts.endDate);
-      
+
       // Group by month
       const byMonth: Record<string, any[]> = {};
       allContracts.forEach(c => {
         if (c.contract.endDate) {
-          const monthKey = new Date(c.contract.endDate).toISOString().substring(0, 7); // YYYY-MM
+          const monthKey = new Date(c.contract.endDate).toISOString().substring(0, 7);
           if (!byMonth[monthKey]) byMonth[monthKey] = [];
           byMonth[monthKey].push(c);
         }
       });
-      
-      // Convert to array and add summary
+
       const result = Object.entries(byMonth).map(([month, contracts]) => ({
         month,
         monthDisplay: new Date(month + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
@@ -14092,7 +14111,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalValue: contracts.reduce((sum, c) => sum + (c.contract.amount || 0), 0),
         contracts,
       }));
-      
+
+      setCached(cacheKey, result, 300);
       res.json(result);
     } catch (error) {
       console.error("Error fetching renewals by month:", error);
@@ -14103,18 +14123,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get contract type summary with client counts
   app.get("/api/contracts/type-summary", isAuthenticated, requirePermission("contracts", "view"), async (req, res) => {
     try {
+      const cached = getCached<any>("contracts:type-summary");
+      if (cached) return res.json(cached);
+
       const summary = await db.select({
-        contractTypeId: customerContracts.contractTypeId,
-        contractTypeName: sql<string>`(SELECT display_name FROM contract_types WHERE id = ${customerContracts.contractTypeId})`,
-        clientCount: sql<number>`COUNT(DISTINCT ${customerContracts.customerId})`,
-        contractCount: sql<number>`COUNT(*)`,
-        totalValue: sql<number>`SUM(${customerContracts.amount})`,
-        activeCount: sql<number>`SUM(CASE WHEN ${customerContracts.status} = 'active' THEN 1 ELSE 0 END)`,
-        expiringCount: sql<number>`SUM(CASE WHEN ${customerContracts.endDate} <= NOW() + INTERVAL '30 days' AND ${customerContracts.endDate} > NOW() THEN 1 ELSE 0 END)`,
+        contractTypeId:   customerContracts.contractTypeId,
+        contractTypeName: contractTypes.displayName,
+        clientCount:      sql<number>`COUNT(DISTINCT ${customerContracts.customerId})`,
+        contractCount:    sql<number>`COUNT(*)`,
+        totalValue:       sql<number>`SUM(${customerContracts.amount})`,
+        activeCount:      sql<number>`SUM(CASE WHEN ${customerContracts.status} = 'active' THEN 1 ELSE 0 END)`,
+        expiringCount:    sql<number>`SUM(CASE WHEN ${customerContracts.endDate} <= NOW() + INTERVAL '30 days' AND ${customerContracts.endDate} > NOW() THEN 1 ELSE 0 END)`,
       })
         .from(customerContracts)
-        .groupBy(customerContracts.contractTypeId);
-      
+        .leftJoin(contractTypes, eq(customerContracts.contractTypeId, contractTypes.id))
+        .groupBy(customerContracts.contractTypeId, contractTypes.displayName);
+
+      setCached("contracts:type-summary", summary, 300);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching contract type summary:", error);

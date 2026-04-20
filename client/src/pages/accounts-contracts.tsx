@@ -309,15 +309,6 @@ export default function AccountsContracts() {
     return <span className="text-muted-foreground">{days} days</span>;
   };
 
-  if (contractsLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -2005,15 +1996,6 @@ function CustomerMasterTab({
     });
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <Card>
@@ -2921,15 +2903,6 @@ function MonthlyRemindersTab({
         return <Badge variant="secondary">{status}</Badge>;
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-96 w-full" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
