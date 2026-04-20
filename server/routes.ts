@@ -16015,85 +16015,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Marketing Dashboard - Get summary metrics
   app.get("/api/marketing/dashboard", isAuthenticated, requirePermission("marketing_dashboard", "view"), async (req, res) => {
     try {
-      // Get all reports for metrics calculation
-      const allReports = await storage.getMarketingDailyReports({});
-      
-      // Calculate date ranges
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfWeek = new Date(startOfToday);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      // Filter reports by time periods
-      const todayReports = allReports.filter(r => new Date(r.reportDate) >= startOfToday);
-      const weekReports = allReports.filter(r => new Date(r.reportDate) >= startOfWeek);
-      const monthReports = allReports.filter(r => new Date(r.reportDate) >= startOfMonth);
-      
-      // Status counts
-      const statusCounts = {
-        draft: allReports.filter(r => r.status === 'draft').length,
-        submitted: allReports.filter(r => r.status === 'submitted').length,
-        approved: allReports.filter(r => r.status === 'approved').length,
-        rejected: allReports.filter(r => r.status === 'rejected').length,
-      };
-      
-      // Aggregate metrics
-      const aggregateMetrics = (reports: any[]) => ({
-        totalReports: reports.length,
-        websiteSessions: reports.reduce((sum, r) => sum + (r.websiteSessions || 0), 0),
-        websiteConversions: reports.reduce((sum, r) => sum + (r.websiteConversions || 0), 0),
-        socialLikes: reports.reduce((sum, r) => sum + (r.socialLikes || 0), 0),
-        socialShares: reports.reduce((sum, r) => sum + (r.socialShares || 0), 0),
-        socialComments: reports.reduce((sum, r) => sum + (r.socialComments || 0), 0),
-        emailConversions: reports.reduce((sum, r) => sum + (r.emailConversions || 0), 0),
-        adBudgetUsed: reports.reduce((sum, r) => sum + (r.adBudgetUsed || 0), 0),
-        leadsGenerated: reports.reduce((sum, r) => sum + (r.leadsGenerated || 0), 0),
-        costPerLead: reports.filter(r => r.costPerLead).length > 0 
-          ? Math.round(reports.reduce((sum, r) => sum + (r.costPerLead || 0), 0) / reports.filter(r => r.costPerLead).length)
-          : 0,
+      const cached = getCached<any>("marketing:dashboard");
+      if (cached) return res.json(cached);
+
+      // Single aggregation query replacing all JS-side filtering of the full dataset
+      const summaryResult = await db.execute(sql`
+        SELECT
+          -- Status counts
+          COUNT(*) FILTER (WHERE status = 'draft')     AS draft,
+          COUNT(*) FILTER (WHERE status = 'submitted') AS submitted,
+          COUNT(*) FILTER (WHERE status = 'approved')  AS approved,
+          COUNT(*) FILTER (WHERE status = 'rejected')  AS rejected,
+          -- Today metrics
+          COUNT(*) FILTER (WHERE report_date >= CURRENT_DATE) AS today_reports,
+          COALESCE(SUM(website_sessions)  FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_sessions,
+          COALESCE(SUM(website_conversions) FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_conversions,
+          COALESCE(SUM(social_likes)      FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_likes,
+          COALESCE(SUM(social_shares)     FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_shares,
+          COALESCE(SUM(social_comments)   FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_comments,
+          COALESCE(SUM(email_conversions) FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_email_conv,
+          COALESCE(SUM(ad_budget_used)    FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_ad_budget,
+          COALESCE(SUM(leads_generated)   FILTER (WHERE report_date >= CURRENT_DATE), 0) AS today_leads,
+          -- Week metrics (Monday-based)
+          COUNT(*) FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)) AS week_reports,
+          COALESCE(SUM(website_sessions)  FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_sessions,
+          COALESCE(SUM(website_conversions) FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_conversions,
+          COALESCE(SUM(social_likes)      FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_likes,
+          COALESCE(SUM(social_shares)     FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_shares,
+          COALESCE(SUM(social_comments)   FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_comments,
+          COALESCE(SUM(email_conversions) FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_email_conv,
+          COALESCE(SUM(ad_budget_used)    FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_ad_budget,
+          COALESCE(SUM(leads_generated)   FILTER (WHERE report_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_leads,
+          -- Month metrics
+          COUNT(*) FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)) AS month_reports,
+          COALESCE(SUM(website_sessions)  FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_sessions,
+          COALESCE(SUM(website_conversions) FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_conversions,
+          COALESCE(SUM(social_likes)      FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_likes,
+          COALESCE(SUM(social_shares)     FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_shares,
+          COALESCE(SUM(social_comments)   FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_comments,
+          COALESCE(SUM(email_conversions) FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_email_conv,
+          COALESCE(SUM(ad_budget_used)    FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_ad_budget,
+          COALESCE(SUM(leads_generated)   FILTER (WHERE report_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_leads,
+          -- All-time totals
+          COUNT(*) AS total_reports,
+          COALESCE(SUM(website_sessions), 0)   AS total_sessions,
+          COALESCE(SUM(website_conversions), 0) AS total_conversions,
+          COALESCE(SUM(social_likes), 0)       AS total_likes,
+          COALESCE(SUM(social_shares), 0)      AS total_shares,
+          COALESCE(SUM(social_comments), 0)    AS total_comments,
+          COALESCE(SUM(email_conversions), 0)  AS total_email_conv,
+          COALESCE(SUM(ad_budget_used), 0)     AS total_ad_budget,
+          COALESCE(SUM(leads_generated), 0)    AS total_leads
+        FROM marketing_daily_reports
+      `);
+      const s = (summaryResult.rows[0] as any) || {};
+
+      const buildMetrics = (prefix: string) => ({
+        totalReports:       Number(s[`${prefix}_reports`]) || 0,
+        websiteSessions:    Number(s[`${prefix}_sessions`]) || 0,
+        websiteConversions: Number(s[`${prefix}_conversions`]) || 0,
+        socialLikes:        Number(s[`${prefix}_likes`]) || 0,
+        socialShares:       Number(s[`${prefix}_shares`]) || 0,
+        socialComments:     Number(s[`${prefix}_comments`]) || 0,
+        emailConversions:   Number(s[`${prefix}_email_conv`]) || 0,
+        adBudgetUsed:       Number(s[`${prefix}_ad_budget`]) || 0,
+        leadsGenerated:     Number(s[`${prefix}_leads`]) || 0,
+        costPerLead:        0,
       });
-      
-      // Get team summary (reports grouped by user)
-      const users = await storage.getUsers();
-      const teamSummary = users
-        .filter(u => {
-          const userReports = allReports.filter(r => r.userId === u.id);
-          return userReports.length > 0;
-        })
-        .map(u => {
-          const userReports = allReports.filter(r => r.userId === u.id);
-          const approved = userReports.filter(r => r.status === 'approved').length;
-          const pending = userReports.filter(r => r.status === 'submitted').length;
-          const draft = userReports.filter(r => r.status === 'draft').length;
-          return {
-            user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email },
-            totalReports: userReports.length,
-            approved,
-            pending,
-            draft,
-            totalLeads: userReports.reduce((sum, r) => sum + (r.leadsGenerated || 0), 0),
-          };
-        })
-        .sort((a, b) => b.totalReports - a.totalReports);
-      
-      // Recent reports (last 10)
-      const recentReports = allReports
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-        .slice(0, 10);
-      
-      res.json({
+
+      const statusCounts = {
+        draft:     Number(s.draft)     || 0,
+        submitted: Number(s.submitted) || 0,
+        approved:  Number(s.approved)  || 0,
+        rejected:  Number(s.rejected)  || 0,
+      };
+
+      // Team summary — SQL GROUP BY instead of JS nested loops
+      const teamRows = await db.execute(sql`
+        SELECT
+          m.user_id,
+          u.first_name,
+          u.last_name,
+          u.email,
+          COUNT(*)::int                                          AS total_reports,
+          COUNT(*) FILTER (WHERE m.status = 'approved')::int    AS approved,
+          COUNT(*) FILTER (WHERE m.status = 'submitted')::int   AS pending,
+          COUNT(*) FILTER (WHERE m.status = 'draft')::int       AS draft,
+          COALESCE(SUM(m.leads_generated), 0)::int              AS total_leads
+        FROM marketing_daily_reports m
+        JOIN users u ON u.id = m.user_id
+        GROUP BY m.user_id, u.first_name, u.last_name, u.email
+        ORDER BY total_reports DESC
+      `);
+      const teamSummary = teamRows.rows.map((r: any) => ({
+        user: { id: r.user_id, firstName: r.first_name, lastName: r.last_name, email: r.email },
+        totalReports: Number(r.total_reports),
+        approved:     Number(r.approved),
+        pending:      Number(r.pending),
+        draft:        Number(r.draft),
+        totalLeads:   Number(r.total_leads),
+      }));
+
+      // Recent 10 reports + pending approval — single query each, minimal fields
+      const [recentReports, pendingApproval] = await Promise.all([
+        db.select().from(marketingDailyReports)
+          .orderBy(desc(marketingDailyReports.createdAt))
+          .limit(10),
+        db.select().from(marketingDailyReports)
+          .where(eq(marketingDailyReports.status, 'submitted'))
+          .orderBy(desc(marketingDailyReports.createdAt)),
+      ]);
+
+      const result = {
         statusCounts,
         metrics: {
-          today: aggregateMetrics(todayReports),
-          week: aggregateMetrics(weekReports),
-          month: aggregateMetrics(monthReports),
-          total: aggregateMetrics(allReports),
+          today: buildMetrics('today'),
+          week:  buildMetrics('week'),
+          month: buildMetrics('month'),
+          total: buildMetrics('total'),
         },
         teamSummary,
         recentReports,
-        pendingApproval: allReports.filter(r => r.status === 'submitted'),
-      });
+        pendingApproval,
+      };
+
+      setCached("marketing:dashboard", result, 300);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching marketing dashboard:", error);
       res.status(500).json({ message: "Failed to fetch marketing dashboard" });
@@ -16243,6 +16290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      invalidateCache("marketing:dashboard");
       res.status(201).json(report);
     } catch (error) {
       console.error("Error creating marketing report:", error);
@@ -16300,6 +16348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      invalidateCache("marketing:dashboard");
       res.json(report);
     } catch (error) {
       console.error("Error updating marketing report:", error);
@@ -16328,7 +16377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.deleteMarketingDailyReport(id);
-      
+      invalidateCache("marketing:dashboard");
       res.json({ message: "Report deleted successfully" });
     } catch (error) {
       console.error("Error deleting marketing report:", error);
@@ -16360,6 +16409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'submitted',
       });
       
+      invalidateCache("marketing:dashboard");
       res.json(report);
     } catch (error) {
       console.error("Error submitting marketing report:", error);
@@ -16405,6 +16455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: newStatus,
       });
       
+      invalidateCache("marketing:dashboard");
       res.json(report);
     } catch (error) {
       console.error("Error reviewing marketing report:", error);
