@@ -7177,8 +7177,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.user.claims.sub,
         });
 
+        invalidateCache("hr:feedback:");
         res.json({ feedback: feedbackResult, newTicket });
       } else {
+        invalidateCache("hr:feedback:");
         res.json({ feedback: feedbackResult });
       }
     } catch (error) {
@@ -14950,8 +14952,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Optimized: Uses database-level aggregation for better performance
   app.get("/api/hr/feedback/stats", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
-      // HR Feedback shows ALL tickets - no department filtering needed
-      // The purpose is for HR to see the complete picture of customer feedback
+      const cached = getCached<any>("hr:feedback:stats");
+      if (cached) return res.json(cached);
+
+      // Use EXISTS/NOT EXISTS instead of IN/NOT IN — far faster on large tables
       const result = await db.execute(sql`
         SELECT 
           COUNT(*) FILTER (WHERE status = 'open') as "totalOpen",
@@ -14960,8 +14964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           COUNT(*) FILTER (WHERE status = 'escalated') as "totalEscalated",
           COUNT(*) FILTER (WHERE status = 'closed') as "totalClosed",
           COUNT(*) FILTER (WHERE status = 'resolved') as "totalResolved",
-          COUNT(*) FILTER (WHERE status = 'closed' AND id IN (SELECT ticket_id FROM feedback)) as "closedWithFeedback",
-          COUNT(*) FILTER (WHERE status = 'closed' AND id NOT IN (SELECT ticket_id FROM feedback)) as "closedWithoutFeedback"
+          COUNT(*) FILTER (WHERE status = 'closed' AND EXISTS (SELECT 1 FROM feedback WHERE feedback.ticket_id = tickets.id)) as "closedWithFeedback",
+          COUNT(*) FILTER (WHERE status = 'closed' AND NOT EXISTS (SELECT 1 FROM feedback WHERE feedback.ticket_id = tickets.id)) as "closedWithoutFeedback"
         FROM tickets
       `);
       
@@ -14976,7 +14980,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         closedWithFeedback: Number(row.closedWithFeedback) || 0,
         closedWithoutFeedback: Number(row.closedWithoutFeedback) || 0,
       };
-      
+
+      setCached("hr:feedback:stats", stats, 300);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching HR feedback stats:", error);
@@ -14991,39 +14996,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/hr/feedback/pending", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
       const { search, dateFrom, dateTo, priority, page = '1', limit = '20' } = req.query;
-      const { and, gte, lte, or } = await import('drizzle-orm');
-      
+
       const pageNum = Math.max(1, parseInt(page as string) || 1);
       const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
       const offset = (pageNum - 1) * limitNum;
-      
-      // Show ALL closed tickets without feedback - HR needs access to all for customer calls
-      // Must have both status='closed' AND a valid closedAt date
-      const conditions: any[] = [
+
+      // Base conditions (LEFT JOIN feedback + WHERE feedback.ticket_id IS NULL is much faster than NOT IN subquery)
+      const baseConditions: any[] = [
         eq(tickets.status, 'closed'),
-        sql`${tickets.closedAt} IS NOT NULL`,
-        sql`${tickets.id} NOT IN (SELECT ticket_id FROM feedback)`,
+        isNotNull(tickets.closedAt),
+        sql`${feedback.ticketId} IS NULL`,  // anti-join via LEFT JOIN
       ];
-      
-      // Date range filter
-      if (dateFrom) {
-        conditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
-      }
+
+      if (dateFrom) baseConditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
       if (dateTo) {
         const to = new Date(dateTo as string);
-        to.setDate(to.getDate() + 1); // Include end date
-        conditions.push(lte(tickets.closedAt, to));
+        to.setDate(to.getDate() + 1);
+        baseConditions.push(lte(tickets.closedAt, to));
       }
-      
-      // Priority filter
-      if (priority && priority !== 'all') {
-        conditions.push(eq(tickets.priority, priority as string));
-      }
-      
-      // Search filter
+      if (priority && priority !== 'all') baseConditions.push(eq(tickets.priority, priority as string));
       if (search) {
         const searchLower = `%${(search as string).toLowerCase()}%`;
-        conditions.push(or(
+        baseConditions.push(or(
           sql`LOWER(${tickets.ticketNumber}) LIKE ${searchLower}`,
           sql`LOWER(${tickets.customerName}) LIKE ${searchLower}`,
           sql`LOWER(${tickets.issueSummary}) LIKE ${searchLower}`,
@@ -15031,52 +15025,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sql`LOWER(${tickets.customerEmail}) LIKE ${searchLower}`,
         ));
       }
-      
-      // Get total count for pagination
-      const countResult = await db.select({
-        count: sql<number>`COUNT(*)::int`,
-      })
+
+      const whereClause = and(...baseConditions);
+
+      // Count query (also uses LEFT JOIN anti-join pattern)
+      const countResult = await db.select({ count: sql<number>`COUNT(*)::int` })
         .from(tickets)
-        .where(and(...conditions));
-      
+        .leftJoin(feedback, eq(feedback.ticketId, tickets.id))
+        .where(whereClause);
+
       const totalCount = countResult[0]?.count || 0;
       const totalPages = Math.ceil(totalCount / limitNum);
-      
+
+      // Data query — JOIN users once instead of 2 correlated subqueries per row
       const pendingTickets = await db.select({
-        id: tickets.id,
-        ticketNumber: tickets.ticketNumber,
-        customerName: tickets.customerName,
-        customerEmail: tickets.customerEmail,
-        customerPhone: tickets.customerPhone,
-        issueSummary: tickets.issueSummary,
-        issueDescription: tickets.issueDescription,
-        priority: tickets.priority,
-        status: tickets.status,
-        createdAt: tickets.createdAt,
-        closedAt: tickets.closedAt,
-        closingNotes: tickets.closingNotes,
-        resolvedAt: tickets.resolvedAt,
-        escalationLevel: tickets.escalationLevel,
-        assignedEngineerId: tickets.assignedEngineerId,
-        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
-        assignedEngineerEmail: sql<string>`(SELECT email FROM users WHERE id = ${tickets.assignedEngineerId})`,
-        daysSinceClosed: sql<number>`EXTRACT(DAY FROM NOW() - ${tickets.closedAt})::int`,
+        id:                   tickets.id,
+        ticketNumber:         tickets.ticketNumber,
+        customerName:         tickets.customerName,
+        customerEmail:        tickets.customerEmail,
+        customerPhone:        tickets.customerPhone,
+        issueSummary:         tickets.issueSummary,
+        issueDescription:     tickets.issueDescription,
+        priority:             tickets.priority,
+        status:               tickets.status,
+        createdAt:            tickets.createdAt,
+        closedAt:             tickets.closedAt,
+        closingNotes:         tickets.closingNotes,
+        resolvedAt:           tickets.resolvedAt,
+        escalationLevel:      tickets.escalationLevel,
+        assignedEngineerId:   tickets.assignedEngineerId,
+        assignedEngineerName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        assignedEngineerEmail: users.email,
+        daysSinceClosed:      sql<number>`EXTRACT(DAY FROM NOW() - ${tickets.closedAt})::int`,
       })
         .from(tickets)
-        .where(and(...conditions))
-        .orderBy(sql`${tickets.closedAt} DESC`)
+        .leftJoin(feedback, eq(feedback.ticketId, tickets.id))
+        .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
+        .where(whereClause)
+        .orderBy(desc(tickets.closedAt))
         .limit(limitNum)
         .offset(offset);
-      
+
       res.json({
         data: pendingTickets,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          totalCount,
-          totalPages,
-          hasMore: pageNum < totalPages,
-        }
+        pagination: { page: pageNum, limit: limitNum, totalCount, totalPages, hasMore: pageNum < totalPages },
       });
     } catch (error) {
       console.error("Error fetching pending feedback tickets:", error);
@@ -15089,27 +15081,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/hr/feedback/completed", isAuthenticated, requirePermission('hr_feedback', 'view'), async (req: any, res) => {
     try {
       const { search, dateFrom, dateTo } = req.query;
-      const { and, gte, lte, or } = await import('drizzle-orm');
-      
-      // Show ALL tickets with feedback - no user/department filtering for completed calls
-      // Must have both status='closed' AND a valid closedAt date
+      const isUnfiltered = !search && !dateFrom && !dateTo;
+
+      if (isUnfiltered) {
+        const cached = getCached<any>("hr:feedback:completed");
+        if (cached) return res.json(cached);
+      }
+
+      // INNER JOIN feedback (replaces IN subquery) — tickets without feedback are excluded automatically
+      // JOIN users once (replaces correlated engineer name subquery)
+      // All 8 feedback field correlated subqueries eliminated — read directly from the JOIN
       const conditions: any[] = [
         eq(tickets.status, 'closed'),
-        sql`${tickets.closedAt} IS NOT NULL`,
-        sql`${tickets.id} IN (SELECT ticket_id FROM feedback)`,
+        isNotNull(tickets.closedAt),
       ];
-      
-      // Date range filter
-      if (dateFrom) {
-        conditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
-      }
+
+      if (dateFrom) conditions.push(gte(tickets.closedAt, new Date(dateFrom as string)));
       if (dateTo) {
         const to = new Date(dateTo as string);
         to.setDate(to.getDate() + 1);
         conditions.push(lte(tickets.closedAt, to));
       }
-      
-      // Search filter
       if (search) {
         const searchLower = `%${(search as string).toLowerCase()}%`;
         conditions.push(or(
@@ -15118,34 +15110,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sql`LOWER(${tickets.issueSummary}) LIKE ${searchLower}`,
         ));
       }
-      
+
       const completedTickets = await db.select({
-        id: tickets.id,
-        ticketNumber: tickets.ticketNumber,
-        customerName: tickets.customerName,
-        customerEmail: tickets.customerEmail,
-        customerPhone: tickets.customerPhone,
-        issueSummary: tickets.issueSummary,
-        priority: tickets.priority,
-        closedAt: tickets.closedAt,
-        closingNotes: tickets.closingNotes,
-        assignedEngineerId: tickets.assignedEngineerId,
-        assignedEngineerName: sql<string>`(SELECT first_name || ' ' || last_name FROM users WHERE id = ${tickets.assignedEngineerId})`,
-        feedbackRating: sql<number>`(SELECT rating FROM feedback WHERE ticket_id = ${tickets.id})`,
-        feedbackComments: sql<string>`(SELECT comments FROM feedback WHERE ticket_id = ${tickets.id})`,
-        feedbackSatisfied: sql<boolean>`(SELECT satisfied FROM feedback WHERE ticket_id = ${tickets.id})`,
-        feedbackSubmittedAt: sql<string>`(SELECT submitted_at FROM feedback WHERE ticket_id = ${tickets.id})::text`,
-        workStatus: sql<string>`(SELECT work_status FROM feedback WHERE ticket_id = ${tickets.id})`,
-        workDescription: sql<string>`(SELECT work_description FROM feedback WHERE ticket_id = ${tickets.id})`,
-        clientContactPerson: sql<string>`(SELECT client_contact_person FROM feedback WHERE ticket_id = ${tickets.id})`,
-        clientContactPhone: sql<string>`(SELECT client_contact_phone FROM feedback WHERE ticket_id = ${tickets.id})`,
-        completedAt: sql<string>`(SELECT completed_at FROM feedback WHERE ticket_id = ${tickets.id})::text`,
+        id:                   tickets.id,
+        ticketNumber:         tickets.ticketNumber,
+        customerName:         tickets.customerName,
+        customerEmail:        tickets.customerEmail,
+        customerPhone:        tickets.customerPhone,
+        issueSummary:         tickets.issueSummary,
+        priority:             tickets.priority,
+        closedAt:             tickets.closedAt,
+        closingNotes:         tickets.closingNotes,
+        assignedEngineerId:   tickets.assignedEngineerId,
+        assignedEngineerName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        feedbackRating:       feedback.rating,
+        feedbackComments:     feedback.comments,
+        feedbackSatisfied:    feedback.satisfied,
+        feedbackSubmittedAt:  feedback.submittedAt,
+        workStatus:           feedback.workStatus,
+        workDescription:      feedback.workDescription,
+        clientContactPerson:  feedback.clientContactPerson,
+        clientContactPhone:   feedback.clientContactPhone,
+        completedAt:          feedback.completedAt,
       })
         .from(tickets)
+        .innerJoin(feedback, eq(feedback.ticketId, tickets.id))
+        .leftJoin(users, eq(users.id, tickets.assignedEngineerId))
         .where(and(...conditions))
-        .orderBy(sql`${tickets.closedAt} DESC`)
+        .orderBy(desc(tickets.closedAt))
         .limit(100);
-      
+
+      if (isUnfiltered) setCached("hr:feedback:completed", completedTickets, 300);
       res.json(completedTickets);
     } catch (error) {
       console.error("Error fetching completed feedback tickets:", error);
@@ -15212,6 +15207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { rating, satisfied, comments: comments?.substring(0, 100) },
       });
       
+      invalidateCache("hr:feedback:");
       res.json({ success: true, feedback: newFeedback, message: "Feedback submitted successfully" });
     } catch (error) {
       console.error("Error submitting feedback:", error);
@@ -15283,6 +15279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: { reason, previousStatus: ticket.status },
       });
       
+      invalidateCache("hr:feedback:");
       res.json({ success: true, ticket: updatedTicket, message: "Ticket reopened successfully" });
     } catch (error) {
       console.error("Error reopening ticket:", error);
