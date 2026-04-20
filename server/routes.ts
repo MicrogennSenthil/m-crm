@@ -340,8 +340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update last login in background (non-blocking)
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
-      
-      res.json({ 
+
+      const loginPayload = { 
         success: true, 
         user: { 
           id: user.id, 
@@ -351,10 +351,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: userRole,
           profileImageUrl: user.profileImageUrl
         } 
+      };
+
+      // Save session explicitly with a 3-second hard timeout.
+      // On a loaded VPS the session store (connect-pg-simple) can block
+      // res.end() indefinitely if the DB pool is exhausted. This guarantees
+      // the login response is sent within 3 s regardless of store latency.
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          console.warn("[Auth] Session save timeout — responding without confirmed save");
+          resolve();
+        }, 3000);
+        req.session.save((err) => {
+          clearTimeout(timer);
+          if (err) console.error("[Auth] Session save error:", err);
+          resolve();
+        });
       });
+
+      if (!res.headersSent) res.json(loginPayload);
     } catch (error: any) {
       console.error("Error logging in:", error?.message || error, error?.stack);
-      res.status(500).json({ message: "Login failed", error: error?.message });
+      if (!res.headersSent) res.status(500).json({ message: "Login failed", error: error?.message });
     }
   });
 

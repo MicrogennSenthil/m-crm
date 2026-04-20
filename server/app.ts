@@ -13,6 +13,7 @@ import { startAutoAssignmentScheduler } from "./autoAssignmentScheduler";
 import { startModuleContractReminderScheduler } from "./moduleContractReminderScheduler";
 import { storage } from "./storage";
 import { setCached } from "./cache";
+import { pool } from "./db";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -149,5 +150,24 @@ export default async function runApp(
         log(`[Warmup] Pre-warm skipped: ${e}`, "scheduler");
       }
     }, 3000); // 3s delay — let DB connections fully settle first
+
+    // Purge expired sessions daily to prevent table bloat (root cause of slow logins on VPS)
+    const purgeExpiredSessions = async () => {
+      try {
+        const result = await pool.query(
+          "DELETE FROM sessions WHERE expire < NOW()"
+        );
+        const deleted = result.rowCount ?? 0;
+        if (deleted > 0) {
+          log(`[SessionCleanup] Purged ${deleted} expired sessions`, "scheduler");
+        }
+      } catch (e) {
+        log(`[SessionCleanup] Error purging sessions: ${e}`, "scheduler");
+      }
+    };
+
+    // Run once at startup (after a short delay) then every 24h
+    setTimeout(purgeExpiredSessions, 10000);
+    setInterval(purgeExpiredSessions, 24 * 60 * 60 * 1000);
   });
 }
