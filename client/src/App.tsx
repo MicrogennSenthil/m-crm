@@ -234,6 +234,12 @@ function Router() {
 }
 
 export default function App() {
+  // Clear the chunk-reload guard whenever the app boots successfully,
+  // so future deploys can trigger the auto-reload again.
+  useEffect(() => {
+    sessionStorage.removeItem("chunk_reload_attempted");
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
