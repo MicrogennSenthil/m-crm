@@ -4272,21 +4272,17 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(marketingDailyReports.reportDate, filters.endDate));
     }
     
-    const reports = await db
+    const rows = await db
       .select()
       .from(marketingDailyReports)
+      .leftJoin(users, eq(users.id, marketingDailyReports.userId))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(marketingDailyReports.reportDate));
     
-    // Get user details for each report
-    const reportsWithUser = await Promise.all(
-      reports.map(async (report) => {
-        const user = await this.getUser(report.userId);
-        return { ...report, user };
-      })
-    );
-    
-    return reportsWithUser;
+    return rows.map(({ marketing_daily_reports: r, users: u }) => ({
+      ...r,
+      user: u ?? undefined,
+    }));
   }
 
   async getMarketingDailyReport(id: string): Promise<(MarketingDailyReport & { 

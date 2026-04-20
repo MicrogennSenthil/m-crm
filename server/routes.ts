@@ -16154,6 +16154,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userClaims = req.user as any;
       const currentUserId = userClaims.claims?.sub || (req.session as any).userId;
       const userEmail = userClaims.claims?.email;
+
+      // Build cache key from user + all filter dimensions (60-sec TTL)
+      const cacheKey = `marketing:reports:${currentUserId}:${filterUserId||""}:${status||""}:${startDate||""}:${endDate||""}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
+
       const user = await storage.getUser(currentUserId);
       
       // Digital Marketing users can only see their own reports unless admin or super admin
@@ -16161,7 +16167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAdminOrSuperAdmin = user?.role === 'admin' || user?.role === 'super_admin' || isSuperAdmin(userEmail);
       
       if (!isAdminOrSuperAdmin) {
-        // Check if user is a department head for Digital Marketing (using junction table)
+        // Resolve department-head status via cached departments list
         const departments = await storage.getDepartments();
         const marketingDept = departments.find(d => d.name === 'Digital Marketing');
         let isDeptHead = false;
@@ -16171,7 +16177,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         if (!isDeptHead) {
-          // Regular marketing staff can only see their own reports
           filters.userId = currentUserId;
         } else if (filterUserId) {
           filters.userId = filterUserId as string;
@@ -16185,6 +16190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (endDate) filters.endDate = new Date(endDate as string);
       
       const reports = await storage.getMarketingDailyReports(filters);
+      setCached(cacheKey, reports, 60);
       res.json(reports);
     } catch (error) {
       console.error("Error fetching marketing reports:", error);
@@ -16291,6 +16297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       invalidateCache("marketing:dashboard");
+      invalidateCache("marketing:reports:");
       res.status(201).json(report);
     } catch (error) {
       console.error("Error creating marketing report:", error);
@@ -16349,6 +16356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       invalidateCache("marketing:dashboard");
+      invalidateCache("marketing:reports:");
       res.json(report);
     } catch (error) {
       console.error("Error updating marketing report:", error);
@@ -16378,6 +16386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteMarketingDailyReport(id);
       invalidateCache("marketing:dashboard");
+      invalidateCache("marketing:reports:");
       res.json({ message: "Report deleted successfully" });
     } catch (error) {
       console.error("Error deleting marketing report:", error);
@@ -16410,6 +16419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       invalidateCache("marketing:dashboard");
+      invalidateCache("marketing:reports:");
       res.json(report);
     } catch (error) {
       console.error("Error submitting marketing report:", error);
@@ -16456,6 +16466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       invalidateCache("marketing:dashboard");
+      invalidateCache("marketing:reports:");
       res.json(report);
     } catch (error) {
       console.error("Error reviewing marketing report:", error);
