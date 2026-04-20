@@ -573,14 +573,6 @@ export default function DevelopmentTasks() {
     deleteTaskMutation.mutate(taskId);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" data-testid="loading-spinner"></div>
-      </div>
-    );
-  }
-
   // Source type counts for categorization tabs (based on full task list)
   const supportCount = tasks?.filter(t => t.sourceType === "support").length || 0;
   const implementationCount = tasks?.filter(t => t.sourceType === "implementation").length || 0;
