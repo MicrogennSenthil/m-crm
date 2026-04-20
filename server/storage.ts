@@ -4168,44 +4168,41 @@ export class DatabaseStorage implements IStorage {
     } else if (assignedTo) {
       conditions.push(eq(developmentTasks.assignedTo, assignedTo));
     }
-    
-    const allTasks = await db
-      .select()
-      .from(developmentTasks)
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
 
-    const totalTasks = allTasks.length;
-    const pendingTasks = allTasks.filter(t => t.status === 'pending').length;
-    const inProgressTasks = allTasks.filter(t => t.status === 'in_progress').length;
-    const completedTasks = allTasks.filter(t => t.status === 'completed').length;
-    const overdueTasks = allTasks.filter(t => t.isOverdue === true).length;
-    const totalPenaltyPoints = allTasks.reduce((sum, t) => sum + (t.penaltyPoints || 0), 0);
-    
-    // Enhanced categories
-    const yetToWorkTasks = allTasks.filter(t => t.status === 'pending' && !t.assignedTo).length;
-    const onProcessTasks = inProgressTasks; // Same as in_progress
-    const waitingTasks = allTasks.filter(t => t.status === 'pending' && t.assignedTo).length;
-    
-    // Source breakdown
-    const supportTasks = allTasks.filter(t => t.sourceType === 'support').length;
-    const implementationTasks = allTasks.filter(t => t.sourceType === 'implementation').length;
-    const taskModuleTasks = allTasks.filter(t => t.sourceType === 'task').length;
-    const manualTasks = allTasks.filter(t => t.sourceType === 'manual').length;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Single SQL aggregate query — avoids loading every row into JS
+    const [agg] = await db.select({
+      totalTasks:           sql<number>`COUNT(*)`,
+      pendingTasks:         sql<number>`COUNT(*) FILTER (WHERE status = 'pending')`,
+      inProgressTasks:      sql<number>`COUNT(*) FILTER (WHERE status = 'in_progress')`,
+      completedTasks:       sql<number>`COUNT(*) FILTER (WHERE status = 'completed')`,
+      overdueTasks:         sql<number>`COUNT(*) FILTER (WHERE is_overdue = true)`,
+      totalPenaltyPoints:   sql<number>`COALESCE(SUM(penalty_points), 0)`,
+      yetToWorkTasks:       sql<number>`COUNT(*) FILTER (WHERE status = 'pending' AND assigned_to IS NULL)`,
+      waitingTasks:         sql<number>`COUNT(*) FILTER (WHERE status = 'pending' AND assigned_to IS NOT NULL)`,
+      supportTasks:         sql<number>`COUNT(*) FILTER (WHERE source_type = 'support')`,
+      implementationTasks:  sql<number>`COUNT(*) FILTER (WHERE source_type = 'implementation')`,
+      taskModuleTasks:      sql<number>`COUNT(*) FILTER (WHERE source_type = 'task')`,
+      manualTasks:          sql<number>`COUNT(*) FILTER (WHERE source_type = 'manual')`,
+    }).from(developmentTasks).where(whereClause);
+
+    const inProgressTasks = Number(agg.inProgressTasks);
 
     return {
-      totalTasks,
-      pendingTasks,
+      totalTasks:          Number(agg.totalTasks),
+      pendingTasks:        Number(agg.pendingTasks),
       inProgressTasks,
-      completedTasks,
-      overdueTasks,
-      totalPenaltyPoints,
-      yetToWorkTasks,
-      onProcessTasks,
-      waitingTasks,
-      supportTasks,
-      implementationTasks,
-      taskModuleTasks,
-      manualTasks,
+      completedTasks:      Number(agg.completedTasks),
+      overdueTasks:        Number(agg.overdueTasks),
+      totalPenaltyPoints:  Number(agg.totalPenaltyPoints),
+      yetToWorkTasks:      Number(agg.yetToWorkTasks),
+      onProcessTasks:      inProgressTasks,
+      waitingTasks:        Number(agg.waitingTasks),
+      supportTasks:        Number(agg.supportTasks),
+      implementationTasks: Number(agg.implementationTasks),
+      taskModuleTasks:     Number(agg.taskModuleTasks),
+      manualTasks:         Number(agg.manualTasks),
     };
   }
 

@@ -6,7 +6,7 @@ import { getCached, setCached, invalidateCache } from "./cache";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, type User } from "@shared/schema";
+import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray, isNotNull, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -12603,8 +12603,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           assignedToIds = accessControl.allowedUserIds;
         }
       }
+
+      const devDashCacheKey = `devdash:metrics:${accessControl.hasFullAccess ? 'shared' : currentUser.id}`;
+      const devDashCached = getCached<any>(devDashCacheKey);
+      if (devDashCached) return res.json(devDashCached);
       
       const metrics = await storage.getDevelopmentDashboardMetrics(assignedTo, assignedToIds);
+      setCached(devDashCacheKey, metrics, 300);
       res.json(metrics);
     } catch (error) {
       console.error("Error fetching development dashboard:", error);
@@ -12615,35 +12620,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get developer-wise task summary
   app.get("/api/development/developer-summary", isAuthenticated, async (req: any, res) => {
     try {
-      const tasks = await storage.getDevelopmentTasks({});
-      const users = await storage.getUsers();
-      
-      // Group tasks by developer
-      const developerMap = new Map<string, { developer: any; pending: number; inProgress: number; completed: number; overdue: number; total: number }>();
-      
-      for (const task of tasks) {
-        if (task.assignedTo) {
-          if (!developerMap.has(task.assignedTo)) {
-            const user = users.find(u => u.id === task.assignedTo);
-            developerMap.set(task.assignedTo, {
-              developer: user ? { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email } : null,
-              pending: 0,
-              inProgress: 0,
-              completed: 0,
-              overdue: 0,
-              total: 0
-            });
-          }
-          const entry = developerMap.get(task.assignedTo)!;
-          entry.total++;
-          if (task.status === 'pending') entry.pending++;
-          else if (task.status === 'in_progress') entry.inProgress++;
-          else if (task.status === 'completed') entry.completed++;
-          if (task.isOverdue || task.status === 'overdue') entry.overdue++;
-        }
-      }
-      
-      const summary = Array.from(developerMap.values()).filter(d => d.developer);
+      const devSumCached = getCached<any>("devdash:developer-summary");
+      if (devSumCached) return res.json(devSumCached);
+
+      // Use SQL GROUP BY aggregation instead of fetching all rows
+      const rows = await db.select({
+        assignedTo:   developmentTasks.assignedTo,
+        pending:      sql<number>`COUNT(*) FILTER (WHERE status = 'pending')`,
+        inProgress:   sql<number>`COUNT(*) FILTER (WHERE status = 'in_progress')`,
+        completed:    sql<number>`COUNT(*) FILTER (WHERE status = 'completed')`,
+        overdue:      sql<number>`COUNT(*) FILTER (WHERE is_overdue = true)`,
+        total:        sql<number>`COUNT(*)`,
+      }).from(developmentTasks)
+        .where(isNotNull(developmentTasks.assignedTo))
+        .groupBy(developmentTasks.assignedTo);
+
+      const allUsers = await storage.getUsers();
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+
+      const summary = rows
+        .map(r => {
+          const u = userMap.get(r.assignedTo!);
+          if (!u) return null;
+          return {
+            developer: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email },
+            pending:    Number(r.pending),
+            inProgress: Number(r.inProgress),
+            completed:  Number(r.completed),
+            overdue:    Number(r.overdue),
+            total:      Number(r.total),
+          };
+        })
+        .filter(Boolean);
+
+      setCached("devdash:developer-summary", summary, 300);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching developer summary:", error);
@@ -12654,63 +12664,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get client-wise task summary
   app.get("/api/development/client-summary", isAuthenticated, async (req: any, res) => {
     try {
-      const tasks = await storage.getDevelopmentTasks({});
-      const tickets = await storage.getTickets();
-      const projects = await storage.getProjects();
-      const customers = await storage.getCustomers();
-      
-      // Build a source ID to customer map
+      const clientSumCached = getCached<any>("devdash:client-summary");
+      if (clientSumCached) return res.json(clientSumCached);
+
+      // Fetch minimal fields only — avoid loading all ticket columns
+      const [devTasks, ticketMap, projectMap, customers] = await Promise.all([
+        storage.getDevelopmentTasks({}),
+        // Only need id → customerId mapping from tickets
+        db.select({ id: tickets.id, customerId: tickets.customerId })
+          .from(tickets)
+          .where(isNotNull(tickets.customerId)),
+        // Only need id → customerId mapping from projects
+        db.select({ id: projects.id, customerId: projects.customerId })
+          .from(projects)
+          .where(isNotNull(projects.customerId)),
+        storage.getCustomers(),
+      ]);
+
+      // Build source-id → customerId map
       const sourceToCustomer = new Map<string, string>();
-      
-      // Map tickets to their customers
-      for (const ticket of tickets) {
-        if (ticket.customerId) {
-          sourceToCustomer.set(ticket.id, ticket.customerId);
-        }
-      }
-      
-      // Map projects to their customers
-      for (const project of projects) {
-        if (project.customerId) {
-          sourceToCustomer.set(project.id, project.customerId);
-        }
-      }
-      
+      for (const t of ticketMap) if (t.customerId) sourceToCustomer.set(t.id, t.customerId);
+      for (const p of projectMap) if (p.customerId) sourceToCustomer.set(p.id, p.customerId);
+
+      const customerLookup = new Map(customers.map(c => [c.id, c]));
+
       // Group tasks by customer
-      const customerMap = new Map<string, { customer: any; pending: number; inProgress: number; completed: number; overdue: number; total: number; sources: { support: number; implementation: number; task: number; manual: number } }>();
-      
-      for (const task of tasks) {
-        let customerId = sourceToCustomer.get(task.sourceId);
-        
-        if (customerId) {
-          if (!customerMap.has(customerId)) {
-            const customer = customers.find(c => c.id === customerId);
-            customerMap.set(customerId, {
-              customer: customer ? { id: customer.id, name: customer.name } : null,
-              pending: 0,
-              inProgress: 0,
-              completed: 0,
-              overdue: 0,
-              total: 0,
-              sources: { support: 0, implementation: 0, task: 0, manual: 0 }
-            });
-          }
-          const entry = customerMap.get(customerId)!;
-          entry.total++;
-          if (task.status === 'pending') entry.pending++;
-          else if (task.status === 'in_progress') entry.inProgress++;
-          else if (task.status === 'completed') entry.completed++;
-          if (task.isOverdue || task.status === 'overdue') entry.overdue++;
-          
-          // Track source type
-          if (task.sourceType === 'support') entry.sources.support++;
-          else if (task.sourceType === 'implementation') entry.sources.implementation++;
-          else if (task.sourceType === 'task') entry.sources.task++;
-          else if (task.sourceType === 'manual') entry.sources.manual++;
+      const customerMap = new Map<string, any>();
+      for (const task of devTasks) {
+        const customerId = sourceToCustomer.get(task.sourceId ?? '');
+        if (!customerId) continue;
+        if (!customerMap.has(customerId)) {
+          const c = customerLookup.get(customerId);
+          customerMap.set(customerId, {
+            customer: c ? { id: c.id, name: c.name } : null,
+            pending: 0, inProgress: 0, completed: 0, overdue: 0, total: 0,
+            sources: { support: 0, implementation: 0, task: 0, manual: 0 },
+          });
         }
+        const entry = customerMap.get(customerId)!;
+        entry.total++;
+        if (task.status === 'pending') entry.pending++;
+        else if (task.status === 'in_progress') entry.inProgress++;
+        else if (task.status === 'completed') entry.completed++;
+        if (task.isOverdue) entry.overdue++;
+        if (task.sourceType === 'support') entry.sources.support++;
+        else if (task.sourceType === 'implementation') entry.sources.implementation++;
+        else if (task.sourceType === 'task') entry.sources.task++;
+        else if (task.sourceType === 'manual') entry.sources.manual++;
       }
       
       const summary = Array.from(customerMap.values()).filter(c => c.customer);
+      setCached("devdash:client-summary", summary, 300);
       res.json(summary);
     } catch (error) {
       console.error("Error fetching client summary:", error);
@@ -12826,7 +12830,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'created',
         description: `Created development task ${task.taskNumber} from ${task.sourceType}`,
       });
-      
+
+      invalidateCache("devdash:");
       res.status(201).json(task);
     } catch (error: any) {
       console.error("Error creating development task:", error);
@@ -12896,7 +12901,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: `Updated development task ${updated.taskNumber}`,
         });
       }
-      
+
+      invalidateCache("devdash:");
       res.json(updated);
     } catch (error) {
       console.error("Error updating development task:", error);
@@ -12926,7 +12932,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'deleted',
         description: `Deleted development task ${task.taskNumber}`,
       });
-      
+
+      invalidateCache("devdash:");
       res.json({ message: "Development task deleted" });
     } catch (error) {
       console.error("Error deleting development task:", error);
