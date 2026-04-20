@@ -59,7 +59,8 @@ The database schema comprises 14 tables. Core business logic includes round-robi
 -   **PM2 config**: `ecosystem.config.cjs` with env vars inline (not .env file)
 -   **DATABASE_URL** includes `?sslmode=disable` (local PostgreSQL, no SSL)
 -   **Git remote on VPS**: `origin` → `git@github-mcrm:MicrogennSenthil/m-crm.git`
--   **Deploy steps**: `git pull origin main` → apply DB migrations → `npm run build` → `fuser -k 5050/tcp && pm2 delete mcrm && pm2 start ecosystem.config.cjs && pm2 save`
+-   **Deploy steps**: `cd /var/www/m-crm && git pull origin main && npm run build && fuser -k 5050/tcp; pm2 delete mcrm 2>/dev/null; pm2 start ecosystem.config.cjs && pm2 save`
+    -   **IMPORTANT**: Use semicolons (`;`) not `&&` for `pm2 delete` — if PM2 daemon restarted and has no process registered, `pm2 delete mcrm` exits non-zero and breaks an `&&` chain, preventing `pm2 start` from running (causes 502)
 -   **DB migrations on VPS**: Run SQL directly via `sudo -u postgres psql -d mcrm_db -c "..."` (no drizzle push needed if column already applied)
 -   **Super admin**: `senthil@microgenn.com`
 -   **IMPORTANT — Multiple apps on same VPS**: Other apps (irm-backend, infantinteriors.in, srijayamhall.com, etc.) run on same server. Always scope commands to M-CRM only:
