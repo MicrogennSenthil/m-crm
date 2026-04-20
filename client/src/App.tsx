@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -83,7 +83,28 @@ function PageLoader() {
 
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
-  
+
+  // Prefetch the most-visited page chunks in the background so the first
+  // navigation to any of these pages feels instant (no Suspense "Loading...").
+  useEffect(() => {
+    const prefetch = () => {
+      import("@/pages/tasks");
+      import("@/pages/home");
+      import("@/pages/sales");
+      import("@/pages/support");
+      import("@/pages/knowledge-base-search");
+      import("@/pages/hr-feedback");
+      import("@/pages/implementations");
+      import("@/pages/accounts-contracts");
+      import("@/pages/todays-tasks");
+      import("@/pages/marketing-dashboard");
+      import("@/pages/marketing-daily-report");
+    };
+    // Small delay so it doesn't compete with the initial page render
+    const t = setTimeout(prefetch, 1500);
+    return () => clearTimeout(t);
+  }, []);
+
   const style = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3.5rem",

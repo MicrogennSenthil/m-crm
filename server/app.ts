@@ -173,6 +173,48 @@ export default async function runApp(
       }
     }, 6000); // 6s delay — after global caches settle
 
+    // Pre-warm tasks (admin/shared view) + Knowledge Base caches
+    // These are the most commonly visited pages that benefit most from a warm cache
+    setTimeout(async () => {
+      try {
+        const [taskList, kbSources, kbQueries] = await Promise.all([
+          // tasks:${cachePrefix}:${status}:${view}:${assignedTo}:${createdBy}
+          storage.getTasks({ includeAll: true }).catch(() => null),
+          storage.getKnowledgeBaseSources().catch(() => null),
+          storage.getKnowledgeBaseQueries(100).catch(() => null),
+        ]);
+        if (taskList) setCached("tasks:shared::all::", taskList, 600);
+        if (kbSources) setCached("kb:sources", kbSources, 300);
+        if (kbSources && kbQueries) {
+          const totalSources   = kbSources.length;
+          const activeSources  = kbSources.filter((s: any) => s.isActive).length;
+          const totalChunks    = kbSources.reduce((sum: number, s: any) => sum + (s.chunkCount || 0), 0);
+          const totalQ         = kbQueries.length;
+          const avgMs          = totalQ > 0
+            ? kbQueries.reduce((sum: number, q: any) => sum + (q.searchDurationMs || 0), 0) / totalQ
+            : 0;
+          setCached("kb:analytics", {
+            totalSources,
+            activeSources,
+            totalChunks,
+            totalQueries: totalQ,
+            avgSearchTimeMs: Math.round(avgMs),
+            recentQueries: kbQueries.slice(0, 20).map((q: any) => ({
+              id: q.id,
+              query: q.queryText,
+              resultsCount: q.resultsCount,
+              searchDurationMs: q.searchDurationMs,
+              createdAt: q.createdAt,
+              user: q.user ? { id: q.user.id, name: `${q.user.firstName || ''} ${q.user.lastName || ''}`.trim() } : null,
+            })),
+          }, 300);
+        }
+        log("[Warmup] Tasks + Knowledge Base caches pre-warmed", "scheduler");
+      } catch (e) {
+        log(`[Warmup] Tasks/KB pre-warm skipped: ${e}`, "scheduler");
+      }
+    }, 9000); // 9s delay — after shared list caches settle
+
     // Purge expired sessions daily to prevent table bloat (root cause of slow logins on VPS)
     const purgeExpiredSessions = async () => {
       try {
