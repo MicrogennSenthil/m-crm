@@ -6776,9 +6776,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       invalidateCache("my-department:");
       invalidateCache("dashboard:");
       res.json(newTicket);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating ticket:", error);
-      res.status(400).json({ message: "Failed to create ticket" });
+      const detail = error?.message || String(error);
+      res.status(400).json({ message: `Failed to create ticket: ${detail}` });
     }
   });
 
