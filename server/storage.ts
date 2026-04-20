@@ -3541,21 +3541,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getKnowledgeBaseQueries(limit: number = 100): Promise<(KnowledgeBaseQuery & { user?: User })[]> {
-    const queries = await db
+    const rows = await db
       .select()
       .from(knowledgeBaseQueries)
+      .leftJoin(users, eq(users.id, knowledgeBaseQueries.userId))
       .orderBy(desc(knowledgeBaseQueries.createdAt))
       .limit(limit);
     
-    const queriesWithUsers = await Promise.all(
-      queries.map(async (q) => {
-        if (!q.userId) return { ...q, user: undefined };
-        const user = await this.getUser(q.userId);
-        return { ...q, user };
-      })
-    );
-    
-    return queriesWithUsers;
+    return rows.map(({ knowledge_base_queries: q, users: u }) => ({
+      ...q,
+      user: u ?? undefined,
+    }));
   }
 
   // System Settings operations

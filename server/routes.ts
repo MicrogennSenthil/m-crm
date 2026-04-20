@@ -10016,7 +10016,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all knowledge base sources
   app.get("/api/knowledge-base/sources", isAuthenticated, async (req: any, res) => {
     try {
+      const cached = getCached<any>("kb:sources");
+      if (cached) return res.json(cached);
       const sources = await storage.getKnowledgeBaseSources();
+      setCached("kb:sources", sources, 300);
       res.json(sources);
     } catch (error) {
       console.error("Error fetching knowledge base sources:", error);
@@ -10130,6 +10133,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update source with chunk and token counts
       await db.execute(sql`UPDATE knowledge_base_sources SET chunk_count = ${chunks.length}, token_count = ${totalTokens}, is_indexed = true, indexed_at = NOW() WHERE id = ${source.id}`);
 
+      invalidateCache("kb:sources");
+      invalidateCache("kb:analytics");
       res.status(201).json({
         ...source,
         totalChunks: chunks.length,
@@ -10159,6 +10164,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive,
       });
 
+      invalidateCache("kb:sources");
+      invalidateCache("kb:analytics");
       res.json(updated);
     } catch (error) {
       console.error("Error updating knowledge base source:", error);
@@ -10177,6 +10184,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.deleteKnowledgeBaseSource(id);
+      invalidateCache("kb:sources");
+      invalidateCache("kb:analytics");
       res.json({ message: "Source deleted successfully" });
     } catch (error) {
       console.error("Error deleting knowledge base source:", error);
@@ -10233,6 +10242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tokenCount = estimateTokenCount(extractedText);
       await db.execute(sql`UPDATE knowledge_base_sources SET chunk_count = ${chunks.length}, token_count = ${tokenCount}, is_indexed = true, indexed_at = NOW() WHERE id = ${id}`);
 
+      invalidateCache("kb:sources");
+      invalidateCache("kb:analytics");
       res.json({
         message: `Successfully re-indexed ${chunks.length} chunks`,
         totalChunks: chunks.length,
@@ -10334,6 +10345,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      invalidateCache("kb:sources");
+      invalidateCache("kb:analytics");
       res.json({
         message: `Successfully indexed ${indexedCount} documents with ${totalChunks} chunks`,
         indexed: indexedCount,
@@ -10412,8 +10425,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get search analytics (admin only)
   app.get("/api/knowledge-base/analytics", isAuthenticated, requirePermission("knowledge_base", "view"), async (req: any, res) => {
     try {
-      const queries = await storage.getKnowledgeBaseQueries(100);
-      const sources = await storage.getKnowledgeBaseSources();
+      const cached = getCached<any>("kb:analytics");
+      if (cached) return res.json(cached);
+
+      const [queries, sources] = await Promise.all([
+        storage.getKnowledgeBaseQueries(100),
+        storage.getKnowledgeBaseSources(),
+      ]);
 
       const totalSources = sources.length;
       const activeSources = sources.filter(s => s.isActive).length;
@@ -10423,7 +10441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? queries.reduce((sum, q) => sum + (q.searchDurationMs || 0), 0) / queries.length 
         : 0;
 
-      res.json({
+      const result = {
         totalSources,
         activeSources,
         totalChunks,
@@ -10437,7 +10455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           createdAt: q.createdAt,
           user: q.user ? { id: q.user.id, name: `${q.user.firstName || ''} ${q.user.lastName || ''}`.trim() } : null,
         })),
-      });
+      };
+      setCached("kb:analytics", result, 300);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching knowledge base analytics:", error);
       res.status(500).json({ message: "Failed to fetch analytics" });
