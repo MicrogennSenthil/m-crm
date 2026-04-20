@@ -3178,14 +3178,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { stage, salesExecutiveId, search, city, area, leadSource, fromDate, toDate, page, pageSize } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
 
-      const cacheKey = `leads:list:${authId}:${stage||''}:${salesExecutiveId||''}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${fromDate||''}:${toDate||''}:${page||1}:${pageSize||50}`;
-      const cached = getCached<any>(cacheKey);
-      if (cached) return res.json(cached);
-
       const currentUser = await storage.getUser(authId);
       if (!currentUser) return res.status(401).json({ message: "User not found" });
 
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const cachePrefix = accessControl.hasFullAccess ? 'shared' : authId;
+      const cacheKey = `leads:list:${cachePrefix}:${stage||''}:${salesExecutiveId||''}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${fromDate||''}:${toDate||''}:${page||1}:${pageSize||50}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
 
       const result = await storage.getLeadsPaginated({
@@ -3202,7 +3202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pageSize: pageSize ? parseInt(pageSize as string) : 50,
       });
 
-      setCached(cacheKey, result, 120);
+      setCached(cacheKey, result, 600);
       res.json(result);
     } catch (error) {
       console.error("Error fetching leads:", error);
@@ -3245,14 +3245,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { search, city, area, leadSource, salesExecutiveId, stageLimit } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
 
-      const cacheKey = `leads:kanban:${authId}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${salesExecutiveId||''}`;
-      const cached = getCached<any>(cacheKey);
-      if (cached) return res.json(cached);
-
       const currentUser = await storage.getUser(authId);
       if (!currentUser) return res.status(401).json({ message: "User not found" });
 
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const kanbanCachePrefix = accessControl.hasFullAccess ? 'shared' : authId;
+      const cacheKey = `leads:kanban:${kanbanCachePrefix}:${search||''}:${city||''}:${area||''}:${leadSource||''}:${salesExecutiveId||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       const userFilter = filterAllowedUserId(accessControl, salesExecutiveId as string);
 
       const result = await storage.getLeadsKanban({
@@ -3265,7 +3265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stageLimit: stageLimit ? parseInt(stageLimit as string) : 50,
       });
 
-      setCached(cacheKey, result, 120);
+      setCached(cacheKey, result, 600);
       res.json(result);
     } catch (error) {
       console.error("Error fetching kanban leads:", error);
@@ -5074,19 +5074,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { status, fromDate, toDate } = req.query;
       const authId = req.user.claims.sub || (req.session as any).userId;
-      
-      const cacheKey = `projects:list:${authId}:${status||''}:${fromDate||''}:${toDate||''}`;
-      const cached = getCached<any>(cacheKey);
-      if (cached) return res.json(cached);
 
       // Fetch database user first - required for proper ID resolution
       const currentUser = await storage.getUser(authId);
       if (!currentUser) {
         return res.status(401).json({ message: "User not found" });
       }
-      
+
       // Use the database user ID (not auth ID) for access control
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const cachePrefix = accessControl.hasFullAccess ? 'shared' : authId;
+      const cacheKey = `projects:list:${cachePrefix}:${status||''}:${fromDate||''}:${toDate||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       
       // Build filters with access control
       const filters: { status?: string; engineerIds?: string[]; fromDate?: Date; toDate?: Date } = {
@@ -5125,7 +5125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .filter(Boolean),
       }));
 
-      setCached(cacheKey, projectsWithEngineers, 300); // 5 min cache
+      setCached(cacheKey, projectsWithEngineers, 900); // 15 min cache
       res.json(projectsWithEngineers);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -6638,12 +6638,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { assignedTo, fromDate, toDate, search, category, statusTab, status, priority, customerId, page, pageSize } = req.query;
       const authId = req.user?.claims?.sub;
 
-      // Cache key includes user + all filter params
-      const cacheKey = `tickets:v2:${authId}:${assignedTo||''}:${fromDate||''}:${toDate||''}:${search||''}:${category||''}:${statusTab||''}:${status||''}:${priority||''}:${customerId||''}:${page||1}:${pageSize||50}`;
+      // For full-access users (admin/dept-head) share a single cache so one warm request benefits all
+      const accessControl = await getAllowedUserIdsForUser(authId);
+      const cachePrefix = accessControl.hasFullAccess ? 'shared' : authId;
+      const cacheKey = `tickets:v2:${cachePrefix}:${assignedTo||''}:${fromDate||''}:${toDate||''}:${search||''}:${category||''}:${statusTab||''}:${status||''}:${priority||''}:${customerId||''}:${page||1}:${pageSize||50}`;
       const cached = getCached<any>(cacheKey);
       if (cached) return res.json(cached);
-
-      const accessControl = await getAllowedUserIdsForUser(authId);
 
       // Resolve assignedEngineerIds with access control
       let assignedEngineerIds: string[] | undefined;
@@ -6711,7 +6711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const response = { tickets: ticketsWithDevInfo, total: result.total, counts: result.counts };
-      setCached(cacheKey, response, 300);
+      setCached(cacheKey, response, 900);
       res.json(response);
     } catch (error) {
       console.error("Error fetching tickets:", error);
@@ -9216,19 +9216,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authId = req.user.claims.sub;
       const { status, assignedTo, createdBy, view } = req.query;
 
-      // Cache key per user + filters
-      const cacheKey = `tasks:${authId}:${status||''}:${view||''}:${assignedTo||''}:${createdBy||''}`;
-      const cached = getCached<any>(cacheKey);
-      if (cached) return res.json(cached);
-      
       // Fetch database user first - required for proper ID resolution
       const currentUser = await storage.getUser(authId);
       if (!currentUser) {
         return res.status(401).json({ message: "User not found" });
       }
-      
+
       // Use the database user ID (not auth ID) for access control
       const accessControl = await getAllowedUserIdsForUser(currentUser.id);
+      const cachePrefix = accessControl.hasFullAccess && view === 'all' ? 'shared' : authId;
+      const cacheKey = `tasks:${cachePrefix}:${status||''}:${view||''}:${assignedTo||''}:${createdBy||''}`;
+      const cached = getCached<any>(cacheKey);
+      if (cached) return res.json(cached);
       
       // Only admins/super admins can request view=all (all tasks)
       if (view === 'all' && !accessControl.hasFullAccess) {
@@ -9265,7 +9264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const taskList = await storage.getTasks(taskFilters);
       
-      setCached(cacheKey, taskList, 300);
+      setCached(cacheKey, taskList, 600);
       res.json(taskList);
     } catch (error) {
       console.error("Error fetching tasks:", error);

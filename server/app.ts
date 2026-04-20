@@ -142,14 +142,35 @@ export default async function runApp(
         ]);
         if (customers) setCached("customers:all", customers, 600);
         if (modules) setCached("modules:all", modules, 600);
-        if (users) setCached("users:all:active", users.filter((u: any) => u.isActive !== false), 300);
-        if (dashStats) setCached("dashboard:stats", dashStats, 300);
-        if (activities) setCached("dashboard:activities", activities, 300);
+        if (users) setCached("users:all:active", users.filter((u: any) => u.isActive !== false), 600);
+        if (dashStats) setCached("dashboard:stats", dashStats, 600);
+        if (activities) setCached("dashboard:activities", activities, 600);
         log("[Warmup] Global caches pre-warmed", "scheduler");
       } catch (e) {
         log(`[Warmup] Pre-warm skipped: ${e}`, "scheduler");
       }
     }, 3000); // 3s delay — let DB connections fully settle first
+
+    // Pre-warm shared list caches (used by admin/full-access users across all menus)
+    // Cache keys must exactly match routes.ts patterns
+    setTimeout(async () => {
+      try {
+        const [ticketResult, leadResult, projectsList] = await Promise.all([
+          storage.getTicketsPaginated({ page: 1, pageSize: 50 }).catch(() => null),
+          storage.getLeadsPaginated({ page: 1, pageSize: 50 }).catch(() => null),
+          storage.getProjects({}).catch(() => null),
+        ]);
+        // tickets:v2:${prefix}:${assignedTo}:${fromDate}:${toDate}:${search}:${category}:${statusTab}:${status}:${priority}:${customerId}:${page}:${pageSize}
+        if (ticketResult) setCached("tickets:v2:shared:::::::::1:50", ticketResult, 900);
+        // leads:list:${prefix}:${stage}:${salesExecutiveId}:${search}:${city}:${area}:${leadSource}:${fromDate}:${toDate}:${page}:${pageSize}
+        if (leadResult) setCached("leads:list:shared::::::::::1:50", leadResult, 600);
+        // projects:list:${prefix}:${status}:${fromDate}:${toDate}
+        if (projectsList) setCached("projects:list:shared:::", projectsList, 900);
+        log("[Warmup] Shared list caches pre-warmed", "scheduler");
+      } catch (e) {
+        log(`[Warmup] Shared list pre-warm skipped: ${e}`, "scheduler");
+      }
+    }, 6000); // 6s delay — after global caches settle
 
     // Purge expired sessions daily to prevent table bloat (root cause of slow logins on VPS)
     const purgeExpiredSessions = async () => {
