@@ -40,6 +40,20 @@ export async function verifyAuthToken(token: string): Promise<string | null> {
   }
 }
 
+// Cookie name used for the server-set JWT (bypasses both session store and nginx header issues)
+export const AUTH_COOKIE_NAME = "mcrm_token";
+
+// Parse the Cookie header manually (no cookie-parser dependency needed)
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!cookieHeader) return result;
+  cookieHeader.split(";").forEach((part) => {
+    const [k, ...v] = part.trim().split("=");
+    if (k) result[k.trim()] = decodeURIComponent(v.join("=").trim());
+  });
+  return result;
+}
+
 // Check if running on Replit or if OIDC should be enabled
 const isReplit = process.env.REPL_ID !== undefined;
 const useReplitAuth = process.env.USE_REPLIT_AUTH === "true" || (isReplit && process.env.USE_REPLIT_AUTH !== "false");
@@ -229,32 +243,55 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
-  // ── 1. JWT Bearer token (primary auth for VPS where session cookies may not work) ──
-  const authHeader = req.headers.authorization as string | undefined;
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    const userId = await verifyAuthToken(token);
+  // Helper to authenticate by userId (shared across all token checks)
+  const authenticateUser = async (userId: string): Promise<boolean> => {
+    const user = await storage.getUser(userId);
+    if (!user) return false;
+    if (!user.isActive) {
+      res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
+      return true; // handled
+    }
+    req.user = {
+      claims: {
+        sub: userId,
+        email: user.email,
+        first_name: user.firstName,
+        last_name: user.lastName,
+        metadata: { role: user.role }
+      }
+    };
+    return true;
+  };
+
+  // ── 1. Server-set JWT cookie (most reliable — set by server at login, no client JS needed) ──
+  const cookies = parseCookies(req.headers.cookie as string | undefined);
+  const cookieToken = cookies[AUTH_COOKIE_NAME];
+  if (cookieToken) {
+    const userId = await verifyAuthToken(cookieToken);
     if (userId) {
-      const user = await storage.getUser(userId);
-      if (user) {
-        if (!user.isActive) {
-          return res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
-        }
-        req.user = {
-          claims: {
-            sub: userId,
-            email: user.email,
-            first_name: user.firstName,
-            last_name: user.lastName,
-            metadata: { role: user.role }
-          }
-        };
+      const handled = await authenticateUser(userId);
+      if (handled) {
+        if (res.headersSent) return;
         return next();
       }
     }
   }
 
-  // ── 2. Session cookie (local email/password auth) ──
+  // ── 2. JWT Bearer token (Authorization: Bearer header) ──
+  const authHeader = req.headers.authorization as string | undefined;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const userId = await verifyAuthToken(token);
+    if (userId) {
+      const handled = await authenticateUser(userId);
+      if (handled) {
+        if (res.headersSent) return;
+        return next();
+      }
+    }
+  }
+
+  // ── 3. Session cookie (local email/password auth) ──
   if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
     // For local auth, set up req.user with claims for consistency
     const userId = (req.session as any).userId;

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getCached, setCached, invalidateCache } from "./cache";
-import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, AUTH_COOKIE_NAME } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
 import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
@@ -341,9 +341,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update last login in background (non-blocking)
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
 
-      // Sign a JWT so VPS can authenticate via Authorization: Bearer header
-      // (fallback for when session cookies don't survive the nginx proxy)
+      // Sign a JWT for two delivery mechanisms:
+      // 1. mcrm_token cookie — set server-side so it works even with old cached frontend JS
+      // 2. authToken in JSON body — stored in localStorage by new frontend JS
       const authToken = await signAuthToken(user.id);
+      const cookieMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      res.cookie(AUTH_COOKIE_NAME, authToken, {
+        httpOnly: true,
+        secure: false,   // false so it works over HTTP (nginx handles HTTPS)
+        maxAge: cookieMaxAge,
+        sameSite: "lax",
+        path: "/",
+      });
 
       const loginPayload = { 
         success: true, 
@@ -861,6 +870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Error destroying session:", err);
         }
         res.clearCookie("connect.sid", { path: "/" });
+        res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
         res.json({ success: true, message: "Logged out successfully" });
       });
     } catch (error) {
