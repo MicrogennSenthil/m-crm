@@ -11,17 +11,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth, clearStoredUser } from "@/hooks/useAuth";
 import { queryClient } from "@/lib/queryClient";
-import { useLocation } from "wouter";
 
 export function UserProfileMenu() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
 
   const handleLogout = () => {
     clearStoredUser();
     queryClient.clear();
     fetch("/api/auth/local-logout", { method: "POST" }).catch(() => {});
-    setLocation("/auth/login");
+    // Hard redirect — avoids useAuth() re-check loading spinner on the login page
+    window.location.replace("/auth/login");
   };
 
   const getUserInitials = () => {

@@ -226,7 +226,11 @@ function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
 
-  if (isLoading) {
+  // Don't block auth pages with the loading spinner — show them immediately.
+  // This prevents the "Loading..." flash after logout or on a fresh visit to /auth/login.
+  const isAuthPage = AUTH_PATHS.some(p => location.startsWith(p));
+
+  if (isLoading && !isAuthPage) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-3">
@@ -253,6 +257,7 @@ function Router() {
     );
   }
 
+  // Authenticated user visiting an auth page → send them home
   if (AUTH_PATHS.includes(location)) {
     return <Redirect to="/" />;
   }
