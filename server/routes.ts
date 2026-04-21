@@ -341,10 +341,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update last login in background (non-blocking)
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
 
-      // Sign a JWT for two delivery mechanisms:
-      // 1. mcrm_token cookie — set server-side so it works even with old cached frontend JS
+      // Sign a JWT that carries user data so isAuthenticated needs ZERO DB queries.
+      // Two delivery mechanisms:
+      // 1. mcrm_token cookie — set server-side, works even with old cached frontend JS
       // 2. authToken in JSON body — stored in localStorage by new frontend JS
-      const authToken = await signAuthToken(user.id);
+      const authToken = await signAuthToken(user.id, {
+        email: user.email,
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        role: userRole,
+      });
       const cookieMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
       res.cookie(AUTH_COOKIE_NAME, authToken, {
         httpOnly: true,

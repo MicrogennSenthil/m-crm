@@ -20,19 +20,37 @@ function getJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export async function signAuthToken(userId: string): Promise<string> {
-  return new SignJWT({ sub: userId, isLocalAuth: true })
+export interface JwtUserPayload {
+  sub: string;         // userId
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isLocalAuth: true;
+}
+
+// Sign a JWT that carries user data — isAuthenticated reads this directly
+// without hitting the DB on every request (eliminating N+1 DB queries on dashboard load)
+export async function signAuthToken(userId: string, userData?: { email: string; firstName: string; lastName: string; role: string }): Promise<string> {
+  const payload: Record<string, unknown> = { sub: userId, isLocalAuth: true };
+  if (userData) {
+    payload.email = userData.email;
+    payload.firstName = userData.firstName;
+    payload.lastName = userData.lastName;
+    payload.role = userData.role;
+  }
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
     .setExpirationTime(JWT_TTL)
     .sign(getJwtSecret());
 }
 
-export async function verifyAuthToken(token: string): Promise<string | null> {
+export async function verifyAuthToken(token: string): Promise<JwtUserPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload.isLocalAuth && typeof payload.sub === "string") {
-      return payload.sub;
+      return payload as unknown as JwtUserPayload;
     }
     return null;
   } catch {
@@ -243,13 +261,29 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
-  // Helper to authenticate by userId (shared across all token checks)
-  const authenticateUser = async (userId: string): Promise<boolean> => {
+  // Build req.user from a verified JWT payload — ZERO DB queries if payload has user data.
+  // Falls back to a DB lookup only for old tokens (issued before user-data was embedded).
+  const authenticateFromJwt = async (jwtPayload: JwtUserPayload): Promise<boolean> => {
+    const userId = jwtPayload.sub;
+    if (jwtPayload.email && jwtPayload.role) {
+      // Fast path: all user data is in the JWT — no DB needed
+      req.user = {
+        claims: {
+          sub: userId,
+          email: jwtPayload.email,
+          first_name: jwtPayload.firstName || "",
+          last_name: jwtPayload.lastName || "",
+          metadata: { role: jwtPayload.role }
+        }
+      };
+      return true;
+    }
+    // Slow path: old token without user data → DB lookup (one-time cost until they re-login)
     const user = await storage.getUser(userId);
     if (!user) return false;
     if (!user.isActive) {
       res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
-      return true; // handled
+      return true;
     }
     req.user = {
       claims: {
@@ -267,9 +301,9 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   const cookies = parseCookies(req.headers.cookie as string | undefined);
   const cookieToken = cookies[AUTH_COOKIE_NAME];
   if (cookieToken) {
-    const userId = await verifyAuthToken(cookieToken);
-    if (userId) {
-      const handled = await authenticateUser(userId);
+    const jwtPayload = await verifyAuthToken(cookieToken);
+    if (jwtPayload) {
+      const handled = await authenticateFromJwt(jwtPayload);
       if (handled) {
         if (res.headersSent) return;
         return next();
@@ -281,9 +315,9 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   const authHeader = req.headers.authorization as string | undefined;
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
-    const userId = await verifyAuthToken(token);
-    if (userId) {
-      const handled = await authenticateUser(userId);
+    const jwtPayload = await verifyAuthToken(token);
+    if (jwtPayload) {
+      const handled = await authenticateFromJwt(jwtPayload);
       if (handled) {
         if (res.headersSent) return;
         return next();
