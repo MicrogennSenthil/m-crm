@@ -59,8 +59,9 @@ The database schema comprises 14 tables. Core business logic includes round-robi
 -   **PM2 config**: `ecosystem.config.cjs` with env vars inline (not .env file)
 -   **DATABASE_URL** includes `?sslmode=disable` (local PostgreSQL, no SSL)
 -   **Git remote on VPS**: `origin` → `git@github-mcrm:MicrogennSenthil/m-crm.git`
--   **Deploy steps**: `cd /var/www/m-crm && git pull origin main && npm run build && fuser -k 5050/tcp; pm2 delete mcrm 2>/dev/null; pm2 start ecosystem.config.cjs && pm2 save`
+-   **Deploy steps**: `cd /var/www/m-crm && git pull origin main && npm run build && fuser -k 5050/tcp; pm2 delete mcrm 2>/dev/null; pm2 start ecosystem.config.cjs`
     -   **IMPORTANT**: Use semicolons (`;`) not `&&` for `pm2 delete` — if PM2 daemon restarted and has no process registered, `pm2 delete mcrm` exits non-zero and breaks an `&&` chain, preventing `pm2 start` from running (causes 502)
+    -   **NEVER use `pm2 save` after deploy** — it overwrites the saved process list with only currently-running apps. If any other VPS app (mwhatsapp, irm-backend, etc.) is down at that moment, it gets wiped from auto-start on server reboot. Only run `pm2 save` manually after confirming ALL apps on the VPS are running.
 -   **DB migrations on VPS**: Run SQL directly via `sudo -u postgres psql -d mcrm_db -c "..."` (no drizzle push needed if column already applied)
 -   **Super admin**: `senthil@microgenn.com`
 -   **IMPORTANT — Multiple apps on same VPS**: Other apps (irm-backend, infantinteriors.in, srijayamhall.com, etc.) run on same server. Always scope commands to M-CRM only:
