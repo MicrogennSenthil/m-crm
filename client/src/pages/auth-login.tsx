@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { storeUser } from "@/hooks/useAuth";
 import { useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, storeAuthToken } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,8 @@ export default function AuthLogin() {
       return response.json();
     },
     onSuccess: (data) => {
+      // Store JWT token for VPS cookie-bypass auth
+      if (data.authToken) storeAuthToken(data.authToken);
       storeUser(data.user);
       queryClient.setQueryData(["/api/auth/user"], data.user);
       toast({

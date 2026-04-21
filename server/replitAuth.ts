@@ -6,9 +6,39 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import { SignJWT, jwtVerify } from "jose";
 import { storage } from "./storage";
 import { sendWelcomeEmail } from "./email";
 import { pool } from "./db";
+
+// JWT helpers for VPS cookie-bypass auth
+const JWT_ALG = "HS256";
+const JWT_TTL = "7d";
+
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.SESSION_SECRET || "mcrm-fallback-secret-change-me";
+  return new TextEncoder().encode(secret);
+}
+
+export async function signAuthToken(userId: string): Promise<string> {
+  return new SignJWT({ sub: userId, isLocalAuth: true })
+    .setProtectedHeader({ alg: JWT_ALG })
+    .setIssuedAt()
+    .setExpirationTime(JWT_TTL)
+    .sign(getJwtSecret());
+}
+
+export async function verifyAuthToken(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecret());
+    if (payload.isLocalAuth && typeof payload.sub === "string") {
+      return payload.sub;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // Check if running on Replit or if OIDC should be enabled
 const isReplit = process.env.REPL_ID !== undefined;
@@ -199,7 +229,32 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
-  // Check for local authentication (email/password)
+  // ── 1. JWT Bearer token (primary auth for VPS where session cookies may not work) ──
+  const authHeader = req.headers.authorization as string | undefined;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const userId = await verifyAuthToken(token);
+    if (userId) {
+      const user = await storage.getUser(userId);
+      if (user) {
+        if (!user.isActive) {
+          return res.status(403).json({ message: "Your account has been deactivated. Please contact administrator." });
+        }
+        req.user = {
+          claims: {
+            sub: userId,
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            metadata: { role: user.role }
+          }
+        };
+        return next();
+      }
+    }
+  }
+
+  // ── 2. Session cookie (local email/password auth) ──
   if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
     // For local auth, set up req.user with claims for consistency
     const userId = (req.session as any).userId;
@@ -225,7 +280,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     }
   }
 
-  // Check for OIDC/Replit Auth
+  // ── 3. OIDC/Replit Auth ──
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user?.expires_at) {

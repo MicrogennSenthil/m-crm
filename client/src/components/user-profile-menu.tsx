@@ -10,13 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, clearStoredUser } from "@/hooks/useAuth";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, clearAuthToken } from "@/lib/queryClient";
 
 export function UserProfileMenu() {
   const { user } = useAuth();
 
   const handleLogout = () => {
     clearStoredUser();
+    clearAuthToken();
     queryClient.clear();
     fetch("/api/auth/local-logout", { method: "POST" }).catch(() => {});
     // Hard redirect — avoids useAuth() re-check loading spinner on the login page
