@@ -37,15 +37,23 @@ export function getSession() {
     tableName: "sessions",
   });
   
-  // Determine if we should use secure cookies
-  // On VPS behind Nginx with SSL, trust proxy handles this
-  // For local development or non-HTTPS setups, disable secure cookies
+  // Determine if we should use secure cookies.
+  // On Replit: secure in production (Replit sets X-Forwarded-Proto correctly).
+  // On VPS behind Nginx: do NOT use secure cookies by default because Express
+  // sees plain HTTP from nginx and express-session won't send the Secure cookie
+  // unless trust proxy is configured AND nginx sends X-Forwarded-Proto.
+  // Since nginx handles HTTPS termination, the cookie is safe over the wire even
+  // without the Secure flag — HttpOnly still protects against XSS.
+  // Override with SECURE_COOKIES=true/false env var if needed.
   const isProduction = process.env.NODE_ENV === "production";
   const forceSecureCookies = process.env.SECURE_COOKIES === "true";
   const disableSecureCookies = process.env.SECURE_COOKIES === "false";
   
-  // Default: secure in production, unless explicitly disabled
-  const secureCookies = disableSecureCookies ? false : (forceSecureCookies || isProduction);
+  // On VPS (no REPL_ID), default to non-secure cookies unless explicitly forced
+  const onVPS = !isReplit;
+  const secureCookies = disableSecureCookies ? false
+    : forceSecureCookies ? true
+    : (isProduction && !onVPS);
   
   return session({
     secret: process.env.SESSION_SECRET!,
