@@ -16,16 +16,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
 
-// Only keep truly small/critical pages eager
+// Eager-load the most common first pages so users never see a spinner after login
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import AuthLogin from "@/pages/auth-login";
+import Home from "@/pages/home";
+import Sales from "@/pages/sales";
 
 // Lazy load everything else to minimise the initial JS bundle
 const AuthSignup = lazy(() => import("@/pages/auth-signup"));
 const AuthForgotPassword = lazy(() => import("@/pages/auth-forgot-password"));
-const Home = lazy(() => import("@/pages/home"));
-const Sales = lazy(() => import("@/pages/sales"));
 const Implementations = lazy(() => import("@/pages/implementations"));
 const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));
 const Support = lazy(() => import("@/pages/support"));
@@ -84,25 +84,52 @@ function PageLoader() {
 function AuthenticatedLayout() {
   const { isPinned, setIsPinned } = useSidebarPinned();
 
-  // Prefetch the most-visited page chunks in the background so the first
-  // navigation to any of these pages feels instant (no Suspense "Loading...").
+  // Prefetch page chunks + API data immediately so navigation feels instant.
+  // Home and Sales are already eager (no spinner). Everything else is prefetched
+  // right away in a single idle-callback so it doesn't block the current render.
   useEffect(() => {
-    const prefetch = () => {
+    const prefetchChunks = () => {
+      // Tier 1 — most visited after the landing pages
       import("@/pages/tasks");
-      import("@/pages/home");
-      import("@/pages/sales");
       import("@/pages/support");
+      import("@/pages/implementations");
+      import("@/pages/todays-tasks");
+      // Tier 2 — secondary pages
       import("@/pages/knowledge-base-search");
       import("@/pages/hr-feedback");
-      import("@/pages/implementations");
       import("@/pages/accounts-contracts");
-      import("@/pages/todays-tasks");
       import("@/pages/marketing-dashboard");
       import("@/pages/marketing-daily-report");
+      import("@/pages/sales-dashboard");
+      import("@/pages/sales-planning");
+      import("@/pages/my-performance");
     };
-    // Small delay so it doesn't compete with the initial page render
-    const t = setTimeout(prefetch, 1500);
-    return () => clearTimeout(t);
+
+    const prefetchData = () => {
+      // Pre-warm React Query cache for the APIs that every page needs on first render
+      queryClient.prefetchQuery({ queryKey: ["/api/auth/my-permissions"] });
+      queryClient.prefetchQuery({ queryKey: ["/api/leads/kanban"] });
+      queryClient.prefetchQuery({ queryKey: ["/api/users"] });
+      queryClient.prefetchQuery({ queryKey: ["/api/auth/is-department-head"] });
+      queryClient.prefetchQuery({ queryKey: ["/api/leads/filter-options"] });
+    };
+
+    // Use requestIdleCallback when available so prefetch runs after the browser
+    // has finished painting the current frame — zero impact on first render.
+    if ("requestIdleCallback" in window) {
+      const id = (window as any).requestIdleCallback(() => {
+        prefetchChunks();
+        prefetchData();
+      });
+      return () => (window as any).cancelIdleCallback(id);
+    } else {
+      // Fallback for Safari — small timeout is fine
+      const t = setTimeout(() => {
+        prefetchChunks();
+        prefetchData();
+      }, 200);
+      return () => clearTimeout(t);
+    }
   }, []);
 
   const style = {
