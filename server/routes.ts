@@ -6,7 +6,7 @@ import { getCached, setCached, invalidateCache } from "./cache";
 import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
-import { users, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
+import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
 import { eq, sql, and, desc, or, ilike, inArray, isNotNull, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
