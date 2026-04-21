@@ -28,6 +28,11 @@ export function log(message: string, source = "express") {
 
 export const app = express();
 
+// Trust nginx reverse proxy — required for secure session cookies behind HTTPS termination
+// Without this, req.secure is false (Express sees plain HTTP from nginx) and
+// express-session refuses to set the Secure cookie, breaking all post-login requests
+app.set('trust proxy', 1);
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
