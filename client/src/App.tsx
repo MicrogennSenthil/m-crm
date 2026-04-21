@@ -16,16 +16,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSidebarPinned } from "@/hooks/use-sidebar-pinned";
 import microgennLogo from "@assets/Logo_1764615397514.png";
 
-// Eager-load the most common first pages so users never see a spinner after login
+// Only keep truly small/critical pages eager
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import AuthLogin from "@/pages/auth-login";
-import Home from "@/pages/home";
-import Sales from "@/pages/sales";
 
 // Lazy load everything else to minimise the initial JS bundle
 const AuthSignup = lazy(() => import("@/pages/auth-signup"));
 const AuthForgotPassword = lazy(() => import("@/pages/auth-forgot-password"));
+const Home = lazy(() => import("@/pages/home"));
+const Sales = lazy(() => import("@/pages/sales"));
 const Implementations = lazy(() => import("@/pages/implementations"));
 const ImplementationDashboard = lazy(() => import("@/pages/implementation-dashboard"));
 const Support = lazy(() => import("@/pages/support"));
