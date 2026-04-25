@@ -303,7 +303,7 @@ export default function TaskDetail() {
             </Card>
           </div>
 
-          {task.mentionedUserDetails && task.mentionedUserDetails.length > 0 && (
+          {Array.isArray(task.mentionedUserDetails) && task.mentionedUserDetails.length > 0 && (
             <div>
               <h4 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                 <Users className="h-4 w-4" />

@@ -2858,18 +2858,24 @@ export class DatabaseStorage implements IStorage {
       : [undefined];
 
     let mentionedUserDetails: User[] = [];
-    if (task.mentionedUsers && task.mentionedUsers.length > 0) {
-      mentionedUserDetails = await db
-        .select()
-        .from(users)
-        .where(sql`${users.id} IN (${sql.join(task.mentionedUsers.map(id => sql`${id}`), sql`, `)})`);
+    const mentionedArray = Array.isArray(task.mentionedUsers) ? task.mentionedUsers : [];
+    if (mentionedArray.length > 0) {
+      try {
+        mentionedUserDetails = await db
+          .select()
+          .from(users)
+          .where(sql`${users.id} IN (${sql.join(mentionedArray.map(id => sql`${id}`), sql`, `)})`);
+      } catch (e) {
+        // Safe fallback if query fails
+      }
     }
 
     return {
       ...task,
+      mentionedUsers: mentionedArray,
+      mentionedUserDetails,
       creator,
       assignee,
-      mentionedUserDetails,
     };
   }
 

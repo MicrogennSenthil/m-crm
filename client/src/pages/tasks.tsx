@@ -304,7 +304,7 @@ export default function TasksPage() {
             </div>
           </div>
           
-          {task.mentionedUserDetails && task.mentionedUserDetails.length > 0 && (
+          {Array.isArray(task.mentionedUserDetails) && task.mentionedUserDetails.length > 0 && (
             <div className="mt-3 pt-3 border-t">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Users className="h-3 w-3" />

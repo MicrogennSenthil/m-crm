@@ -706,7 +706,7 @@ export default function TaskDetailModal({ task, open, onOpenChange, onTaskUpdate
               </div>
             </div>
             
-            {task.mentionedUserDetails && task.mentionedUserDetails.length > 0 && (
+            {Array.isArray(task.mentionedUserDetails) && task.mentionedUserDetails.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-muted-foreground mb-2">Mentioned Team Members</h4>
                 <div className="flex flex-wrap gap-2">
