@@ -371,7 +371,7 @@ export function TicketForm({ onSuccess }: TicketFormProps) {
       }
       toast({
         title: "Error",
-        description: "Failed to create ticket",
+        description: error.message || "Failed to create ticket",
         variant: "destructive",
       });
     },

@@ -2014,9 +2014,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTicket(ticket: InsertTicket): Promise<Ticket> {
-    // Generate ticket number
-    const ticketCount = await db.select({ count: sql<number>`count(*)` }).from(tickets);
-    const ticketNumber = `TKT-${String(Number(ticketCount[0].count) + 1).padStart(6, '0')}`;
+    // Generate ticket number using MAX to handle gaps from deleted tickets
+    // count(*)+1 would produce duplicates if tickets have been deleted
+    const result = await db.execute(sql`
+      SELECT COALESCE(MAX(CAST(SUBSTRING(ticket_number FROM 5) AS INTEGER)), 0) AS max_num
+      FROM tickets WHERE ticket_number LIKE 'TKT-%'
+    `);
+    const maxNum = Number((result.rows[0] as any)?.max_num || 0);
+    const ticketNumber = `TKT-${String(maxNum + 1).padStart(6, '0')}`;
     
     const [newTicket] = await db
       .insert(tickets)
