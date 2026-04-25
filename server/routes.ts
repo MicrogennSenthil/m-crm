@@ -362,9 +362,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sameSite: "lax",
         path: "/",
       });
-      // Clear any force-logout cookie from a previous logout so auth works immediately
-      res.clearCookie("mcrm_force_logout", { path: "/" });
-
       const loginPayload = { 
         success: true, 
         authToken,
@@ -868,14 +865,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Local logout — GET so cookies and redirect happen in one response
+  // Local logout — client fetches this as JSON, applies Set-Cookie, then redirects itself
   app.get("/api/auth/logout", async (req: any, res) => {
     try {
-      // Try every possible source for the userId — the GET route doesn't run
-      // isAuthenticated so req.user may be undefined; parse the JWT cookie directly.
+      // Parse userId from session or JWT cookie (route has no isAuthenticated middleware)
       let userId = (req.session as any)?.userId || req.user?.claims?.sub;
       if (!userId) {
-        // Parse the mcrm_token cookie manually to extract the sub claim
         const cookieHeader = req.headers.cookie as string | undefined;
         if (cookieHeader) {
           const cookieMap: Record<string, string> = {};
@@ -891,30 +886,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       if (userId) {
-        // Blacklist the user — stored in Redis so survives PM2 restarts
-        await blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
       }
-      // Set force-logout cookie BEFORE session destroy so it's included in the redirect response.
-      // This cookie makes isAuthenticated return 401 for 90 seconds, overriding any stale
-      // JWT or session cookies that the browser may still carry. No Redis/in-memory needed.
-      res.cookie("mcrm_force_logout", "1", {
-        httpOnly: true,
-        secure: false,
-        maxAge: 90 * 1000, // 90 seconds — enough for the redirect + initial page load
-        sameSite: "lax",
-        path: "/",
-      });
+      // Clear both auth cookies in this response so the browser drops them
+      // before the client does window.location.replace('/auth/login').
+      res.clearCookie("connect.sid", { path: "/" });
+      res.clearCookie(AUTH_COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "lax", secure: false });
       req.session.destroy((err: any) => {
         if (err) console.error("Error destroying session:", err);
-        res.clearCookie("connect.sid", { path: "/" });
-        res.clearCookie(AUTH_COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "lax", secure: false });
-        res.redirect("/auth/login");
+        res.json({ success: true });
       });
     } catch (error) {
       console.error("Error logging out:", error);
-      res.redirect("/auth/login");
+      res.json({ success: true });
     }
   });
 

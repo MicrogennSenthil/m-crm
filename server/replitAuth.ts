@@ -326,12 +326,7 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
     return true;
   };
 
-  // ── 0. Force-logout cookie — short-lived cookie set on logout, overrides all auth ──
-  // Does NOT depend on Redis/in-memory state — the browser carries it automatically.
   const cookies = parseCookies(req.headers.cookie as string | undefined);
-  if (cookies["mcrm_force_logout"] === "1") {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
 
   // ── 1. Server-set JWT cookie (most reliable — set by server at login, no client JS needed) ──
   const cookieToken = cookies[AUTH_COOKIE_NAME];

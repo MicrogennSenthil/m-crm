@@ -15,16 +15,20 @@ import { queryClient, clearAuthToken } from "@/lib/queryClient";
 export function UserProfileMenu() {
   const { user } = useAuth();
 
-  const handleLogout = () => {
-    // Clear all client-side auth state first
+  const handleLogout = async () => {
+    try {
+      // Call the logout API — server clears httpOnly JWT + session cookies in this response.
+      // Using fetch (not navigation) means Set-Cookie headers are applied BEFORE we redirect.
+      await fetch("/api/auth/logout", { credentials: "same-origin" });
+    } catch (_) {
+      // Ignore network errors — continue with client-side cleanup regardless
+    }
+    // Clear client-side state
     clearStoredUser();
     clearAuthToken();
     queryClient.clear();
-    // Navigate to the server-side logout endpoint (GET).
-    // The server destroys the session, clears both cookies (session + JWT),
-    // and issues a 302 redirect to /auth/login — all in one response.
-    // This guarantees cookies are cleared before the login page loads.
-    window.location.href = "/api/auth/logout";
+    // Hard redirect to login — browser now has cleared cookies, so /api/auth/user returns 401
+    window.location.replace("/auth/login");
   };
 
   const getUserInitials = () => {
