@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mcrm-static-v3';
+const CACHE_NAME = 'mcrm-static-v5';
 
 // On install: only pre-cache small static icons — skip the app shell
 // to avoid blocking the install phase with large fetches.
