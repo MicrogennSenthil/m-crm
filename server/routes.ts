@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getCached, setCached, invalidateCache } from "./cache";
-import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, AUTH_COOKIE_NAME } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, AUTH_COOKIE_NAME, blacklistUserJwt } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
 import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
@@ -863,20 +863,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Local logout — GET so cookies are cleared and redirect happen in one response
+  // Local logout — GET so cookies and redirect happen in one response
   app.get("/api/auth/logout", async (req: any, res) => {
     try {
       const userId = (req.session as any).userId || req.user?.claims?.sub;
       if (userId) {
+        // Blacklist the JWT — any existing mcrm_token cookie is rejected immediately,
+        // even if the browser fails to clear it
+        blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
       }
       req.session.destroy((err: any) => {
         if (err) console.error("Error destroying session:", err);
-        // Clear both the session cookie and the JWT cookie in the same response
         res.clearCookie("connect.sid", { path: "/" });
-        res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
-        // 302 redirect — browser follows it only after applying the Set-Cookie headers
+        res.clearCookie(AUTH_COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "lax", secure: false });
         res.redirect("/auth/login");
       });
     } catch (error) {
@@ -885,18 +886,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Keep POST for backwards compatibility (used by older cached clients)
+  // Keep POST for backwards compatibility
   app.post("/api/auth/local-logout", async (req: any, res) => {
     try {
       const userId = (req.session as any).userId || req.user?.claims?.sub;
       if (userId) {
+        blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
       }
       req.session.destroy((err: any) => {
         if (err) console.error("Error destroying session:", err);
         res.clearCookie("connect.sid", { path: "/" });
-        res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+        res.clearCookie(AUTH_COOKIE_NAME, { path: "/", httpOnly: true, sameSite: "lax", secure: false });
         res.json({ success: true, message: "Logged out successfully" });
       });
     } catch (error) {

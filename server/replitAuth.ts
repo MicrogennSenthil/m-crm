@@ -46,10 +46,24 @@ export async function signAuthToken(userId: string, userData?: { email: string; 
     .sign(getJwtSecret());
 }
 
+// In-memory JWT blacklist: userId → logout timestamp (ms)
+// Any JWT issued BEFORE this timestamp is rejected, even if cookie wasn't cleared.
+const jwtBlacklist = new Map<string, number>();
+
+export function blacklistUserJwt(userId: string) {
+  jwtBlacklist.set(userId, Date.now());
+}
+
 export async function verifyAuthToken(token: string): Promise<JwtUserPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload.isLocalAuth && typeof payload.sub === "string") {
+      // Reject tokens issued before the user's logout timestamp
+      const logoutAt = jwtBlacklist.get(payload.sub);
+      if (logoutAt) {
+        const issuedAt = (payload.iat ?? 0) * 1000; // iat is in seconds
+        if (issuedAt < logoutAt) return null;
+      }
       return payload as unknown as JwtUserPayload;
     }
     return null;
