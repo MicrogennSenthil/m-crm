@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getCached, setCached, invalidateCache } from "./cache";
-import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, AUTH_COOKIE_NAME, blacklistUserJwt } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, verifyAuthToken, AUTH_COOKIE_NAME, blacklistUserJwt } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
 import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
@@ -866,10 +866,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Local logout — GET so cookies and redirect happen in one response
   app.get("/api/auth/logout", async (req: any, res) => {
     try {
-      const userId = (req.session as any).userId || req.user?.claims?.sub;
+      // Try every possible source for the userId — the GET route doesn't run
+      // isAuthenticated so req.user may be undefined; parse the JWT cookie directly.
+      let userId = (req.session as any)?.userId || req.user?.claims?.sub;
+      if (!userId) {
+        // Parse the mcrm_token cookie manually to extract the sub claim
+        const cookieHeader = req.headers.cookie as string | undefined;
+        if (cookieHeader) {
+          const cookieMap: Record<string, string> = {};
+          cookieHeader.split(";").forEach(part => {
+            const [k, ...v] = part.trim().split("=");
+            if (k) cookieMap[k.trim()] = decodeURIComponent(v.join("=").trim());
+          });
+          const rawToken = cookieMap[AUTH_COOKIE_NAME];
+          if (rawToken) {
+            const jwtPayload = await verifyAuthToken(rawToken);
+            if (jwtPayload?.sub) userId = jwtPayload.sub;
+          }
+        }
+      }
       if (userId) {
-        // Blacklist the JWT — any existing mcrm_token cookie is rejected immediately,
-        // even if the browser fails to clear it
+        // Blacklist the JWT — any existing mcrm_token cookie is rejected server-side,
+        // even if the browser fails to delete the cookie
         blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
