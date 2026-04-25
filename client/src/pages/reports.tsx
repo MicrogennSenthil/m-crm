@@ -476,7 +476,7 @@ export default function Reports() {
               <CardContent>
                 {salesLoading ? (
                   <Skeleton className="h-64 w-full" />
-                ) : salesData?.sourceData ? (
+                ) : Array.isArray(salesData?.sourceData) && salesData.sourceData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
@@ -565,7 +565,7 @@ export default function Reports() {
               <CardContent>
                 {projectLoading ? (
                   <Skeleton className="h-64 w-full" />
-                ) : projectData?.statusData ? (
+                ) : Array.isArray(projectData?.statusData) && projectData.statusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
@@ -605,7 +605,7 @@ export default function Reports() {
               <CardContent className="space-y-4">
                 {projectLoading ? (
                   <Skeleton className="h-32 w-full" />
-                ) : projectData?.statusData ? (
+                ) : Array.isArray(projectData?.statusData) && projectData.statusData.length > 0 ? (
                   projectData.statusData.map((status: any, index: number) => (
                     <div key={status.name} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -666,7 +666,7 @@ export default function Reports() {
               <CardContent>
                 {ticketLoading ? (
                   <Skeleton className="h-64 w-full" />
-                ) : ticketData?.statusData ? (
+                ) : Array.isArray(ticketData?.statusData) && ticketData.statusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie

@@ -29,7 +29,7 @@ export async function getAllowedUserIdsForUser(userId: string): Promise<AccessCo
   }
   
   const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
-  const isAdmin = user.role === "admin";
+  const isAdmin = user.role?.toLowerCase() === "admin";
   
   // Check if user is a department head using junction table
   const managedDepartments = await storage.getDepartmentsByHead(userId);

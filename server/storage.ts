@@ -2271,11 +2271,16 @@ export class DatabaseStorage implements IStorage {
 
     const conversionRate = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0;
 
-    // Average deal size from quotes
-    const avgDealSizeResult = await db
-      .select({ avg: sql<number>`AVG(${quotes.amount})` })
-      .from(quotes);
-    const avgDealSize = Math.round(Number(avgDealSizeResult[0].avg || 0));
+    // Average deal size from quotes (table may not exist on all environments)
+    let avgDealSize = 0;
+    try {
+      const avgDealSizeResult = await db
+        .select({ avg: sql<number>`AVG(${quotes.amount})` })
+        .from(quotes);
+      avgDealSize = Math.round(Number(avgDealSizeResult[0]?.avg || 0));
+    } catch (e) {
+      // quotes table may not exist yet on this environment
+    }
 
     // Average sales cycle (placeholder - would need created/closed date tracking)
     const avgSalesCycle = 32;
@@ -2326,7 +2331,7 @@ export class DatabaseStorage implements IStorage {
       .groupBy(tickets.priority);
 
     const priorityData = priorityDataRaw.map((item) => ({
-      priority: item.priority.charAt(0).toUpperCase() + item.priority.slice(1),
+      priority: item.priority ? (item.priority.charAt(0).toUpperCase() + item.priority.slice(1)) : 'Unknown',
       count: Number(item.count),
     }));
 
@@ -2352,39 +2357,47 @@ export class DatabaseStorage implements IStorage {
       value: Number(item.count),
     }));
 
-    // Resolution time calculation (for closed tickets)
-    const closedTickets = await db
-      .select({
-        createdAt: tickets.createdAt,
-        closedAt: tickets.closedAt,
-      })
-      .from(tickets)
-      .where(sql`${tickets.status} = 'closed' AND ${tickets.closedAt} IS NOT NULL`);
-
+    // Resolution time calculation (for closed tickets - closedAt column may not exist on all environments)
     let avgResolutionTime = 0;
-    if (closedTickets.length > 0) {
-      const totalHours = closedTickets.reduce((sum, ticket) => {
-        if (ticket.closedAt && ticket.createdAt) {
-          const hours = (ticket.closedAt.getTime() - ticket.createdAt.getTime()) / (1000 * 60 * 60);
-          return sum + hours;
-        }
-        return sum;
-      }, 0);
-      avgResolutionTime = Math.round(totalHours / closedTickets.length);
+    try {
+      const closedTickets = await db
+        .select({
+          createdAt: tickets.createdAt,
+          closedAt: tickets.closedAt,
+        })
+        .from(tickets)
+        .where(sql`${tickets.status} = 'closed' AND ${tickets.closedAt} IS NOT NULL`);
+
+      if (closedTickets.length > 0) {
+        const totalHours = closedTickets.reduce((sum, ticket) => {
+          if (ticket.closedAt && ticket.createdAt) {
+            const hours = (new Date(ticket.closedAt).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60);
+            return sum + hours;
+          }
+          return sum;
+        }, 0);
+        avgResolutionTime = Math.round(totalHours / closedTickets.length);
+      }
+    } catch (e) {
+      // closedAt column may not exist in this environment's tickets table
     }
 
     // First response time (from first comment - simplified as 2 hours placeholder)
     const avgFirstResponseTime = 2;
 
-    // Customer satisfaction (from feedback)
-    const feedbackRatings = await db
-      .select({ rating: feedback.rating })
-      .from(feedback);
-
+    // Customer satisfaction (from feedback - table may not exist on all environments)
     let customerSatisfaction = 0;
-    if (feedbackRatings.length > 0) {
-      const totalRating = feedbackRatings.reduce((sum, f) => sum + (f.rating || 0), 0);
-      customerSatisfaction = Math.round((totalRating / (feedbackRatings.length * 5)) * 100);
+    try {
+      const feedbackRatings = await db
+        .select({ rating: feedback.rating })
+        .from(feedback);
+
+      if (feedbackRatings.length > 0) {
+        const totalRating = feedbackRatings.reduce((sum, f) => sum + (f.rating || 0), 0);
+        customerSatisfaction = Math.round((totalRating / (feedbackRatings.length * 5)) * 100);
+      }
+    } catch (e) {
+      // feedback table may not exist yet on this environment
     }
 
     return {
@@ -2465,65 +2478,87 @@ export class DatabaseStorage implements IStorage {
     const engineers = await db
       .select()
       .from(users)
-      .where(sql`${users.role} IN ('engineer', 'support')`);
+      .where(sql`${users.role} IN ('engineer', 'support', 'Engineer', 'Support')`);
 
     const productivityData = await Promise.all(
       engineers.map(async (engineer) => {
         // Tickets resolved by this engineer
-        const ticketsResolved = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(tickets)
-          .where(and(
-            eq(tickets.assignedEngineerId, engineer.id),
-            eq(tickets.status, "closed")
-          ));
+        let ticketsResolvedCount = 0;
+        let activeTicketsCount = 0;
+        let projectsCompletedCount = 0;
+        let activeProjectsCount = 0;
+        let trainingHoursTotal = 0;
 
-        // Active tickets
-        const activeTickets = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(tickets)
-          .where(and(
-            eq(tickets.assignedEngineerId, engineer.id),
-            sql`${tickets.status} != 'closed'`
-          ));
+        try {
+          const ticketsResolved = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(tickets)
+            .where(and(
+              eq(tickets.assignedEngineerId, engineer.id),
+              eq(tickets.status, "closed")
+            ));
+          ticketsResolvedCount = Number(ticketsResolved[0]?.count || 0);
 
-        // Projects completed
-        const projectsCompleted = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(projectEngineers)
-          .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
-          .where(and(
-            eq(projectEngineers.engineerId, engineer.id),
-            eq(projects.status, "completed")
-          ));
+          const activeTickets = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(tickets)
+            .where(and(
+              eq(tickets.assignedEngineerId, engineer.id),
+              sql`${tickets.status} != 'closed'`
+            ));
+          activeTicketsCount = Number(activeTickets[0]?.count || 0);
+        } catch (e) {
+          // tickets table columns may differ on this environment
+        }
 
-        // Active projects
-        const activeProjects = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(projectEngineers)
-          .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
-          .where(and(
-            eq(projectEngineers.engineerId, engineer.id),
-            sql`${projects.status} != 'completed'`
-          ));
+        try {
+          // Projects completed
+          const projectsCompleted = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(projectEngineers)
+            .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
+            .where(and(
+              eq(projectEngineers.engineerId, engineer.id),
+              eq(projects.status, "completed")
+            ));
+          projectsCompletedCount = Number(projectsCompleted[0]?.count || 0);
 
-        // Training hours delivered
-        const trainingHours = await db
-          .select({ total: sql<number>`COALESCE(SUM(${trainingRecords.trainingHours}), 0)` })
-          .from(trainingRecords)
-          .innerJoin(projects, eq(trainingRecords.projectId, projects.id))
-          .innerJoin(projectEngineers, eq(projectEngineers.projectId, projects.id))
-          .where(eq(projectEngineers.engineerId, engineer.id));
+          // Active projects
+          const activeProjects = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(projectEngineers)
+            .innerJoin(projects, eq(projectEngineers.projectId, projects.id))
+            .where(and(
+              eq(projectEngineers.engineerId, engineer.id),
+              sql`${projects.status} != 'completed'`
+            ));
+          activeProjectsCount = Number(activeProjects[0]?.count || 0);
+        } catch (e) {
+          // project_engineers table may not exist on this environment
+        }
+
+        try {
+          // Training hours delivered
+          const trainingHours = await db
+            .select({ total: sql<number>`COALESCE(SUM(${trainingRecords.trainingHours}), 0)` })
+            .from(trainingRecords)
+            .innerJoin(projects, eq(trainingRecords.projectId, projects.id))
+            .innerJoin(projectEngineers, eq(projectEngineers.projectId, projects.id))
+            .where(eq(projectEngineers.engineerId, engineer.id));
+          trainingHoursTotal = Number(trainingHours[0]?.total || 0);
+        } catch (e) {
+          // training_records or project_engineers table may not exist on this environment
+        }
 
         return {
           id: engineer.id,
           name: `${engineer.firstName || ""} ${engineer.lastName || ""}`.trim() || engineer.email || "Unknown",
           role: engineer.role,
-          ticketsResolved: Number(ticketsResolved[0]?.count || 0),
-          activeTickets: Number(activeTickets[0]?.count || 0),
-          projectsCompleted: Number(projectsCompleted[0]?.count || 0),
-          activeProjects: Number(activeProjects[0]?.count || 0),
-          trainingHours: Number(trainingHours[0]?.total || 0),
+          ticketsResolved: ticketsResolvedCount,
+          activeTickets: activeTicketsCount,
+          projectsCompleted: projectsCompletedCount,
+          activeProjects: activeProjectsCount,
+          trainingHours: trainingHoursTotal,
         };
       })
     );
@@ -2765,7 +2800,9 @@ export class DatabaseStorage implements IStorage {
     if (taskList.length === 0) return [];
 
     // Collect all unique user IDs (creators + assignees + mentioned)
-    const allMentioned = taskList.flatMap(t => t.mentionedUsers || []);
+    // Use Array.isArray() to defensively handle VPS DB where mentionedUsers may be text not text[]
+    const safeMentioned = (mu: any): string[] => Array.isArray(mu) ? mu : [];
+    const allMentioned = taskList.flatMap(t => safeMentioned(t.mentionedUsers));
     const allUserIds = [...new Set([
       ...taskList.map(t => t.createdBy).filter(Boolean) as string[],
       ...taskList.map(t => t.assignedTo).filter(Boolean) as string[],
@@ -2795,7 +2832,7 @@ export class DatabaseStorage implements IStorage {
       ...task,
       creator: task.createdBy ? (userMap.get(task.createdBy) as User | undefined) : undefined,
       assignee: task.assignedTo ? (userMap.get(task.assignedTo) as User | undefined) : undefined,
-      mentionedUserDetails: (task.mentionedUsers || [])
+      mentionedUserDetails: safeMentioned(task.mentionedUsers)
         .map(uid => userMap.get(uid))
         .filter(Boolean) as User[],
       commentsCount: commentCountMap.get(task.id) || 0,
@@ -3391,9 +3428,11 @@ export class DatabaseStorage implements IStorage {
     if (roleIds.length === 0) {
       const user = await this.getUser(userId);
       if (user?.role) {
-        // Find role by name matching the legacy role field
+        // Find role by name matching the legacy role field (case-insensitive)
         const allRoles = await this.getUserRoles();
-        const legacyRole = allRoles.find(r => r.name === user.role && r.isActive);
+        const legacyRole = allRoles.find(r => 
+          r.name.toLowerCase() === (user.role || '').toLowerCase() && r.isActive
+        );
         if (legacyRole) {
           roleIds = [legacyRole.id];
         }

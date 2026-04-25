@@ -409,8 +409,8 @@ export const isAdmin: RequestHandler = async (req: any, res, next) => {
     return next();
   }
   
-  // Check legacy role field first
-  if (legacyRole === "admin") {
+  // Check legacy role field first (case-insensitive to handle "Admin" vs "admin")
+  if (legacyRole?.toLowerCase() === "admin") {
     return next();
   }
   
@@ -530,9 +530,9 @@ export function requirePermission(moduleName: string, action: PermissionAction):
           }
         }
         
-        // Also check legacy role field
+        // Also check legacy role field (case-insensitive to handle "Admin" vs "admin")
         const legacyRole = user?.claims?.metadata?.role;
-        if (legacyRole === 'admin') {
+        if (legacyRole?.toLowerCase() === 'admin') {
           return next();
         }
         
@@ -626,9 +626,9 @@ export function requireAnyPermission(permissions: Array<{ module: string; action
         }
       }
       
-      // Also check legacy role field
+      // Also check legacy role field (case-insensitive to handle "Admin" vs "admin")
       const legacyRole = user?.claims?.metadata?.role;
-      if (legacyRole === 'admin') {
+      if (legacyRole?.toLowerCase() === 'admin') {
         return next();
       }
       

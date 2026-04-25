@@ -126,7 +126,7 @@ export default function TasksPage() {
   });
 
   const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
-  const isAdmin = currentUser?.role === "admin" || isSuperAdmin;
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin" || isSuperAdmin;
 
   // Fetch tasks based on view filter (own vs all for admins)
   const { data: tasks = [], isLoading } = useQuery<TaskWithDetails[]>({

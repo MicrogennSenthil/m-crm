@@ -84,7 +84,7 @@ export default function TodaysTasksPage() {
   });
 
   const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
-  const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || isSuperAdmin;
 
   // Fetch today's tasks based on view filter
   const { data: tasks = [], isLoading, refetch } = useQuery<TaskWithDetails[]>({
