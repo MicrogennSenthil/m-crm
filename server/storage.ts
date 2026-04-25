@@ -689,16 +689,23 @@ export interface IStorage {
   }>;
 }
 
+// Normalize user role to lowercase so VPS data like "Admin" works the same as "admin"
+function normalizeUser<T extends { role?: string | null } | undefined>(user: T): T {
+  if (!user) return user;
+  return { ...user, role: user.role?.toLowerCase() ?? user.role } as T;
+}
+
 export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return normalizeUser(user);
   }
 
   async getUsersByIds(ids: string[]): Promise<User[]> {
     if (!ids.length) return [];
-    return await db.select().from(users).where(inArray(users.id, ids));
+    const result = await db.select().from(users).where(inArray(users.id, ids));
+    return result.map(normalizeUser);
   }
 
   async upsertUser(userData: UpsertUser): Promise<{ user: User; isNew: boolean }> {
@@ -775,7 +782,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(desc(users.createdAt));
+    const result = await db.select().from(users).orderBy(desc(users.createdAt));
+    return result.map(normalizeUser);
   }
 
   async updateUser(id: string, data: Partial<InsertUser & { passwordHash?: string; isEmailVerified?: boolean; isActive?: boolean; lastLoginAt?: Date; approvedAt?: Date; approvedBy?: string }>): Promise<User> {
@@ -877,7 +885,7 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    return normalizeUser(user);
   }
 
   async createUserWithPassword(userData: InsertUser & { passwordHash: string }): Promise<User> {
@@ -3136,7 +3144,13 @@ export class DatabaseStorage implements IStorage {
 
   async isUserDepartmentHead(userId: string): Promise<{ isDeptHead: boolean; departments: Department[] }> {
     // Check both new junction table and legacy managerId field
-    const headAssignments = await db.select().from(departmentHeads).where(eq(departmentHeads.userId, userId));
+    // Wrap junction table query in try-catch so older DBs without department_heads table still work
+    let headAssignments: { departmentId: string }[] = [];
+    try {
+      headAssignments = await db.select().from(departmentHeads).where(eq(departmentHeads.userId, userId));
+    } catch {
+      headAssignments = [];
+    }
     const legacyDepts = await db.select().from(departments).where(eq(departments.managerId, userId));
     
     // Combine unique department IDs from both sources
