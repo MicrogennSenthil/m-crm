@@ -2773,16 +2773,20 @@ export class DatabaseStorage implements IStorage {
     ])];
 
     // Bulk fetch users + comment counts in parallel
-    const [usersData, commentCounts] = await Promise.all([
-      allUserIds.length > 0
-        ? db.select().from(users).where(inArray(users.id, allUserIds))
-        : Promise.resolve([]),
-      db
+    const usersData = allUserIds.length > 0
+      ? await db.select().from(users).where(inArray(users.id, allUserIds))
+      : [];
+
+    let commentCounts: { taskId: string; count: number }[] = [];
+    try {
+      commentCounts = await db
         .select({ taskId: taskComments.taskId, count: sql<number>`count(*)` })
         .from(taskComments)
         .where(inArray(taskComments.taskId, taskList.map(t => t.id)))
-        .groupBy(taskComments.taskId),
-    ]);
+        .groupBy(taskComments.taskId);
+    } catch (e) {
+      // task_comments table may not exist yet on this environment
+    }
 
     const userMap = new Map(usersData.map(u => [u.id, u]));
     const commentCountMap = new Map(commentCounts.map(c => [c.taskId, Number(c.count)]));
@@ -3005,15 +3009,20 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Also get tasks where followup has next_followup_date = today
-    const followupsForToday = await db
-      .select()
-      .from(taskFollowups)
-      .where(
-        and(
-          gte(taskFollowups.nextFollowupDate, today),
-          lte(taskFollowups.nextFollowupDate, tomorrow)
-        )
-      );
+    let followupsForToday: { taskId: string }[] = [];
+    try {
+      followupsForToday = await db
+        .select()
+        .from(taskFollowups)
+        .where(
+          and(
+            gte(taskFollowups.nextFollowupDate, today),
+            lte(taskFollowups.nextFollowupDate, tomorrow)
+          )
+        );
+    } catch (e) {
+      // task_followups table may not exist yet on this environment
+    }
 
     // Get task IDs from followups
     const followupTaskIds = Array.from(new Set(followupsForToday.map(f => f.taskId)));
@@ -3047,21 +3056,27 @@ export class DatabaseStorage implements IStorage {
           ? await db.select().from(users).where(eq(users.id, task.assignedTo))
           : [undefined];
 
-        // Get followup count
-        const [countResult] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(taskFollowups)
-          .where(eq(taskFollowups.taskId, task.id));
-        
-        const followupsCount = Number(countResult?.count || 0);
+        let followupsCount = 0;
+        let latestFollowup: TaskFollowup | undefined;
+        try {
+          // Get followup count
+          const [countResult] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(taskFollowups)
+            .where(eq(taskFollowups.taskId, task.id));
+          followupsCount = Number(countResult?.count || 0);
 
-        // Get latest followup
-        const [latestFollowup] = await db
-          .select()
-          .from(taskFollowups)
-          .where(eq(taskFollowups.taskId, task.id))
-          .orderBy(desc(taskFollowups.createdAt))
-          .limit(1);
+          // Get latest followup
+          const [lf] = await db
+            .select()
+            .from(taskFollowups)
+            .where(eq(taskFollowups.taskId, task.id))
+            .orderBy(desc(taskFollowups.createdAt))
+            .limit(1);
+          latestFollowup = lf;
+        } catch (e) {
+          // task_followups table may not exist yet on this environment
+        }
 
         return {
           ...task,
