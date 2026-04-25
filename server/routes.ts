@@ -6762,31 +6762,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newTicket = await storage.createTicket(validatedData);
       
       // Award points and record assignment history if ticket is assigned
+      // Wrapped in try-catch: these secondary operations must not block ticket creation
       if (newTicket.assignedEngineerId) {
-        // Create initial assignment history entry
-        await storage.createTicketAssignmentHistory({
-          ticketId: newTicket.id,
-          engineerId: newTicket.assignedEngineerId,
-          assignedAt: new Date(),
-        });
+        try {
+          await storage.createTicketAssignmentHistory({
+            ticketId: newTicket.id,
+            engineerId: newTicket.assignedEngineerId,
+            assignedAt: new Date(),
+          });
+        } catch (histErr) {
+          console.error("[Ticket] Assignment history insert failed (table may not exist):", histErr);
+        }
         
-        await handleAssignment({
-          module: "tickets",
-          entityId: newTicket.id,
-          newAssigneeId: newTicket.assignedEngineerId,
-          previousAssigneeId: null,
-          assignedById: req.user.claims.sub,
-        });
+        try {
+          await handleAssignment({
+            module: "tickets",
+            entityId: newTicket.id,
+            newAssigneeId: newTicket.assignedEngineerId,
+            previousAssigneeId: null,
+            assignedById: req.user.claims.sub,
+          });
+        } catch (assignErr) {
+          console.error("[Ticket] handleAssignment failed:", assignErr);
+        }
       }
       
       // Log activity
-      await storage.logActivity({
-        entityType: "ticket",
-        entityId: newTicket.id,
-        action: "created",
-        description: `New ticket created: ${newTicket.ticketNumber} - ${newTicket.issueSummary}`,
-        userId: req.user.claims.sub,
-      });
+      try {
+        await storage.logActivity({
+          entityType: "ticket",
+          entityId: newTicket.id,
+          action: "created",
+          description: `New ticket created: ${newTicket.ticketNumber} - ${newTicket.issueSummary}`,
+          userId: req.user.claims.sub,
+        });
+      } catch (logErr) {
+        console.error("[Ticket] Activity log failed:", logErr);
+      }
 
       invalidateCache("tickets:");
       invalidateCache("my-department:");
