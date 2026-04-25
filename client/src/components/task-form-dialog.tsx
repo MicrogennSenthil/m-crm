@@ -145,8 +145,10 @@ export default function TaskFormDialog({ open, onOpenChange, task, onSuccess }: 
   });
 
   // Fetch all leads for linking tasks
+  // /api/leads returns a paginated { leads: [], total: ... } object, so extract the array
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["/api/leads"],
+    select: (data: any) => Array.isArray(data) ? data : (Array.isArray(data?.leads) ? data.leads : []),
   });
   
   // Fetch all customers
