@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getCached, setCached, invalidateCache } from "./cache";
-import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, verifyAuthToken, AUTH_COOKIE_NAME, blacklistUserJwt } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin, requirePermission, requireAnyPermission, isSuperAdmin, clearPermissionCache, clearAllPermissionCaches, signAuthToken, verifyAuthToken, AUTH_COOKIE_NAME, blacklistUserJwt, clearUserBlacklist } from "./replitAuth";
 import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalidateAccessControlCache, SUPER_ADMIN_EMAIL } from "./accessControl";
 import { db } from "./db";
 import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
@@ -340,6 +340,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update last login in background (non-blocking)
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
+
+      // Remove from logout blacklist so re-login works immediately
+      clearUserBlacklist(user.id);
 
       // Sign a JWT that carries user data so isAuthenticated needs ZERO DB queries.
       // Two delivery mechanisms:

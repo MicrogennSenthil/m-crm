@@ -46,12 +46,20 @@ export async function signAuthToken(userId: string, userData?: { email: string; 
     .sign(getJwtSecret());
 }
 
-// In-memory JWT blacklist: userId → logout timestamp (ms)
-// Any JWT issued BEFORE this timestamp is rejected, even if cookie wasn't cleared.
+// In-memory logout blacklist: userId → logout timestamp (ms)
+// Rejects both JWT cookies AND session auth issued before this timestamp.
 const jwtBlacklist = new Map<string, number>();
 
 export function blacklistUserJwt(userId: string) {
   jwtBlacklist.set(userId, Date.now());
+}
+
+export function clearUserBlacklist(userId: string) {
+  jwtBlacklist.delete(userId);
+}
+
+export function isUserBlacklisted(userId: string): boolean {
+  return jwtBlacklist.has(userId);
 }
 
 export async function verifyAuthToken(token: string): Promise<JwtUserPayload | null> {
@@ -343,6 +351,12 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
     // For local auth, set up req.user with claims for consistency
     const userId = (req.session as any).userId;
+    // Reject session if user has logged out (blacklist covers both JWT and session auth)
+    if (jwtBlacklist.has(userId)) {
+      (req.session as any).isLocalAuth = false;
+      (req.session as any).userId = null;
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     const user = await storage.getUser(userId);
     if (user) {
       // Check if user is active
