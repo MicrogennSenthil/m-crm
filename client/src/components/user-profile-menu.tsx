@@ -15,17 +15,16 @@ import { queryClient, clearAuthToken } from "@/lib/queryClient";
 export function UserProfileMenu() {
   const { user } = useAuth();
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    // Clear all client-side auth state first
     clearStoredUser();
     clearAuthToken();
     queryClient.clear();
-    // Await the server session destroy before redirecting — otherwise the
-    // session is still valid when the login page loads and useAuth() bounces
-    // the user straight back to the dashboard.
-    try {
-      await fetch("/api/auth/local-logout", { method: "POST" });
-    } catch (_) {}
-    window.location.replace("/auth/login");
+    // Navigate to the server-side logout endpoint (GET).
+    // The server destroys the session, clears both cookies (session + JWT),
+    // and issues a 302 redirect to /auth/login — all in one response.
+    // This guarantees cookies are cleared before the login page loads.
+    window.location.href = "/api/auth/logout";
   };
 
   const getUserInitials = () => {

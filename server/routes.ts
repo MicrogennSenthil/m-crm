@@ -863,7 +863,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Local logout
+  // Local logout — GET so cookies are cleared and redirect happen in one response
+  app.get("/api/auth/logout", async (req: any, res) => {
+    try {
+      const userId = (req.session as any).userId || req.user?.claims?.sub;
+      if (userId) {
+        invalidateCache(`auth:permissions:${userId}`);
+        invalidateCache(`auth:user:${userId}`);
+      }
+      req.session.destroy((err: any) => {
+        if (err) console.error("Error destroying session:", err);
+        // Clear both the session cookie and the JWT cookie in the same response
+        res.clearCookie("connect.sid", { path: "/" });
+        res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+        // 302 redirect — browser follows it only after applying the Set-Cookie headers
+        res.redirect("/auth/login");
+      });
+    } catch (error) {
+      console.error("Error logging out:", error);
+      res.redirect("/auth/login");
+    }
+  });
+
+  // Keep POST for backwards compatibility (used by older cached clients)
   app.post("/api/auth/local-logout", async (req: any, res) => {
     try {
       const userId = (req.session as any).userId || req.user?.claims?.sub;
@@ -872,9 +894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         invalidateCache(`auth:user:${userId}`);
       }
       req.session.destroy((err: any) => {
-        if (err) {
-          console.error("Error destroying session:", err);
-        }
+        if (err) console.error("Error destroying session:", err);
         res.clearCookie("connect.sid", { path: "/" });
         res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
         res.json({ success: true, message: "Logged out successfully" });
