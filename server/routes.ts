@@ -342,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       storage.updateUser(user.id, { lastLoginAt: new Date() }).catch(() => {});
 
       // Remove from logout blacklist so re-login works immediately
-      clearUserBlacklist(user.id);
+      await clearUserBlacklist(user.id);
 
       // Sign a JWT that carries user data so isAuthenticated needs ZERO DB queries.
       // Two delivery mechanisms:
@@ -889,9 +889,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       if (userId) {
-        // Blacklist the JWT — any existing mcrm_token cookie is rejected server-side,
-        // even if the browser fails to delete the cookie
-        blacklistUserJwt(userId);
+        // Blacklist the user — stored in Redis so survives PM2 restarts
+        await blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
       }
@@ -912,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = (req.session as any).userId || req.user?.claims?.sub;
       if (userId) {
-        blacklistUserJwt(userId);
+        await blacklistUserJwt(userId);
         invalidateCache(`auth:permissions:${userId}`);
         invalidateCache(`auth:user:${userId}`);
       }

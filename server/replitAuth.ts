@@ -10,6 +10,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { storage } from "./storage";
 import { sendWelcomeEmail } from "./email";
 import { pool } from "./db";
+import { getCachedAsync, setCachedAsync, invalidateCacheAsync } from "./cache";
 
 // JWT helpers for VPS cookie-bypass auth
 const JWT_ALG = "HS256";
@@ -46,29 +47,35 @@ export async function signAuthToken(userId: string, userData?: { email: string; 
     .sign(getJwtSecret());
 }
 
-// In-memory logout blacklist: userId → logout timestamp (ms)
-// Rejects both JWT cookies AND session auth issued before this timestamp.
-const jwtBlacklist = new Map<string, number>();
+// Logout blacklist stored in Redis (persistent across PM2 restarts) with in-memory fallback.
+// Key: logout:blacklist:<userId>  Value: logout timestamp (ms as string)  TTL: 7 days
+const BLACKLIST_TTL = 7 * 24 * 60 * 60; // seconds
+const blacklistKey = (userId: string) => `logout:blacklist:${userId}`;
 
-export function blacklistUserJwt(userId: string) {
-  jwtBlacklist.set(userId, Date.now());
+export async function blacklistUserJwt(userId: string): Promise<void> {
+  await setCachedAsync(blacklistKey(userId), Date.now(), BLACKLIST_TTL);
 }
 
-export function clearUserBlacklist(userId: string) {
-  jwtBlacklist.delete(userId);
+export async function clearUserBlacklist(userId: string): Promise<void> {
+  await invalidateCacheAsync(blacklistKey(userId));
 }
 
-export function isUserBlacklisted(userId: string): boolean {
-  return jwtBlacklist.has(userId);
+export async function isUserBlacklisted(userId: string): Promise<boolean> {
+  const ts = await getCachedAsync<number>(blacklistKey(userId));
+  return ts !== null;
+}
+
+async function getBlacklistTimestamp(userId: string): Promise<number | null> {
+  return getCachedAsync<number>(blacklistKey(userId));
 }
 
 export async function verifyAuthToken(token: string): Promise<JwtUserPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload.isLocalAuth && typeof payload.sub === "string") {
-      // Reject tokens issued before the user's logout timestamp
-      const logoutAt = jwtBlacklist.get(payload.sub);
-      if (logoutAt) {
+      // Reject tokens issued before the user's logout timestamp (Redis-backed, survives restarts)
+      const logoutAt = await getBlacklistTimestamp(payload.sub);
+      if (logoutAt !== null) {
         const issuedAt = (payload.iat ?? 0) * 1000; // iat is in seconds
         if (issuedAt < logoutAt) return null;
       }
@@ -351,8 +358,9 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
     // For local auth, set up req.user with claims for consistency
     const userId = (req.session as any).userId;
-    // Reject session if user has logged out (blacklist covers both JWT and session auth)
-    if (jwtBlacklist.has(userId)) {
+    // Reject session if user has logged out (Redis-backed, survives PM2 restarts)
+    const blacklistedAt = await getBlacklistTimestamp(userId);
+    if (blacklistedAt !== null) {
       (req.session as any).isLocalAuth = false;
       (req.session as any).userId = null;
       return res.status(401).json({ message: "Unauthorized" });
