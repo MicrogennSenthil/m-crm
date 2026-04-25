@@ -15,12 +15,16 @@ import { queryClient, clearAuthToken } from "@/lib/queryClient";
 export function UserProfileMenu() {
   const { user } = useAuth();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearStoredUser();
     clearAuthToken();
     queryClient.clear();
-    fetch("/api/auth/local-logout", { method: "POST" }).catch(() => {});
-    // Hard redirect — avoids useAuth() re-check loading spinner on the login page
+    // Await the server session destroy before redirecting — otherwise the
+    // session is still valid when the login page loads and useAuth() bounces
+    // the user straight back to the dashboard.
+    try {
+      await fetch("/api/auth/local-logout", { method: "POST" });
+    } catch (_) {}
     window.location.replace("/auth/login");
   };
 
