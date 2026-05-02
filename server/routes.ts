@@ -6791,58 +6791,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertTicketSchema.parse(req.body);
       
-      // NO immediate auto-assignment - tickets stay unassigned for 10 minutes
-      // to allow manual allocation. After 10 minutes, the scheduler will auto-assign.
-      // Only mark as manual assignment if explicitly assigned by user
       if (validatedData.assignedEngineerId) {
         (validatedData as any).assignmentMethod = "manual";
       }
       
       const newTicket = await storage.createTicket(validatedData);
       
-      // Award points and record assignment history if ticket is assigned
-      // Wrapped in try-catch: these secondary operations must not block ticket creation
-      if (newTicket.assignedEngineerId) {
-        try {
-          await storage.createTicketAssignmentHistory({
-            ticketId: newTicket.id,
-            engineerId: newTicket.assignedEngineerId,
-            assignedAt: new Date(),
-          });
-        } catch (histErr) {
-          console.error("[Ticket] Assignment history insert failed (table may not exist):", histErr);
-        }
-        
-        try {
-          await handleAssignment({
-            module: "tickets",
-            entityId: newTicket.id,
-            newAssigneeId: newTicket.assignedEngineerId,
-            previousAssigneeId: null,
-            assignedById: req.user.claims.sub,
-          });
-        } catch (assignErr) {
-          console.error("[Ticket] handleAssignment failed:", assignErr);
-        }
-      }
-      
-      // Log activity
-      try {
-        await storage.logActivity({
-          entityType: "ticket",
-          entityId: newTicket.id,
-          action: "created",
-          description: `New ticket created: ${newTicket.ticketNumber} - ${newTicket.issueSummary}`,
-          userId: req.user.claims.sub,
-        });
-      } catch (logErr) {
-        console.error("[Ticket] Activity log failed:", logErr);
-      }
-
+      // Respond immediately — secondary ops (points, history, activity log) run in background
       invalidateCache("tickets:");
       invalidateCache("my-department:");
       invalidateCache("dashboard:");
       res.json(newTicket);
+
+      // Fire-and-forget: do not await these after response is sent
+      const userId = req.user.claims.sub;
+      (async () => {
+        try {
+          if (newTicket.assignedEngineerId) {
+            await Promise.all([
+              storage.createTicketAssignmentHistory({
+                ticketId: newTicket.id,
+                engineerId: newTicket.assignedEngineerId,
+                assignedAt: new Date(),
+              }).catch(e => console.error("[Ticket] Assignment history failed:", e)),
+              handleAssignment({
+                module: "tickets",
+                entityId: newTicket.id,
+                newAssigneeId: newTicket.assignedEngineerId,
+                previousAssigneeId: null,
+                assignedById: userId,
+              }).catch(e => console.error("[Ticket] handleAssignment failed:", e)),
+            ]);
+          }
+          await storage.logActivity({
+            entityType: "ticket",
+            entityId: newTicket.id,
+            action: "created",
+            description: `New ticket created: ${newTicket.ticketNumber} - ${newTicket.issueSummary}`,
+            userId,
+          });
+        } catch (bgErr) {
+          console.error("[Ticket] Background ops error:", bgErr);
+        }
+      })();
     } catch (error: any) {
       console.error("Error creating ticket:", error);
       const detail = error?.message || String(error);
