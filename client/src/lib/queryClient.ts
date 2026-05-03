@@ -106,6 +106,40 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// ── Safe query helpers ────────────────────────────────────────────────────
+// These throw on !res.ok (so React Query gets an `error` instead of trying
+// to render an error-shaped JSON body), and validate the response shape so
+// callers can rely on getting an array / object back.
+
+export function safeArrayQueryFn<T>(url: string): () => Promise<T[]> {
+  return async () => {
+    const res = await fetch(url, { credentials: "include", headers: authHeaders() });
+    if (!res.ok) {
+      const body = await res.text();
+      let msg = body || `Request failed with status ${res.status}`;
+      try { const j = JSON.parse(body); if (j?.message) msg = j.message; } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json().catch(() => null);
+    return Array.isArray(data) ? (data as T[]) : [];
+  };
+}
+
+export function safeObjectQueryFn<T>(url: string): () => Promise<T | null> {
+  return async () => {
+    const res = await fetch(url, { credentials: "include", headers: authHeaders() });
+    if (!res.ok) {
+      const body = await res.text();
+      let msg = body || `Request failed with status ${res.status}`;
+      try { const j = JSON.parse(body); if (j?.message) msg = j.message; } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json().catch(() => null);
+    if (data && typeof data === "object" && !Array.isArray(data)) return data as T;
+    return null;
+  };
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
