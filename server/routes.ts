@@ -17063,6 +17063,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Quotation ${created.quotationNumber} created for ${created.propertyName}`,
         userId: req.user.claims.sub,
       }).catch(() => {});
+      // If linked to a lead, move that lead to "quote_sent" stage and stamp quote info
+      if (created.leadId) {
+        try {
+          const lead = await storage.getLead(created.leadId);
+          if (lead && lead.stage !== "closed_won" && lead.stage !== "closed_lost") {
+            await storage.updateLead(created.leadId, {
+              stage: "quote_sent",
+              quoteSentDate: new Date(),
+              quoteValue: Math.round((created.total || 0) / 100),
+            } as any);
+          }
+        } catch (err) {
+          console.error("Failed to advance lead to quote_sent:", err);
+        }
+      }
       res.json(created);
     } catch (e: any) {
       console.error("Create quotation error:", e);

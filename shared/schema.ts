@@ -1923,6 +1923,8 @@ export const quotations = pgTable("quotations", {
   emailSentTo: text("email_sent_to"),
   whatsappSentAt: timestamp("whatsapp_sent_at"),
   whatsappSentTo: text("whatsapp_sent_to"),
+  // Link to originating lead (optional)
+  leadId: varchar("lead_id").references(() => leads.id, { onDelete: "set null" }),
   // Audit
   createdById: varchar("created_by_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),

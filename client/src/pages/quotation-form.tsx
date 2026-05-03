@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, safeArrayQueryFn, safeObjectQueryFn } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Save, Printer } from "lucide-react";
-import type { Module, QuotationSettings, Quotation, User } from "@shared/schema";
+import { ArrowLeft, Plus, Trash2, Save, Printer, Check, ChevronsUpDown, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { Module, QuotationSettings, Quotation, User, Lead } from "@shared/schema";
 
 const CATEGORIES = [
   { value: "software_onpremise", label: "Software — On-Premises" },
@@ -42,14 +46,37 @@ export default function QuotationFormPage() {
   const editId = params.id;
   const { toast } = useToast();
 
-  const { data: settings } = useQuery<QuotationSettings>({ queryKey: ["/api/quotation-settings"] });
-  const { data: modules = [] } = useQuery<Module[]>({ queryKey: ["/api/modules"] });
-  const { data: users = [] } = useQuery<User[]>({ queryKey: ["/api/users"] });
-  const { data: existing } = useQuery<Quotation>({
+  const { data: settings, error: settingsError } = useQuery<QuotationSettings | null>({
+    queryKey: ["/api/quotation-settings"],
+    queryFn: safeObjectQueryFn<QuotationSettings>("/api/quotation-settings"),
+  });
+  const { data: modules = [], error: modulesError } = useQuery<Module[]>({
+    queryKey: ["/api/modules"],
+    queryFn: safeArrayQueryFn<Module>("/api/modules"),
+  });
+  const { data: users = [], error: usersError } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    queryFn: safeArrayQueryFn<User>("/api/users"),
+  });
+  const { data: existing, error: existingError } = useQuery<Quotation | null>({
     queryKey: ["/api/quotations", editId],
-    queryFn: () => fetch(`/api/quotations/${editId}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: safeObjectQueryFn<Quotation>(`/api/quotations/${editId}`),
     enabled: !!editId,
   });
+  // Pull leads for the picker (largest single page; client-side searchable)
+  const { data: leadsResp } = useQuery<{ leads: Lead[] } | Lead[]>({
+    queryKey: ["/api/leads", "for-quotation"],
+    queryFn: safeObjectQueryFn<{ leads: Lead[] } | Lead[]>("/api/leads?pageSize=500"),
+  });
+
+  const safeModules: Module[] = Array.isArray(modules) ? modules : [];
+  const safeUsers: User[] = Array.isArray(users) ? users : [];
+  const safeLeads: Lead[] = Array.isArray(leadsResp)
+    ? leadsResp
+    : Array.isArray((leadsResp as any)?.leads)
+      ? (leadsResp as any).leads
+      : [];
+  const loadError = settingsError || modulesError || usersError || existingError;
 
   // Form state
   const [type, setType] = useState<"quotation" | "amc">("quotation");
@@ -63,6 +90,8 @@ export default function QuotationFormPage() {
   const [designation, setDesignation] = useState("");
   const [bdmId, setBdmId] = useState<string>("");
   const [bdmName, setBdmName] = useState("");
+  const [leadId, setLeadId] = useState<string>("");
+  const [leadPickerOpen, setLeadPickerOpen] = useState(false);
   const [validityDays, setValidityDays] = useState(30);
   const [gstPercent, setGstPercent] = useState(18);
   const [paymentTerms, setPaymentTerms] = useState("");
@@ -96,6 +125,7 @@ export default function QuotationFormPage() {
       setDesignation(existing.designation || "");
       setBdmId(existing.bdmId || "");
       setBdmName(existing.bdmName || "");
+      setLeadId((existing as any).leadId || "");
       setValidityDays(existing.validityDays ?? 30);
       setGstPercent(existing.gstPercent ?? 18);
       setPaymentTerms(existing.paymentTerms || "");
@@ -108,8 +138,8 @@ export default function QuotationFormPage() {
 
   // Filter modules by category
   const filteredModules = useMemo(
-    () => modules.filter((m) => !category || !m.category || m.category === category),
-    [modules, category]
+    () => safeModules.filter((m) => !category || !m.category || m.category === category),
+    [safeModules, category]
   );
 
   const addItem = () => {
@@ -151,8 +181,31 @@ export default function QuotationFormPage() {
 
   const onUserChange = (id: string) => {
     setBdmId(id);
-    const u = users.find((x) => x.id === id);
+    const u = safeUsers.find((x) => x.id === id);
     if (u) setBdmName(`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "");
+  };
+
+  const selectedLead = safeLeads.find((l) => l.id === leadId);
+
+  const pickLead = (lead: Lead) => {
+    setLeadId(lead.id);
+    setLeadPickerOpen(false);
+    if (!propertyName) setPropertyName(lead.companyName || "");
+    if (!kindAttentionName) setKindAttentionName(lead.contactPerson || "");
+    if (!email) setEmail(lead.contactEmail || "");
+    if (!phone) setPhone(lead.contactPhone || "");
+    if (!city && lead.city) setCity(lead.city);
+    if (!bdmId && lead.salesExecutiveId) {
+      setBdmId(lead.salesExecutiveId);
+      const u = safeUsers.find((x) => x.id === lead.salesExecutiveId);
+      if (u) setBdmName(`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "");
+    }
+    toast({ title: "Lead linked", description: `${lead.companyName} — fields pre-filled` });
+  };
+
+  const clearLead = () => {
+    setLeadId("");
+    toast({ title: "Lead unlinked", description: "Customer fields kept; this quotation is now standalone." });
   };
 
   const saveMut = useMutation({
@@ -162,6 +215,7 @@ export default function QuotationFormPage() {
       const body: any = {
         type, category, propertyName, address, city, email, phone,
         kindAttentionName, designation, bdmId: bdmId || null, bdmName,
+        leadId: leadId || null,
         validityDays,
         items, // stored as JSON (rupees)
         subtotal: Math.round(subtotal * 100),
@@ -207,6 +261,31 @@ export default function QuotationFormPage() {
     }
     saveMut.mutate();
   };
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        <div className="flex items-center gap-3">
+          <Link href="/quotations">
+            <Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="h-4 w-4" /></Button>
+          </Link>
+          <h1 className="text-2xl font-bold">{editId ? "Edit Quotation" : "New Quotation"}</h1>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive font-medium" data-testid="text-load-error">
+              Failed to load quotation form
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">{(loadError as Error).message}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              If this is a fresh deploy, the database tables may need to be created, or you may
+              not have permission to view modules / users / settings.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
@@ -263,6 +342,75 @@ export default function QuotationFormPage() {
         <CardHeader><CardTitle className="text-base">Customer / Property Details</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
+            <Label>Link to Sales Lead (optional)</Label>
+            <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+              <Popover open={leadPickerOpen} onOpenChange={setLeadPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={leadPickerOpen}
+                    className="flex-1 justify-between font-normal"
+                    data-testid="button-pick-lead"
+                  >
+                    {selectedLead
+                      ? `${selectedLead.companyName} — ${selectedLead.contactPerson}`
+                      : "Search & pick an existing lead..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Type company, contact, email or phone..." data-testid="input-lead-search" />
+                    <CommandList>
+                      <CommandEmpty>
+                        No matching leads. You can keep typing the customer name below to create a fresh client.
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {safeLeads.map((l) => (
+                          <CommandItem
+                            key={l.id}
+                            value={`${l.companyName} ${l.contactPerson} ${l.contactEmail} ${l.contactPhone || ""} ${l.city || ""}`}
+                            onSelect={() => pickLead(l)}
+                            data-testid={`option-lead-${l.id}`}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", leadId === l.id ? "opacity-100" : "opacity-0")} />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{l.companyName}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {l.contactPerson} · {l.contactEmail}
+                                {l.city ? ` · ${l.city}` : ""}
+                                {l.stage ? ` · ${l.stage}` : ""}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedLead && (
+                <Button type="button" variant="ghost" size="sm" onClick={clearLead} data-testid="button-clear-lead">
+                  <X className="h-4 w-4 mr-1" />Unlink
+                </Button>
+              )}
+            </div>
+            {selectedLead ? (
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                <Badge variant="secondary" data-testid="badge-linked-lead">Linked to lead</Badge>
+                <span>
+                  Stage: <b>{selectedLead.stage}</b>. After saving, this lead will move to <b>quote_sent</b>.
+                </span>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Pick an existing lead to auto-fill the fields below, or just type a new client name to create a standalone quotation.
+              </p>
+            )}
+          </div>
+          <div className="md:col-span-2">
             <Label>Property / Customer Name *</Label>
             <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} data-testid="input-property" />
           </div>
@@ -295,7 +443,7 @@ export default function QuotationFormPage() {
             <Select value={bdmId} onValueChange={onUserChange}>
               <SelectTrigger data-testid="select-bdm"><SelectValue placeholder="Select BDM" /></SelectTrigger>
               <SelectContent>
-                {users.map((u) => (
+                {safeUsers.map((u) => (
                   <SelectItem key={u.id} value={u.id}>
                     {(u.firstName || "") + " " + (u.lastName || "")} ({u.email})
                   </SelectItem>
@@ -311,7 +459,7 @@ export default function QuotationFormPage() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-base">Line Items</CardTitle>
             <div className="flex gap-2 flex-wrap">
-              <Select onValueChange={(modId) => { const m = modules.find(x => x.id === modId); if (m) addModule(m); }}>
+              <Select onValueChange={(modId) => { const m = safeModules.find(x => x.id === modId); if (m) addModule(m); }}>
                 <SelectTrigger className="w-64" data-testid="select-add-module">
                   <SelectValue placeholder={`+ Add module${filteredModules.length ? ` (${filteredModules.length})` : ""}`} />
                 </SelectTrigger>
