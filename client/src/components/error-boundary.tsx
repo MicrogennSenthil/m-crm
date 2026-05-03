@@ -23,6 +23,30 @@ function isChunkLoadError(error: Error): boolean {
   );
 }
 
+// Force a fully fresh load: clear SW + caches, then reload with cache-busting query param.
+// Without the query param, browsers may re-serve index.html from disk cache and the
+// chunk-not-found loop continues forever.
+function hardReload() {
+  const bust = async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      // ignore — we still want to reload
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("_v", Date.now().toString());
+    window.location.replace(url.toString());
+  };
+  void bust();
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -38,9 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const key = "chunk_reload_attempted";
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, "1");
-        // Replace href forces the browser to re-fetch HTML from the server,
-        // bypassing any stale cache entry.
-        window.location.replace(window.location.href);
+        hardReload();
       }
     }
 
@@ -55,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.isChunkError) {
       // Clear the guard so the next hard-reload attempt is allowed.
       sessionStorage.removeItem("chunk_reload_attempted");
-      window.location.replace(window.location.href);
+      hardReload();
       return;
     }
     this.setState({ hasError: false, error: null, isChunkError: false });
