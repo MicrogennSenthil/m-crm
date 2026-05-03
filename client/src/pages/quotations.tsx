@@ -45,17 +45,31 @@ export default function QuotationsPage() {
   if (status !== "all") params.set("status", status);
   const qs = params.toString();
 
-  const { data: quotations = [], isLoading, error } = useQuery<Quotation[]>({
+  const { data: quotations = [], isLoading, error, refetch, isFetching } = useQuery<Quotation[]>({
     queryKey: ["/api/quotations", type, status],
     queryFn: async () => {
-      const r = await fetch(`/api/quotations${qs ? `?${qs}` : ""}`, { credentials: "include" });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        throw new Error(body?.message || `Failed to load quotations (${r.status})`);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      try {
+        const r = await fetch(`/api/quotations${qs ? `?${qs}` : ""}`, {
+          credentials: "include",
+          signal: ctrl.signal,
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body?.message || `Failed to load quotations (${r.status})`);
+        }
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      } catch (e: any) {
+        if (e?.name === "AbortError") throw new Error("Request timed out after 15s. Try again.");
+        throw e;
+      } finally {
+        clearTimeout(timer);
       }
-      const data = await r.json();
-      return Array.isArray(data) ? data : [];
     },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 
   const safeQuotations: Quotation[] = Array.isArray(quotations) ? quotations : [];
@@ -163,14 +177,17 @@ export default function QuotationsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="inline-block h-6 w-6 border-2 border-current border-t-transparent rounded-full animate-spin mb-2" />
+              <p className="text-sm">Loading quotations…</p>
+            </div>
           ) : error ? (
             <div className="text-center py-12">
               <p className="text-destructive font-medium">Failed to load quotations</p>
               <p className="text-xs text-muted-foreground mt-2">{(error as Error).message}</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                If this is a fresh deploy, the database tables may need to be created.
-              </p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()} disabled={isFetching} data-testid="button-retry-quotations">
+                {isFetching ? "Retrying…" : "Retry"}
+              </Button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12">

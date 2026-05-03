@@ -5173,7 +5173,7 @@ export class DatabaseStorage implements IStorage {
     const q = conds.length > 0
       ? db.select().from(quotations).where(and(...conds))
       : db.select().from(quotations);
-    return await q.orderBy(desc(quotations.createdAt));
+    return await q.orderBy(desc(quotations.createdAt)).limit(500);
   }
   async getQuotation(id: string): Promise<Quotation | undefined> {
     const [row] = await db.select().from(quotations).where(eq(quotations.id, id));
