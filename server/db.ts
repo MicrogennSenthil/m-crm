@@ -19,4 +19,11 @@ export const pool = new Pool({
   allowExitOnIdle: false,
 });
 
+// Prevent crashes from idle-client errors (e.g. Neon dropping idle TCP
+// connections with "57P01 terminating connection due to administrator command").
+// Without this listener Node treats the unhandled `error` event as fatal.
+pool.on('error', (err: any) => {
+  console.warn('[db.pool] idle client error:', err?.code || '', err?.message || err);
+});
+
 export const db = drizzle({ client: pool, schema });
