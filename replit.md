@@ -71,6 +71,19 @@ The database schema comprises 14 tables. Core business logic includes round-robi
     -   Nginx: only edit `/etc/nginx/sites-available/mcrm` — NEVER global nginx.conf or other site configs
     -   Database: only `mcrm_db` — NEVER touch other databases
 
+## Recent Changes (May 3, 2026)
+-   **Quotations Module (Sales)**: New module for preparing, sending and tracking customer Quotations and AMC contracts.
+    -   Schema: added `price`, `category`, `unit`, `hsnCode` to `modules`; new tables `quotations` (with line items as JSON, amounts in paise) and `quotation_settings` (singleton row id="default").
+    -   Separate, configurable number sequences for Quotations and AMC (prefix + year suffix + auto-increment, atomic via `SELECT ... FOR UPDATE` in a transaction to prevent duplicates under concurrency).
+    -   Per-quotation editable: GST %, Validity days, Payment Terms, T&C (defaults pulled from settings, overridable per doc).
+    -   Module picker filtered by category; default unit price auto-filled from module master.
+    -   Professional A4-print HTML template (navy `#1a2b6d` header, golden `#f5a623` Grand Total).
+    -   **Email**: send via existing Resend integration; tracks `emailSentAt` / `emailSentTo`.
+    -   **WhatsApp**: configurable endpoint + Bearer token in settings (POSTs `{ to, message, quotationNumber }` JSON to user's M-WhatsApp instance, e.g. `https://wa.microgenn.com/api/...`); disabled by default.
+    -   **Security**: object-level access control — only the creator, admin or super-admin (`senthil@microgenn.com`) can read/edit/delete/print/send any quotation; `whatsappToken` redacted from non-admin GET on settings; settings PATCH limited to `isAdmin`; Zod-validated `to` for email (RFC email) and WhatsApp (8–15 digit phone, optional `+`).
+    -   Routes: `/quotations`, `/quotations/new`, `/quotations/:id/edit`, `/quotations/:id` (print), `/quotations/settings` (admin).
+    -   Masters → Modules tab now exposes Category / Default Price / Unit / HSN.
+
 ## Recent Changes (March 5, 2026)
 -   **Lead creation error handling**: Server returns actual Zod/DB error messages; frontend shows specific reason in toast; PLANNING_REQUIRED (403) redirects to Sales Planning
 -   **Custom lead source**: Added `custom_lead_source` column to leads table; selecting "Other" as lead source shows a "Specify Source" text input; custom source shown in badges, filters, reports export, and task-to-lead conversion form

@@ -1688,7 +1688,9 @@ function ModulesTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead className="hidden md:table-cell">Category</TableHead>
                   <TableHead className="hidden sm:table-cell">Description</TableHead>
+                  <TableHead className="text-right hidden sm:table-cell">Price (₹)</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1696,8 +1698,14 @@ function ModulesTab() {
                 {filteredModules.map((module) => (
                   <TableRow key={module.id} data-testid={`row-module-${module.id}`}>
                     <TableCell className="font-medium">{module.name}</TableCell>
+                    <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                      {(module as any).category ? String((module as any).category).replace(/_/g, " ") : "-"}
+                    </TableCell>
                     <TableCell className="hidden sm:table-cell max-w-md truncate">
                       {module.description || "-"}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-right font-mono">
+                      {(module as any).price ? `₹${((module as any).price as number).toLocaleString("en-IN")}` : "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -1777,6 +1785,10 @@ function ModuleForm({
   const [formData, setFormData] = useState({
     name: module?.name || "",
     description: module?.description || "",
+    category: (module as any)?.category || "software_onpremise",
+    price: (module as any)?.price ?? 0,
+    unit: (module as any)?.unit || "Nos",
+    hsnCode: (module as any)?.hsnCode || "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1812,6 +1824,56 @@ function ModuleForm({
             rows={3}
             data-testid="input-module-description"
           />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="module-category">Category</Label>
+            <select
+              id="module-category"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+              data-testid="select-module-category"
+            >
+              <option value="software_onpremise">Software — On-Premises</option>
+              <option value="software_cloud">Software — Cloud Based</option>
+              <option value="power_automation">Power Automation</option>
+              <option value="digital_marketing">Digital Marketing</option>
+              <option value="door_lock">Door Lock</option>
+              <option value="computer_system">Computer System</option>
+              <option value="amc">AMC</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="module-price">Default Price (₹)</Label>
+            <Input
+              id="module-price"
+              type="number"
+              value={formData.price}
+              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              data-testid="input-module-price"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="module-unit">Unit</Label>
+            <Input
+              id="module-unit"
+              value={formData.unit}
+              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+              placeholder="Nos / License / Year"
+              data-testid="input-module-unit"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="module-hsn">HSN/SAC Code</Label>
+            <Input
+              id="module-hsn"
+              value={formData.hsnCode}
+              onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+              data-testid="input-module-hsn"
+            />
+          </div>
         </div>
       </div>
       <DialogFooter>

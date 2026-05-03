@@ -36,6 +36,12 @@ import {
   knowledgeBaseChunks,
   knowledgeBaseQueries,
   systemSettings,
+  quotations,
+  quotationSettings,
+  type Quotation,
+  type InsertQuotation,
+  type QuotationSettings,
+  type InsertQuotationSettings,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -287,6 +293,18 @@ export interface IStorage {
   getProjectEngineersForProjects(projectIds: string[]): Promise<ProjectEngineer[]>;
   assignEngineer(assignment: InsertProjectEngineer): Promise<ProjectEngineer>;
   removeEngineer(id: string): Promise<void>;
+
+  // Quotation operations
+  getQuotations(filters?: { type?: string; status?: string; createdById?: string }): Promise<Quotation[]>;
+  getQuotation(id: string): Promise<Quotation | undefined>;
+  createQuotation(data: InsertQuotation, createdById: string): Promise<Quotation>;
+  updateQuotation(id: string, data: Partial<InsertQuotation>): Promise<Quotation>;
+  deleteQuotation(id: string): Promise<void>;
+  markQuotationEmailSent(id: string, to: string): Promise<void>;
+  markQuotationWhatsappSent(id: string, to: string): Promise<void>;
+  getQuotationSettings(): Promise<QuotationSettings>;
+  updateQuotationSettings(data: Partial<InsertQuotationSettings>): Promise<QuotationSettings>;
+  generateQuotationNumber(type: 'quotation' | 'amc'): Promise<string>;
 
   // Module operations (Master data)
   getModules(): Promise<Module[]>;
@@ -5144,6 +5162,86 @@ export class DatabaseStorage implements IStorage {
     }
     
     return results;
+  }
+
+  // ===== QUOTATIONS =====
+  async getQuotations(filters?: { type?: string; status?: string; createdById?: string }): Promise<Quotation[]> {
+    const conds: any[] = [];
+    if (filters?.type) conds.push(eq(quotations.type, filters.type));
+    if (filters?.status) conds.push(eq(quotations.status, filters.status));
+    if (filters?.createdById) conds.push(eq(quotations.createdById, filters.createdById));
+    const q = conds.length > 0
+      ? db.select().from(quotations).where(and(...conds))
+      : db.select().from(quotations);
+    return await q.orderBy(desc(quotations.createdAt));
+  }
+  async getQuotation(id: string): Promise<Quotation | undefined> {
+    const [row] = await db.select().from(quotations).where(eq(quotations.id, id));
+    return row;
+  }
+  async generateQuotationNumber(type: 'quotation' | 'amc'): Promise<string> {
+    // Ensure settings row exists before transaction
+    await this.getQuotationSettings();
+    return await db.transaction(async (tx) => {
+      // Lock the settings row to make concurrent allocations safe
+      const locked = await tx.execute(
+        sql`SELECT * FROM quotation_settings WHERE id = 'default' FOR UPDATE`
+      );
+      const row: any = (locked as any).rows?.[0] || (Array.isArray(locked) ? locked[0] : null);
+      if (!row) throw new Error('Quotation settings missing');
+      const padding = row.number_padding || row.numberPadding || 4;
+      if (type === 'amc') {
+        const next = row.amc_next_number || row.amcNextNumber || 1;
+        const prefix = row.amc_prefix || row.amcPrefix || 'MGN/AMC/';
+        const year = row.amc_year_suffix || row.amcYearSuffix || '';
+        const num = String(next).padStart(padding, '0');
+        const formatted = year ? `${prefix}${num}/${year}` : `${prefix}${num}`;
+        await tx.execute(sql`UPDATE quotation_settings SET amc_next_number = ${next + 1}, updated_at = NOW() WHERE id = 'default'`);
+        return formatted;
+      } else {
+        const next = row.quotation_next_number || row.quotationNextNumber || 1;
+        const prefix = row.quotation_prefix || row.quotationPrefix || 'MGN/QT/';
+        const year = row.quotation_year_suffix || row.quotationYearSuffix || '';
+        const num = String(next).padStart(padding, '0');
+        const formatted = year ? `${prefix}${num}/${year}` : `${prefix}${num}`;
+        await tx.execute(sql`UPDATE quotation_settings SET quotation_next_number = ${next + 1}, updated_at = NOW() WHERE id = 'default'`);
+        return formatted;
+      }
+    });
+  }
+  async createQuotation(data: InsertQuotation, createdById: string): Promise<Quotation> {
+    const quotationNumber = await this.generateQuotationNumber((data.type as 'quotation' | 'amc') || 'quotation');
+    const [row] = await db.insert(quotations).values({
+      ...data,
+      quotationNumber,
+      createdById,
+    } as any).returning();
+    return row;
+  }
+  async updateQuotation(id: string, data: Partial<InsertQuotation>): Promise<Quotation> {
+    const [row] = await db.update(quotations).set({ ...data, updatedAt: new Date() } as any).where(eq(quotations.id, id)).returning();
+    return row;
+  }
+  async deleteQuotation(id: string): Promise<void> {
+    await db.delete(quotations).where(eq(quotations.id, id));
+  }
+  async markQuotationEmailSent(id: string, to: string): Promise<void> {
+    await db.update(quotations).set({ emailSentAt: new Date(), emailSentTo: to, status: 'sent', updatedAt: new Date() }).where(eq(quotations.id, id));
+  }
+  async markQuotationWhatsappSent(id: string, to: string): Promise<void> {
+    await db.update(quotations).set({ whatsappSentAt: new Date(), whatsappSentTo: to, status: 'sent', updatedAt: new Date() }).where(eq(quotations.id, id));
+  }
+  async getQuotationSettings(): Promise<QuotationSettings> {
+    const [row] = await db.select().from(quotationSettings).where(eq(quotationSettings.id, 'default'));
+    if (row) return row;
+    const [created] = await db.insert(quotationSettings).values({ id: 'default' } as any).returning();
+    return created;
+  }
+  async updateQuotationSettings(data: Partial<InsertQuotationSettings>): Promise<QuotationSettings> {
+    await this.getQuotationSettings(); // ensure row exists
+    const { id: _ignoreId, ...safe } = (data as any) || {};
+    const [row] = await db.update(quotationSettings).set({ ...safe, updatedAt: new Date() } as any).where(eq(quotationSettings.id, 'default')).returning();
+    return row;
   }
 }
 

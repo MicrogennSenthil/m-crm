@@ -408,6 +408,11 @@ export const modules = pgTable("modules", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
+  // Quotation pricing fields
+  category: text("category"), // software_onpremise | software_cloud | power_automation | digital_marketing | door_lock | computer_system | amc | other
+  price: integer("price").default(0), // Default unit price in INR (no decimals - rupees only)
+  unit: text("unit").default("Nos"), // Nos, License, User, Year, Month, Lot, etc.
+  hsnCode: text("hsn_code"), // HSN/SAC code for GST
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1826,3 +1831,116 @@ export const insertSalesMonthlyTargetSchema = createInsertSchema(salesMonthlyTar
 
 export type InsertSalesMonthlyTarget = z.infer<typeof insertSalesMonthlyTargetSchema>;
 export type SalesMonthlyTarget = typeof salesMonthlyTargets.$inferSelect;
+
+// =====================================================
+// QUOTATIONS MODULE
+// =====================================================
+
+// Quotation Settings (single row table - id="default")
+export const quotationSettings = pgTable("quotation_settings", {
+  id: varchar("id").primaryKey().default("default"),
+  // Number sequences
+  quotationPrefix: text("quotation_prefix").default("MGN/QT/"),
+  quotationYearSuffix: text("quotation_year_suffix").default("26-27"),
+  quotationNextNumber: integer("quotation_next_number").default(1),
+  amcPrefix: text("amc_prefix").default("MGN/AMC/"),
+  amcYearSuffix: text("amc_year_suffix").default("26-27"),
+  amcNextNumber: integer("amc_next_number").default(1),
+  numberPadding: integer("number_padding").default(4), // 4 -> 0001
+  // Defaults
+  defaultGstPercent: integer("default_gst_percent").default(18),
+  defaultValidityDays: integer("default_validity_days").default(30),
+  defaultPaymentTerms: text("default_payment_terms").default("50% advance along with confirmation order, balance 50% before delivery."),
+  defaultTermsConditions: text("default_terms_conditions").default("1. Prices are exclusive of GST.\n2. Quotation valid for 30 days from date of issue.\n3. Delivery within 2-3 weeks from order confirmation.\n4. Payment as per agreed terms.\n5. All disputes subject to Chennai jurisdiction."),
+  // Company / Letterhead
+  companyName: text("company_name").default("Microgenn India Pvt Ltd"),
+  companyAddress: text("company_address").default(""),
+  companyPhone: text("company_phone").default(""),
+  companyEmail: text("company_email").default(""),
+  companyGstin: text("company_gstin").default(""),
+  companyWebsite: text("company_website").default("www.microgenn.com"),
+  bankDetails: text("bank_details").default(""),
+  // WhatsApp integration (M-Whatsapp)
+  whatsappEndpoint: text("whatsapp_endpoint").default("https://wa.microgenn.com/api/send-message"),
+  whatsappToken: text("whatsapp_token").default(""),
+  whatsappEnabled: boolean("whatsapp_enabled").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertQuotationSettingsSchema = createInsertSchema(quotationSettings).omit({
+  updatedAt: true,
+});
+export type InsertQuotationSettings = z.infer<typeof insertQuotationSettingsSchema>;
+export type QuotationSettings = typeof quotationSettings.$inferSelect;
+
+// Quotation item (stored as JSON in quotations.items)
+export const quotationItemSchema = z.object({
+  moduleId: z.string().optional().nullable(),
+  name: z.string().min(1, "Item name required"),
+  description: z.string().optional().default(""),
+  hsnCode: z.string().optional().default(""),
+  qty: z.number().min(0.01, "Quantity must be > 0"),
+  unit: z.string().default("Nos"),
+  unitPrice: z.number().min(0, "Price must be >= 0"),
+  lineTotal: z.number().min(0),
+});
+export type QuotationItem = z.infer<typeof quotationItemSchema>;
+
+// Quotations table
+export const quotations = pgTable("quotations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quotationNumber: text("quotation_number").notNull().unique(),
+  type: text("type").notNull().default("quotation"), // quotation | amc
+  category: text("category").notNull().default("software_onpremise"),
+  // Customer / Property
+  propertyName: text("property_name").notNull(),
+  address: text("address").default(""),
+  city: text("city").default(""),
+  email: text("email").default(""),
+  phone: text("phone").default(""),
+  kindAttentionName: text("kind_attention_name").default(""),
+  designation: text("designation").default(""),
+  // BDM
+  bdmId: varchar("bdm_id").references(() => users.id),
+  bdmName: text("bdm_name").default(""),
+  // Validity
+  validityDays: integer("validity_days").default(30),
+  validUntil: timestamp("valid_until"),
+  quotationDate: timestamp("quotation_date").defaultNow(),
+  // Items + totals (all amounts in paise to avoid float issues OR rupees as integer - using rupees x 100)
+  items: jsonb("items").$type<QuotationItem[]>().default([]),
+  subtotal: integer("subtotal").default(0), // in paise (rupees x 100)
+  gstPercent: integer("gst_percent").default(18),
+  gstAmount: integer("gst_amount").default(0),
+  total: integer("total").default(0),
+  // Editable text blocks
+  paymentTerms: text("payment_terms").default(""),
+  termsConditions: text("terms_conditions").default(""),
+  notes: text("notes").default(""),
+  // Status & sending
+  status: text("status").notNull().default("draft"), // draft | sent | accepted | rejected | expired
+  emailSentAt: timestamp("email_sent_at"),
+  emailSentTo: text("email_sent_to"),
+  whatsappSentAt: timestamp("whatsapp_sent_at"),
+  whatsappSentTo: text("whatsapp_sent_to"),
+  // Audit
+  createdById: varchar("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertQuotationSchema = createInsertSchema(quotations).omit({
+  id: true,
+  quotationNumber: true,
+  createdAt: true,
+  updatedAt: true,
+  emailSentAt: true,
+  whatsappSentAt: true,
+}).extend({
+  items: z.array(quotationItemSchema).min(1, "Add at least one line item"),
+  validUntil: z.coerce.date().optional().nullable(),
+  quotationDate: z.coerce.date().optional().nullable(),
+});
+
+export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
+export type Quotation = typeof quotations.$inferSelect;

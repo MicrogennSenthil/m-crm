@@ -140,6 +140,14 @@ const menuGroups = [
         bgColor: "bg-lime-500/10",
         module: "sales_planning",
       },
+      {
+        title: "Quotations",
+        url: "/quotations",
+        icon: FileText,
+        color: "text-teal-500",
+        bgColor: "bg-teal-500/10",
+        module: "leads",
+      },
     ],
   },
   {

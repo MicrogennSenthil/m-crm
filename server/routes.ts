@@ -18,6 +18,8 @@ import {
   insertProjectSchema,
   insertProjectEngineerSchema,
   insertModuleSchema,
+  insertQuotationSchema,
+  insertQuotationSettingsSchema,
   insertProjectModuleSchema,
   insertProjectProgressEntrySchema,
   insertTrainingRecordSchema,
@@ -17000,7 +17002,354 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================
+  // QUOTATIONS MODULE
+  // ============================================================
+
+  // Helper: only admin / super-admin / quotation creator can access
+  async function canAccessQuotation(req: any, q: any): Promise<boolean> {
+    if (!q) return false;
+    const userId = req.user?.claims?.sub;
+    if (!userId) return false;
+    if (q.createdById === userId) return true;
+    if (req.user?.claims?.email === SUPER_ADMIN_EMAIL) return true;
+    const user = await storage.getUser(userId);
+    if (user?.role === "admin") return true;
+    return false;
+  }
+
+  // List quotations (with filters) — non-admins only see their own
+  app.get("/api/quotations", isAuthenticated, async (req: any, res) => {
+    try {
+      const filters: any = {};
+      if (req.query.type) filters.type = String(req.query.type);
+      if (req.query.status) filters.status = String(req.query.status);
+      const userId = req.user.claims.sub;
+      const isSuper = req.user.claims.email === SUPER_ADMIN_EMAIL;
+      const me = await storage.getUser(userId);
+      const isAdminUser = isSuper || me?.role === "admin";
+      if (!isAdminUser) filters.createdById = userId;
+      else if (req.query.mine === "1") filters.createdById = userId;
+      const list = await storage.getQuotations(filters);
+      res.json(list);
+    } catch (e) {
+      console.error("List quotations error:", e);
+      res.status(500).json({ message: "Failed to list quotations" });
+    }
+  });
+
+  // Get single quotation
+  app.get("/api/quotations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = await storage.getQuotation(req.params.id);
+      if (!q) return res.status(404).json({ message: "Quotation not found" });
+      if (!(await canAccessQuotation(req, q))) return res.status(403).json({ message: "Forbidden" });
+      res.json(q);
+    } catch (e) {
+      console.error("Get quotation error:", e);
+      res.status(500).json({ message: "Failed to fetch quotation" });
+    }
+  });
+
+  // Create quotation
+  app.post("/api/quotations", isAuthenticated, async (req: any, res) => {
+    try {
+      const data = insertQuotationSchema.parse(req.body);
+      const created = await storage.createQuotation(data, req.user.claims.sub);
+      storage.logActivity({
+        entityType: "quotation",
+        entityId: created.id,
+        action: "created",
+        description: `Quotation ${created.quotationNumber} created for ${created.propertyName}`,
+        userId: req.user.claims.sub,
+      }).catch(() => {});
+      res.json(created);
+    } catch (e: any) {
+      console.error("Create quotation error:", e);
+      const msg = e?.issues?.[0]?.message || e?.message || "Failed to create quotation";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  // Update quotation
+  app.patch("/api/quotations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const existing = await storage.getQuotation(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      if (!(await canAccessQuotation(req, existing))) return res.status(403).json({ message: "Forbidden" });
+      const data = insertQuotationSchema.partial().parse(req.body);
+      const updated = await storage.updateQuotation(req.params.id, data);
+      res.json(updated);
+    } catch (e: any) {
+      console.error("Update quotation error:", e);
+      const msg = e?.issues?.[0]?.message || e?.message || "Failed to update quotation";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  // Delete quotation
+  app.delete("/api/quotations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const existing = await storage.getQuotation(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      if (!(await canAccessQuotation(req, existing))) return res.status(403).json({ message: "Forbidden" });
+      await storage.deleteQuotation(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("Delete quotation error:", e);
+      res.status(500).json({ message: "Failed to delete quotation" });
+    }
+  });
+
+  // Quotation settings — non-admins receive a redacted view (no whatsappToken)
+  app.get("/api/quotation-settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const settings = await storage.getQuotationSettings();
+      const isSuper = req.user.claims.email === SUPER_ADMIN_EMAIL;
+      const me = await storage.getUser(req.user.claims.sub);
+      const isAdminUser = isSuper || me?.role === "admin";
+      if (!isAdminUser) {
+        const { whatsappToken, ...safe } = settings as any;
+        return res.json({ ...safe, whatsappToken: whatsappToken ? "***configured***" : "" });
+      }
+      res.json(settings);
+    } catch (e) {
+      console.error("Get quotation settings error:", e);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+  app.patch("/api/quotation-settings", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const data = insertQuotationSettingsSchema.partial().parse(req.body);
+      res.json(await storage.updateQuotationSettings(data));
+    } catch (e: any) {
+      console.error("Update quotation settings error:", e);
+      res.status(400).json({ message: e?.message || "Failed to update settings" });
+    }
+  });
+
+  // Render quotation as printable HTML (used for view + print + PDF source)
+  app.get("/api/quotations/:id/print", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = await storage.getQuotation(req.params.id);
+      if (!q) return res.status(404).send("Not found");
+      if (!(await canAccessQuotation(req, q))) return res.status(403).send("Forbidden");
+      const settings = await storage.getQuotationSettings();
+      res.setHeader("Content-Type", "text/html");
+      res.send(buildQuotationHtml(q, settings));
+    } catch (e) {
+      console.error("Print quotation error:", e);
+      res.status(500).send("Failed to render quotation");
+    }
+  });
+
+  // Send quotation by email
+  app.post("/api/quotations/:id/send-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = await storage.getQuotation(req.params.id);
+      if (!q) return res.status(404).json({ message: "Quotation not found" });
+      if (!(await canAccessQuotation(req, q))) return res.status(403).json({ message: "Forbidden" });
+      const sendSchema = z.object({ to: z.string().trim().email("Invalid email") });
+      const { to } = sendSchema.parse({ to: req.body?.to || q.email || "" });
+      const settings = await storage.getQuotationSettings();
+      const html = buildQuotationHtml(q, settings);
+      await sendEmail({
+        to,
+        subject: `Quotation ${q.quotationNumber} from ${settings.companyName}`,
+        html,
+      });
+      await storage.markQuotationEmailSent(q.id, to);
+      res.json({ success: true, to });
+    } catch (e: any) {
+      console.error("Send quotation email error:", e);
+      res.status(500).json({ message: e?.message || "Failed to send email" });
+    }
+  });
+
+  // Send quotation via WhatsApp (M-Whatsapp)
+  app.post("/api/quotations/:id/send-whatsapp", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = await storage.getQuotation(req.params.id);
+      if (!q) return res.status(404).json({ message: "Quotation not found" });
+      if (!(await canAccessQuotation(req, q))) return res.status(403).json({ message: "Forbidden" });
+      const settings = await storage.getQuotationSettings();
+      if (!settings.whatsappEnabled || !settings.whatsappEndpoint) {
+        return res.status(400).json({ message: "WhatsApp is not enabled. Configure it in Quotation Settings." });
+      }
+      const waSchema = z.object({ to: z.string().trim().regex(/^\+?\d{8,15}$/, "Phone must be 8-15 digits, optionally prefixed with +") });
+      const { to } = waSchema.parse({ to: (req.body?.to || q.phone || "").toString().replace(/[\s-]/g, "") });
+      const totalRupees = ((q.total || 0) / 100).toLocaleString("en-IN");
+      const message = `Dear ${q.kindAttentionName || q.propertyName},\n\nPlease find quotation ${q.quotationNumber} for ${q.propertyName}.\nTotal: ₹${totalRupees}\nValid till: ${q.validUntil ? new Date(q.validUntil).toLocaleDateString("en-IN") : "-"}\n\nRegards,\n${q.bdmName || settings.companyName}`;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (settings.whatsappToken) headers["Authorization"] = `Bearer ${settings.whatsappToken}`;
+      const resp = await fetch(settings.whatsappEndpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ to, message, quotationNumber: q.quotationNumber }),
+      });
+      const respText = await resp.text();
+      if (!resp.ok) {
+        return res.status(502).json({ message: `WhatsApp API failed (${resp.status}): ${respText.slice(0, 200)}` });
+      }
+      await storage.markQuotationWhatsappSent(q.id, to);
+      res.json({ success: true, to, response: respText.slice(0, 200) });
+    } catch (e: any) {
+      console.error("Send quotation WhatsApp error:", e);
+      res.status(500).json({ message: e?.message || "Failed to send WhatsApp" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
+}
+
+// ============================================================
+// QUOTATION HTML TEMPLATE BUILDER
+// ============================================================
+function buildQuotationHtml(q: any, s: any): string {
+  const fmt = (paise: number) => `₹${((paise || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const date = (d: any) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "-";
+  const items = (q.items || []) as any[];
+  const itemsRows = items.map((it: any, idx: number) => `
+    <tr>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${idx + 1}</td>
+      <td style="padding:10px;border:1px solid #d4d4d8;">
+        <div style="font-weight:600;color:#1a2b6d;">${escapeHtml(it.name || "")}</div>
+        ${it.description ? `<div style="font-size:12px;color:#52525b;margin-top:2px;white-space:pre-wrap;">${escapeHtml(it.description)}</div>` : ""}
+      </td>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${escapeHtml(it.hsnCode || "-")}</td>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${it.qty} ${escapeHtml(it.unit || "")}</td>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:right;">${fmt((it.unitPrice || 0) * 100)}</td>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:right;font-weight:600;">${fmt((it.lineTotal || 0) * 100)}</td>
+    </tr>
+  `).join("");
+
+  const typeLabel = q.type === 'amc' ? 'AMC AGREEMENT' : 'QUOTATION';
+  const categoryLabel = String(q.category || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8"/>
+<title>${escapeHtml(q.quotationNumber)}</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { font-family: 'Inter', Arial, sans-serif; color: #18181b; margin:0; background:#f4f4f5; }
+  .page { max-width: 800px; margin: 20px auto; background: white; padding: 40px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .header { display:flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #1a2b6d; padding-bottom: 16px; margin-bottom: 20px; }
+  .company-name { font-size: 22px; font-weight: 800; color:#1a2b6d; margin:0; }
+  .company-meta { font-size: 12px; color: #52525b; line-height: 1.6; margin-top:6px; }
+  .qt-badge { background: #1a2b6d; color: white; padding: 8px 16px; border-radius: 4px; font-weight:700; font-size: 14px; letter-spacing: 1px; }
+  .qt-no { font-size: 13px; color:#52525b; margin-top:8px; text-align:right; }
+  .qt-no b { color:#1a2b6d; font-size:15px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom:24px; }
+  .panel { background:#f8fafc; border:1px solid #e4e4e7; border-radius:6px; padding:14px; }
+  .panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#1a2b6d; margin:0 0 8px 0; font-weight:700; }
+  .panel .row { font-size:13px; margin: 4px 0; }
+  .panel .row b { color:#18181b; }
+  table.items { width:100%; border-collapse:collapse; margin: 16px 0; font-size:13px; }
+  table.items thead { background:#1a2b6d; color:white; }
+  table.items th { padding:10px; text-align:left; font-weight:600; border:1px solid #1a2b6d; font-size:12px; }
+  table.items th:nth-child(1), table.items th:nth-child(3), table.items th:nth-child(4) { text-align:center; }
+  table.items th:nth-child(5), table.items th:nth-child(6) { text-align:right; }
+  .totals { margin-left:auto; width: 320px; font-size:13px; }
+  .totals .row { display:flex; justify-content: space-between; padding: 6px 12px; }
+  .totals .row.grand { background:#f5a623; color:#1a2b6d; font-weight:800; font-size:15px; padding: 10px 12px; border-radius:4px; margin-top:4px; }
+  .section { margin-top: 24px; }
+  .section h4 { font-size: 12px; text-transform:uppercase; letter-spacing:1px; color:#1a2b6d; margin:0 0 8px 0; border-bottom:1px solid #e4e4e7; padding-bottom:6px; }
+  .section .body { font-size:12px; color:#3f3f46; line-height:1.6; white-space:pre-wrap; }
+  .footer { margin-top:40px; display:flex; justify-content: space-between; align-items: flex-end; }
+  .signature { text-align:center; min-width: 200px; }
+  .signature .line { border-top:1px solid #18181b; margin-top:60px; padding-top:6px; font-size:12px; font-weight:600; }
+  .footer-note { font-size:11px; color:#71717a; text-align:center; margin-top: 24px; border-top:1px dashed #d4d4d8; padding-top:12px; }
+  @media print { body { background:white; } .page { box-shadow:none; margin:0; padding:0; max-width:100%; } .no-print { display:none; } }
+  .actions { max-width:800px; margin: 12px auto; text-align:right; }
+  .actions button { background:#1a2b6d; color:white; border:none; padding: 8px 16px; border-radius:4px; font-weight:600; cursor:pointer; margin-left:8px; }
+</style></head><body>
+<div class="actions no-print">
+  <button onclick="window.print()">Print / Save as PDF</button>
+</div>
+<div class="page">
+  <div class="header">
+    <div>
+      <h1 class="company-name">${escapeHtml(s.companyName || "")}</h1>
+      <div class="company-meta">
+        ${escapeHtml(s.companyAddress || "")}<br/>
+        ${s.companyPhone ? `Phone: ${escapeHtml(s.companyPhone)} &nbsp;` : ""}
+        ${s.companyEmail ? `Email: ${escapeHtml(s.companyEmail)}<br/>` : ""}
+        ${s.companyWebsite ? `Web: ${escapeHtml(s.companyWebsite)} &nbsp;` : ""}
+        ${s.companyGstin ? `GSTIN: ${escapeHtml(s.companyGstin)}` : ""}
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div class="qt-badge">${typeLabel}</div>
+      <div class="qt-no">No: <b>${escapeHtml(q.quotationNumber)}</b><br/>Date: ${date(q.quotationDate)}<br/>Valid Till: ${date(q.validUntil)}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h3>To (Customer)</h3>
+      <div class="row"><b>${escapeHtml(q.propertyName || "")}</b></div>
+      ${q.address ? `<div class="row">${escapeHtml(q.address)}</div>` : ""}
+      ${q.city ? `<div class="row">${escapeHtml(q.city)}</div>` : ""}
+      ${q.email ? `<div class="row">Email: ${escapeHtml(q.email)}</div>` : ""}
+      ${q.phone ? `<div class="row">Phone: ${escapeHtml(q.phone)}</div>` : ""}
+    </div>
+    <div class="panel">
+      <h3>Kind Attention</h3>
+      ${q.kindAttentionName ? `<div class="row"><b>${escapeHtml(q.kindAttentionName)}</b></div>` : ""}
+      ${q.designation ? `<div class="row">${escapeHtml(q.designation)}</div>` : ""}
+      <div class="row" style="margin-top:8px;">Category: <b>${escapeHtml(categoryLabel)}</b></div>
+      ${q.bdmName ? `<div class="row">Prepared by: <b>${escapeHtml(q.bdmName)}</b></div>` : ""}
+    </div>
+  </div>
+
+  <p style="font-size:13px;color:#3f3f46;margin:0 0 8px 0;">
+    Dear Sir/Madam,<br/>
+    With reference to your enquiry, we are pleased to submit our quotation as below:
+  </p>
+
+  <table class="items">
+    <thead>
+      <tr><th>S.No</th><th>Description</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr>
+    </thead>
+    <tbody>${itemsRows}</tbody>
+  </table>
+
+  <div class="totals">
+    <div class="row"><span>Subtotal</span><span>${fmt(q.subtotal)}</span></div>
+    <div class="row"><span>GST @ ${q.gstPercent || 0}%</span><span>${fmt(q.gstAmount)}</span></div>
+    <div class="row grand"><span>GRAND TOTAL</span><span>${fmt(q.total)}</span></div>
+  </div>
+
+  ${q.paymentTerms ? `<div class="section"><h4>Payment Terms</h4><div class="body">${escapeHtml(q.paymentTerms)}</div></div>` : ""}
+  ${q.termsConditions ? `<div class="section"><h4>Terms &amp; Conditions</h4><div class="body">${escapeHtml(q.termsConditions)}</div></div>` : ""}
+  ${q.notes ? `<div class="section"><h4>Notes</h4><div class="body">${escapeHtml(q.notes)}</div></div>` : ""}
+  ${s.bankDetails ? `<div class="section"><h4>Bank Details</h4><div class="body">${escapeHtml(s.bankDetails)}</div></div>` : ""}
+
+  <div class="footer">
+    <div style="font-size:12px;color:#52525b;max-width:300px;">
+      Thank you for the opportunity to quote. We look forward to your valued order.
+    </div>
+    <div class="signature">
+      <div style="font-size:12px;color:#52525b;">For ${escapeHtml(s.companyName || "")}</div>
+      <div class="line">Authorised Signatory</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    This is a computer-generated quotation. ${escapeHtml(s.companyName || "")} &middot; ${escapeHtml(s.companyWebsite || "")}
+  </div>
+</div>
+</body></html>`;
+}
+
+function escapeHtml(str: any): string {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }

@@ -69,6 +69,10 @@ const MarketingDashboard = lazy(() => import("@/pages/marketing-dashboard"));
 const Extractor = lazy(() => import("@/pages/extractor"));
 const MyPerformance = lazy(() => import("@/pages/my-performance"));
 const SalesPlanning = lazy(() => import("@/pages/sales-planning"));
+const Quotations = lazy(() => import("@/pages/quotations"));
+const QuotationForm = lazy(() => import("@/pages/quotation-form"));
+const QuotationSettings = lazy(() => import("@/pages/quotation-settings"));
+const QuotationView = lazy(() => import("@/pages/quotation-view"));
 
 function PageLoader() {
   return (
@@ -173,6 +177,11 @@ function AuthenticatedLayout() {
                 <Route path="/sales" component={Sales} />
                 <Route path="/sales-dashboard" component={SalesDashboard} />
                 <Route path="/sales-planning" component={SalesPlanning} />
+                <Route path="/quotations" component={Quotations} />
+                <Route path="/quotations/settings" component={QuotationSettings} />
+                <Route path="/quotations/new" component={QuotationForm} />
+                <Route path="/quotations/:id/edit" component={QuotationForm} />
+                <Route path="/quotations/:id" component={QuotationView} />
                 <Route path="/implementations" component={Implementations} />
                 <Route path="/implementation-dashboard" component={ImplementationDashboard} />
                 <Route path="/support" component={Support} />
