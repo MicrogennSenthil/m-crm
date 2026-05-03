@@ -413,6 +413,7 @@ export const modules = pgTable("modules", {
   price: integer("price").default(0), // Default unit price in INR (no decimals - rupees only)
   unit: text("unit").default("Nos"), // Nos, License, User, Year, Month, Lot, etc.
   hsnCode: text("hsn_code"), // HSN/SAC code for GST
+  gstPercent: integer("gst_percent").default(18), // Default GST % for this item (e.g. 18 for software, 28 for door_lock)
   createdAt: timestamp("created_at").defaultNow(),
 });
 

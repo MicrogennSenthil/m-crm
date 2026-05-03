@@ -1691,6 +1691,7 @@ function ModulesTab() {
                   <TableHead className="hidden md:table-cell">Category</TableHead>
                   <TableHead className="hidden sm:table-cell">Description</TableHead>
                   <TableHead className="text-right hidden sm:table-cell">Price (₹)</TableHead>
+                  <TableHead className="text-right hidden md:table-cell">GST %</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1706,6 +1707,9 @@ function ModulesTab() {
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-right font-mono">
                       {(module as any).price ? `₹${((module as any).price as number).toLocaleString("en-IN")}` : "-"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-right font-mono">
+                      {(module as any).gstPercent != null ? `${(module as any).gstPercent}%` : "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -1789,6 +1793,7 @@ function ModuleForm({
     price: (module as any)?.price ?? 0,
     unit: (module as any)?.unit || "Nos",
     hsnCode: (module as any)?.hsnCode || "",
+    gstPercent: (module as any)?.gstPercent ?? 18,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1872,6 +1877,20 @@ function ModuleForm({
               value={formData.hsnCode}
               onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
               data-testid="input-module-hsn"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="module-gst">Default GST %</Label>
+            <Input
+              id="module-gst"
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={formData.gstPercent}
+              onChange={(e) => setFormData({ ...formData, gstPercent: parseFloat(e.target.value) || 0 })}
+              placeholder="18"
+              data-testid="input-module-gst"
             />
           </div>
         </div>

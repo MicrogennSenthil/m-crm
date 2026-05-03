@@ -35,6 +35,7 @@ type Item = {
   qty: number;
   unit: string;
   unitPrice: number;
+  gstPercent?: number; // per-line GST; if undefined falls back to quotation default
   lineTotal: number;
 };
 
@@ -143,7 +144,7 @@ export default function QuotationFormPage() {
   );
 
   const addItem = () => {
-    setItems([...items, { name: "", description: "", hsnCode: "", qty: 1, unit: "Nos", unitPrice: 0, lineTotal: 0 }]);
+    setItems([...items, { name: "", description: "", hsnCode: "", qty: 1, unit: "Nos", unitPrice: 0, gstPercent, lineTotal: 0 }]);
   };
 
   const addModule = (mod: Module) => {
@@ -157,6 +158,7 @@ export default function QuotationFormPage() {
         qty: 1,
         unit: mod.unit || "Nos",
         unitPrice: mod.price || 0,
+        gstPercent: (mod as any).gstPercent ?? gstPercent,
         lineTotal: mod.price || 0,
       },
     ]);
@@ -175,9 +177,20 @@ export default function QuotationFormPage() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
 
+  const itemGst = (it: Item) => (it.gstPercent != null ? it.gstPercent : gstPercent);
   const subtotal = items.reduce((s, it) => s + (it.lineTotal || 0), 0);
-  const gstAmount = (subtotal * gstPercent) / 100;
+  // Per-line GST aggregated by rate so the totals panel and print template can show a breakdown.
+  const gstByRate = items.reduce<Record<string, { taxable: number; tax: number }>>((acc, it) => {
+    const rate = itemGst(it);
+    const key = String(rate);
+    if (!acc[key]) acc[key] = { taxable: 0, tax: 0 };
+    acc[key].taxable += it.lineTotal || 0;
+    acc[key].tax += ((it.lineTotal || 0) * rate) / 100;
+    return acc;
+  }, {});
+  const gstAmount = Object.values(gstByRate).reduce((s, x) => s + x.tax, 0);
   const total = subtotal + gstAmount;
+  const gstRateKeys = Object.keys(gstByRate).sort((a, b) => parseFloat(a) - parseFloat(b));
 
   const onUserChange = (id: string) => {
     setBdmId(id);
@@ -492,6 +505,7 @@ export default function QuotationFormPage() {
                     <th className="text-left p-2 w-20">Qty</th>
                     <th className="text-left p-2 w-20">Unit</th>
                     <th className="text-right p-2 w-32">Unit Price</th>
+                    <th className="text-right p-2 w-20">GST %</th>
                     <th className="text-right p-2 w-32">Total</th>
                     <th className="w-12"></th>
                   </tr>
@@ -516,6 +530,18 @@ export default function QuotationFormPage() {
                       <td className="p-2">
                         <Input type="number" value={it.unitPrice} onChange={(e) => updateItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })} className="text-right" data-testid={`input-item-price-${idx}`} />
                       </td>
+                      <td className="p-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          value={itemGst(it)}
+                          onChange={(e) => updateItem(idx, { gstPercent: parseFloat(e.target.value) || 0 })}
+                          className="text-right"
+                          data-testid={`input-item-gst-${idx}`}
+                        />
+                      </td>
                       <td className="p-2 text-right font-semibold" data-testid={`text-item-total-${idx}`}>{fmt(it.lineTotal)}</td>
                       <td className="p-2">
                         <Button size="icon" variant="ghost" onClick={() => removeItem(idx)} data-testid={`button-remove-item-${idx}`}>
@@ -530,15 +556,35 @@ export default function QuotationFormPage() {
           )}
 
           <div className="flex flex-col sm:flex-row sm:justify-end mt-4 gap-3">
-            <div className="w-full sm:w-80 space-y-1 text-sm">
+            <div className="w-full sm:w-96 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{fmt(subtotal)}</span></div>
-              <div className="flex justify-between items-center gap-2">
+              <div className="flex justify-between items-center gap-2 pt-1 border-t">
                 <span className="text-muted-foreground flex items-center gap-2">
-                  GST %
+                  Default GST % (for new lines)
                   <Input type="number" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-16 h-7" data-testid="input-gst" />
                 </span>
-                <span>{fmt(gstAmount)}</span>
               </div>
+              {gstRateKeys.length === 0 ? (
+                <div className="flex justify-between"><span className="text-muted-foreground">GST</span><span>{fmt(0)}</span></div>
+              ) : gstRateKeys.length === 1 ? (
+                <div className="flex justify-between" data-testid={`text-gst-${gstRateKeys[0]}`}>
+                  <span className="text-muted-foreground">GST @ {gstRateKeys[0]}%</span>
+                  <span>{fmt(gstByRate[gstRateKeys[0]].tax)}</span>
+                </div>
+              ) : (
+                <>
+                  {gstRateKeys.map((k) => (
+                    <div key={k} className="flex justify-between text-xs" data-testid={`text-gst-${k}`}>
+                      <span className="text-muted-foreground">GST @ {k}% (on {fmt(gstByRate[k].taxable)})</span>
+                      <span>{fmt(gstByRate[k].tax)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total GST</span>
+                    <span>{fmt(gstAmount)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between text-base font-bold pt-2 border-t" data-testid="text-grand-total">
                 <span>Grand Total</span><span className="text-primary">{fmt(total)}</span>
               </div>

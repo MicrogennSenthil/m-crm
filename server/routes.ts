@@ -17226,6 +17226,19 @@ function buildQuotationHtml(q: any, s: any): string {
   const fmt = (paise: number) => `₹${((paise || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const date = (d: any) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "-";
   const items = (q.items || []) as any[];
+  const defaultGst = Number(q.gstPercent || 0);
+  const itemRate = (it: any) => (it.gstPercent != null ? Number(it.gstPercent) : defaultGst);
+  // Group by GST rate for the totals breakdown
+  const gstByRate: Record<string, { taxable: number; tax: number }> = {};
+  for (const it of items) {
+    const rate = itemRate(it);
+    const key = String(rate);
+    const taxable = (it.lineTotal || 0) * 100; // paise
+    if (!gstByRate[key]) gstByRate[key] = { taxable: 0, tax: 0 };
+    gstByRate[key].taxable += taxable;
+    gstByRate[key].tax += (taxable * rate) / 100;
+  }
+  const gstRateKeys = Object.keys(gstByRate).sort((a, b) => parseFloat(a) - parseFloat(b));
   const itemsRows = items.map((it: any, idx: number) => `
     <tr>
       <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${idx + 1}</td>
@@ -17236,9 +17249,17 @@ function buildQuotationHtml(q: any, s: any): string {
       <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${escapeHtml(it.hsnCode || "-")}</td>
       <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${it.qty} ${escapeHtml(it.unit || "")}</td>
       <td style="padding:10px;border:1px solid #d4d4d8;text-align:right;">${fmt((it.unitPrice || 0) * 100)}</td>
+      <td style="padding:10px;border:1px solid #d4d4d8;text-align:center;">${itemRate(it)}%</td>
       <td style="padding:10px;border:1px solid #d4d4d8;text-align:right;font-weight:600;">${fmt((it.lineTotal || 0) * 100)}</td>
     </tr>
   `).join("");
+  const gstRowsHtml = gstRateKeys.length === 0
+    ? `<div class="row"><span>GST</span><span>${fmt(0)}</span></div>`
+    : gstRateKeys.length === 1
+      ? `<div class="row"><span>GST @ ${gstRateKeys[0]}%</span><span>${fmt(gstByRate[gstRateKeys[0]].tax)}</span></div>`
+      : gstRateKeys.map((k) =>
+          `<div class="row"><span>GST @ ${k}% (on ${fmt(gstByRate[k].taxable)})</span><span>${fmt(gstByRate[k].tax)}</span></div>`
+        ).join("");
 
   const typeLabel = q.type === 'amc' ? 'AMC AGREEMENT' : 'QUOTATION';
   const categoryLabel = String(q.category || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -17264,8 +17285,8 @@ function buildQuotationHtml(q: any, s: any): string {
   table.items { width:100%; border-collapse:collapse; margin: 16px 0; font-size:13px; }
   table.items thead { background:#1a2b6d; color:white; }
   table.items th { padding:10px; text-align:left; font-weight:600; border:1px solid #1a2b6d; font-size:12px; }
-  table.items th:nth-child(1), table.items th:nth-child(3), table.items th:nth-child(4) { text-align:center; }
-  table.items th:nth-child(5), table.items th:nth-child(6) { text-align:right; }
+  table.items th:nth-child(1), table.items th:nth-child(3), table.items th:nth-child(4), table.items th:nth-child(6) { text-align:center; }
+  table.items th:nth-child(5), table.items th:nth-child(7) { text-align:right; }
   .totals { margin-left:auto; width: 320px; font-size:13px; }
   .totals .row { display:flex; justify-content: space-between; padding: 6px 12px; }
   .totals .row.grand { background:#f5a623; color:#1a2b6d; font-weight:800; font-size:15px; padding: 10px 12px; border-radius:4px; margin-top:4px; }
@@ -17326,14 +17347,14 @@ function buildQuotationHtml(q: any, s: any): string {
 
   <table class="items">
     <thead>
-      <tr><th>S.No</th><th>Description</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr>
+      <tr><th>S.No</th><th>Description</th><th>HSN</th><th>Qty</th><th>Unit Price</th><th>GST %</th><th>Amount</th></tr>
     </thead>
     <tbody>${itemsRows}</tbody>
   </table>
 
   <div class="totals">
     <div class="row"><span>Subtotal</span><span>${fmt(q.subtotal)}</span></div>
-    <div class="row"><span>GST @ ${q.gstPercent || 0}%</span><span>${fmt(q.gstAmount)}</span></div>
+    ${gstRowsHtml}
     <div class="row grand"><span>GRAND TOTAL</span><span>${fmt(q.total)}</span></div>
   </div>
 
