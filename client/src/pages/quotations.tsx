@@ -45,12 +45,21 @@ export default function QuotationsPage() {
   if (status !== "all") params.set("status", status);
   const qs = params.toString();
 
-  const { data: quotations = [], isLoading } = useQuery<Quotation[]>({
+  const { data: quotations = [], isLoading, error } = useQuery<Quotation[]>({
     queryKey: ["/api/quotations", type, status],
-    queryFn: () => fetch(`/api/quotations${qs ? `?${qs}` : ""}`, { credentials: "include" }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/quotations${qs ? `?${qs}` : ""}`, { credentials: "include" });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body?.message || `Failed to load quotations (${r.status})`);
+      }
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    },
   });
 
-  const filtered = quotations.filter((q) => {
+  const safeQuotations: Quotation[] = Array.isArray(quotations) ? quotations : [];
+  const filtered = safeQuotations.filter((q) => {
     if (!search) return true;
     const s = search.toLowerCase();
     return (
@@ -155,6 +164,14 @@ export default function QuotationsPage() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-destructive font-medium">Failed to load quotations</p>
+              <p className="text-xs text-muted-foreground mt-2">{(error as Error).message}</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                If this is a fresh deploy, the database tables may need to be created.
+              </p>
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
