@@ -95,32 +95,33 @@ export default function Masters() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Only mount the active tab — prevents 7 parallel API call storms on page load */}
         <TabsContent value="customers">
-          <CustomersTab />
+          {activeTab === "customers" && <CustomersTab />}
         </TabsContent>
 
         <TabsContent value="departments">
-          <DepartmentsTab />
+          {activeTab === "departments" && <DepartmentsTab />}
         </TabsContent>
 
         <TabsContent value="modules">
-          <ModulesTab />
+          {activeTab === "modules" && <ModulesTab />}
         </TabsContent>
 
         <TabsContent value="users">
-          <UsersTab />
+          {activeTab === "users" && <UsersTab />}
         </TabsContent>
 
         <TabsContent value="roles">
-          <UserRolesTab />
+          {activeTab === "roles" && <UserRolesTab />}
         </TabsContent>
 
         <TabsContent value="rights">
-          <RoleRightsTab />
+          {activeTab === "rights" && <RoleRightsTab />}
         </TabsContent>
 
         <TabsContent value="contract-types">
-          <ContractTypesTab />
+          {activeTab === "contract-types" && <ContractTypesTab />}
         </TabsContent>
       </Tabs>
     </div>
