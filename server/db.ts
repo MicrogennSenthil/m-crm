@@ -14,8 +14,16 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: false,
   max: 20,                       // allow up to 20 concurrent connections
-  connectionTimeoutMillis: 5000, // fail fast if pool is exhausted (5s not 3min)
-  idleTimeoutMillis: 30000,      // release idle connections after 30s
+  connectionTimeoutMillis: 5000, // fail fast if pool is exhausted
+  // Release idle clients well before Neon (dev DB) can kill them with
+  // "FATAL 57P01 terminating connection due to administrator command".
+  // Neon idle suspend is ~5 minutes; we close at 20s so we always retire
+  // the socket from our side.
+  idleTimeoutMillis: 20_000,
+  // Enable TCP keepalive so the OS detects half-open sockets quickly
+  // (e.g. when Neon force-closes a connection from its side).
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
   allowExitOnIdle: false,
 });
 
