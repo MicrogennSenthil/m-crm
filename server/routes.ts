@@ -17135,8 +17135,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const me = await storage.getUser(req.user.claims.sub);
       const isAdminUser = isSuper || me?.role === "admin";
       if (!isAdminUser) {
-        const { whatsappToken, ...safe } = settings as any;
-        return res.json({ ...safe, whatsappToken: whatsappToken ? "***configured***" : "" });
+        const { whatsappToken, bridgeToken, ...safe } = settings as any;
+        return res.json({
+          ...safe,
+          whatsappToken: whatsappToken ? "***configured***" : "",
+          bridgeToken: bridgeToken ? "***configured***" : "",
+        });
       }
       res.json(settings);
     } catch (e) {
