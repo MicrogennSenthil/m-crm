@@ -8,6 +8,7 @@ import { getAllowedUserIdsForUser, isUserIdAllowed, filterAllowedUserId, invalid
 import { db } from "./db";
 import { users, leads, modules, projectModules, projectEngineers, tickets, ticketComments, escalationHistory, feedback, activityLog, tasks, taskFollowups, contractTypeChangeLogs, monthlyPaymentReminders, customers, customerModuleContracts, marketingDailyReports, projects, developmentTasks, type User } from "@shared/schema";
 import { sendQuoteEmail, sendTicketClosureFeedbackEmail, sendTrainingConfirmationEmail, sendWelcomeEmail, sendEmail, sendOtpEmail, sendPasswordResetSuccessEmail, sendPasswordResetNotificationEmail, clearSmtpSettingsCache, setStorageGetter } from "./email";
+import { notifyStageChanged } from "./whatsappBridge";
 import { eq, sql, and, desc, or, ilike, inArray, isNotNull, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import {
@@ -3563,6 +3564,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           toStage: updateData.stage,
           changedById: req.user.claims.sub,
           changeReason: `Stage changed from ${fromLabel} to ${toLabel}`,
+        });
+
+        // Notify M-WhatsApp bridge so it can fire the configured Stage Automation
+        // template for this transition. Fire-and-forget — never blocks the response.
+        notifyStageChanged({
+          leadId: req.params.id,
+          leadName: currentLead.companyName,
+          phone: currentLead.contactPhone ?? null,
+          fromStage: currentLead.stage,
+          toStage: updateData.stage,
         });
       }
       
