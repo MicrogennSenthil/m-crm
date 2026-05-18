@@ -1865,6 +1865,10 @@ export const quotationSettings = pgTable("quotation_settings", {
   whatsappEndpoint: text("whatsapp_endpoint").default("https://wa.microgenn.com/api/send-message"),
   whatsappToken: text("whatsapp_token").default(""),
   whatsappEnabled: boolean("whatsapp_enabled").default(false),
+  // M-WhatsApp CRM bridge — fires on lead stage changes for stage-automation templates
+  bridgeUrl: text("bridge_url").default("https://wa.microgenn.com:4000/api/crm-bridge"),
+  bridgeToken: text("bridge_token").default(""),
+  bridgeEnabled: boolean("bridge_enabled").default(true),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
