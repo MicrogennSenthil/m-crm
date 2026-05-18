@@ -17148,6 +17148,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch settings" });
     }
   });
+  // Returns the CRM DATABASE_URL for the M-WhatsApp team to paste as CRM_DATABASE_URL.
+  // Restricted to super-admin only — the URL contains the database password.
+  app.get("/api/integration-info/crm-database-url", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!isSuperAdmin(req.user.claims.email)) {
+        return res.status(403).json({ message: "Super admin only" });
+      }
+      const url = process.env.DATABASE_URL || "";
+      if (!url) return res.status(404).json({ message: "DATABASE_URL not set on server" });
+      res.json({ url });
+    } catch (e) {
+      console.error("Get CRM DB URL error:", e);
+      res.status(500).json({ message: "Failed to fetch database URL" });
+    }
+  });
+
   app.patch("/api/quotation-settings", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const data = insertQuotationSettingsSchema.partial().parse(req.body);
