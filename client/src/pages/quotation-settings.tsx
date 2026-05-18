@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, safeObjectQueryFn } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,10 @@ import type { QuotationSettings } from "@shared/schema";
 
 export default function QuotationSettingsPage() {
   const { toast } = useToast();
-  const { data, isLoading } = useQuery<QuotationSettings>({ queryKey: ["/api/quotation-settings"] });
+  const { data, isLoading, error } = useQuery<QuotationSettings | null>({
+    queryKey: ["/api/quotation-settings"],
+    queryFn: safeObjectQueryFn<QuotationSettings>("/api/quotation-settings"),
+  });
   const [form, setForm] = useState<Partial<QuotationSettings>>({});
 
   useEffect(() => { if (data) setForm(data); }, [data]);
@@ -31,6 +34,31 @@ export default function QuotationSettingsPage() {
   });
 
   if (isLoading) return <div className="p-8 text-center">Loading...</div>;
+
+  if (error) {
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        <div className="flex items-center gap-3">
+          <Link href="/quotations">
+            <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
+          </Link>
+          <h1 className="text-2xl font-bold">Quotation Settings</h1>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-destructive font-medium" data-testid="text-settings-error">
+              Failed to load quotation settings
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">{(error as Error).message}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              If this is a fresh deploy, the database tables may need to be created, or you may
+              not have permission to view settings.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
@@ -118,6 +146,58 @@ export default function QuotationSettingsPage() {
           <p className="text-xs text-muted-foreground">
             We'll POST <code>{`{ to, message, quotationNumber }`}</code> as JSON to this endpoint with optional <code>Authorization: Bearer &lt;token&gt;</code> header.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">M-WhatsApp CRM Bridge (Stage Automation)</CardTitle>
+          <CardDescription>
+            Each time a lead's stage changes, M-CRM POSTs the transition to the bridge so it can fire the
+            template you configured in the bridge's Stage Automation tab.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={!!form.bridgeEnabled}
+              onCheckedChange={(v) => set("bridgeEnabled", v)}
+              data-testid="switch-bridge-enabled"
+            />
+            <Label>Enable stage-change webhooks</Label>
+          </div>
+          <div>
+            <Label>Bridge Base URL</Label>
+            <Input
+              value={form.bridgeUrl || ""}
+              onChange={(e) => set("bridgeUrl", e.target.value)}
+              placeholder="https://wa.microgenn.com:4000/api/crm-bridge"
+              data-testid="input-bridge-url"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              We append <code>/webhook/stage-changed</code> automatically — paste just the base URL.
+            </p>
+          </div>
+          <div>
+            <Label>Bridge API Token (Bearer)</Label>
+            <Input
+              type="password"
+              value={form.bridgeToken || ""}
+              onChange={(e) => set("bridgeToken", e.target.value)}
+              placeholder="Optional bearer token"
+              data-testid="input-bridge-token"
+            />
+          </div>
+          <div className="rounded-md bg-muted/40 p-3 text-xs">
+            <div className="font-medium mb-1">POST {(form.bridgeUrl || "").replace(/\/$/, "")}/webhook/stage-changed</div>
+            <pre className="overflow-x-auto">{`{
+  "leadId": "...",
+  "leadName": "Acme Hotels",
+  "phone": "919876543210",
+  "fromStage": "lead",
+  "toStage": "demo_scheduled"
+}`}</pre>
+          </div>
         </CardContent>
       </Card>
     </div>
