@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, Eye, EyeOff } from "lucide-react";
 import type { QuotationSettings } from "@shared/schema";
 
 export default function QuotationSettingsPage() {
@@ -200,6 +200,190 @@ export default function QuotationSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <IntegrationReferenceCard bridgeUrl={form.bridgeUrl || "https://wa.microgenn.com:4000/api/crm-bridge"} />
     </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Integration Reference card — copy-paste ready values for the M-WhatsApp team
+// ───────────────────────────────────────────────────────────────────────────
+
+function CopyBlock({
+  label,
+  value,
+  testId,
+  multiline = false,
+  masked = false,
+}: {
+  label: string;
+  value: string;
+  testId: string;
+  multiline?: boolean;
+  masked?: boolean;
+}) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState(!masked);
+
+  const display = masked && !revealed ? value.replace(/./g, "•") : value;
+
+  const handleCopy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast({ title: `${label} copied` });
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({ title: "Copy failed", description: "Select the text and copy manually", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <Label className="text-xs font-medium">{label}</Label>
+        <div className="flex items-center gap-1">
+          {masked && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setRevealed((r) => !r)}
+              data-testid={`button-toggle-${testId}`}
+            >
+              {revealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            disabled={!value}
+            data-testid={`button-copy-${testId}`}
+          >
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            <span className="ml-1 text-xs">{copied ? "Copied" : "Copy"}</span>
+          </Button>
+        </div>
+      </div>
+      {multiline ? (
+        <pre className="rounded-md bg-muted/40 p-3 text-xs overflow-x-auto whitespace-pre" data-testid={`text-${testId}`}>
+          {display || "(not configured)"}
+        </pre>
+      ) : (
+        <div
+          className="rounded-md bg-muted/40 p-2 text-xs font-mono break-all"
+          data-testid={`text-${testId}`}
+        >
+          {display || "(not configured)"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntegrationReferenceCard({ bridgeUrl }: { bridgeUrl: string }) {
+  const { toast } = useToast();
+  const [dbUrl, setDbUrl] = useState<string | null>(null);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  const cleanBase = bridgeUrl.replace(/\/$/, "");
+  const postUrl = `${cleanBase}/webhook/stage-changed`;
+  const samplePayload = JSON.stringify(
+    {
+      leadId: "...",
+      leadName: "Acme Hotels",
+      phone: "919876543210",
+      fromStage: "lead",
+      toStage: "demo_scheduled",
+    },
+    null,
+    2,
+  );
+  const curlSample = `curl -X POST '${postUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -d '${samplePayload.replace(/\n/g, " ").replace(/  +/g, " ")}'`;
+
+  const loadDbUrl = async () => {
+    setDbLoading(true);
+    setDbError(null);
+    try {
+      const res = await fetch("/api/integration-info/crm-database-url", { credentials: "include" });
+      if (res.status === 403) {
+        setDbError("Super admin only");
+        toast({ title: "Super admin only", description: "Only senthil@microgenn.com can reveal this URL.", variant: "destructive" });
+        return;
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setDbError(j.message || `HTTP ${res.status}`);
+        return;
+      }
+      const j = await res.json();
+      setDbUrl(j.url);
+    } catch (e: any) {
+      setDbError(e?.message || "Failed to load");
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Integration Reference (for M-WhatsApp Team)</CardTitle>
+        <CardDescription>
+          Copy-paste ready values for the M-WhatsApp bridge. Share the database URL only with trusted operators —
+          it contains the Postgres password.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <CopyBlock label="Webhook URL" value={postUrl} testId="webhook-url" />
+
+        <CopyBlock
+          label="Sample payload (JSON body)"
+          value={samplePayload}
+          testId="webhook-payload"
+          multiline
+        />
+
+        <CopyBlock label="curl test command" value={curlSample} testId="webhook-curl" multiline />
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <Label className="text-xs font-medium">CRM_DATABASE_URL (for the M-WhatsApp project's secret)</Label>
+            {!dbUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={loadDbUrl}
+                disabled={dbLoading}
+                data-testid="button-reveal-db-url"
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                {dbLoading ? "Loading..." : "Reveal & Copy (Super Admin)"}
+              </Button>
+            )}
+          </div>
+          {dbUrl ? (
+            <CopyBlock label="" value={dbUrl} testId="db-url" masked />
+          ) : (
+            <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+              {dbError ? <span className="text-destructive">{dbError}</span> : "Click \"Reveal & Copy\" to load this value."}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            Paste into the M-WhatsApp app's <code>CRM_DATABASE_URL</code> environment variable so the Leads tab
+            can read live data.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
