@@ -28,14 +28,26 @@ export function clearStoredUser() {
   } catch {}
 }
 
+const AUTH_PAGE_PREFIXES = ["/auth/login", "/auth/signup", "/auth/forgot-password"];
+
+function isOnAuthPage(): boolean {
+  if (typeof window === "undefined") return false;
+  const p = window.location.pathname;
+  return AUTH_PAGE_PREFIXES.some((prefix) => p.startsWith(prefix));
+}
+
 export function useAuth() {
   const initialData = getStoredUser();
+  const skipAuthCheck = isOnAuthPage() && !initialData;
 
   const { data: user, isLoading, isError } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     retry: false,
     initialData,
     initialDataUpdatedAt: 0,
+    // Don't fire /api/auth/user on /auth/* pages when we already know
+    // there's no cached session — saves a slow round-trip on the login page.
+    enabled: !skipAuthCheck,
   });
 
   useEffect(() => {
@@ -52,7 +64,7 @@ export function useAuth() {
 
   return {
     user: isError ? undefined : user,
-    isLoading: isLoading && !initialData,
+    isLoading: !skipAuthCheck && isLoading && !initialData,
     isAuthenticated: !isError && !!user,
   };
 }
