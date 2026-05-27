@@ -8730,30 +8730,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
-      if (error instanceof ObjectNotFoundError) {
-        return res.sendStatus(404);
-      }
-      // On VPS deployments, legacy /objects/uploads/... paths point to GCS buckets
-      // that are not reachable from outside Replit. Treat any storage/auth/network
-      // failure as "not found" so the browser silently falls back to AvatarFallback
-      // (initials) instead of logging a noisy 500 in the console.
-      const msg = String(error?.message || error?.code || "");
-      const isStorageUnavailable =
-        msg.includes("ENOTFOUND") ||
-        msg.includes("ECONNREFUSED") ||
-        msg.includes("ETIMEDOUT") ||
-        msg.includes("Could not load") ||
-        msg.includes("Unable to authenticate") ||
-        msg.includes("invalid_grant") ||
-        msg.includes("Forbidden") ||
-        msg.includes("Not Found") ||
-        error?.code === 404 ||
-        error?.code === 403;
-      if (isStorageUnavailable) {
-        return res.sendStatus(404);
-      }
-      console.error("Error accessing object:", error);
-      return res.sendStatus(500);
+      // Any failure to fetch a media object — missing file, unreachable
+      // storage backend, missing credentials on VPS, etc. — is reported as
+      // 404 so the browser silently falls back (e.g. AvatarFallback shows
+      // initials) instead of logging a noisy 500. We still log the cause
+      // server-side once for diagnostics.
+      console.warn(
+        "[objects] cannot serve",
+        req.path,
+        "-",
+        error?.code || error?.message || error,
+      );
+      return res.sendStatus(404);
     }
   });
 
