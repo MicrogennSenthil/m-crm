@@ -57,6 +57,7 @@ import {
   customerContractModules,
   insertSalesPlanSchema,
   insertSalesMonthlyTargetSchema,
+  insertExtractorSettingsSchema,
 } from "@shared/schema";
 import { generateEmbedding, generateEmbeddings, chunkText, extractTextFromContent, estimateTokenCount } from "./embeddings";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -16581,6 +16582,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Google Maps Extractor Routes
   // ==========================================
 
+  // GET extractor settings (admin only — key masked for non-super-admin)
+  app.get("/api/extractor/settings", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const settings = await storage.getExtractorSettings();
+      const isSuperAdmin = req.user?.email === "senthil@microgenn.com";
+      res.json({
+        ...settings,
+        googlePlacesApiKey: isSuperAdmin
+          ? settings.googlePlacesApiKey
+          : settings.googlePlacesApiKey
+            ? "***configured***"
+            : "",
+        isKeyConfigured: !!(settings.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY),
+      });
+    } catch (error) {
+      console.error("Error fetching extractor settings:", error);
+      res.status(500).json({ message: "Failed to fetch extractor settings" });
+    }
+  });
+
+  // PATCH extractor settings (admin only)
+  app.patch("/api/extractor/settings", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const parsed = insertExtractorSettingsSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid settings data", errors: parsed.error.flatten() });
+      }
+      const updated = await storage.updateExtractorSettings(parsed.data);
+      res.json({ ...updated, googlePlacesApiKey: updated.googlePlacesApiKey ? "***configured***" : "" });
+    } catch (error) {
+      console.error("Error updating extractor settings:", error);
+      res.status(500).json({ message: "Failed to update extractor settings" });
+    }
+  });
+
   // Search Google Places API
   app.post("/api/extractor/search", isAuthenticated, requirePermission('leads', 'create'), async (req: any, res) => {
     try {
@@ -16590,9 +16626,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Search query is required" });
       }
 
-      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      // Read API key from DB first, fall back to environment variable
+      const dbSettings = await storage.getExtractorSettings();
+      const apiKey = dbSettings.googlePlacesApiKey || process.env.GOOGLE_PLACES_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ message: "Google Places API key not configured" });
+        return res.status(500).json({ message: "Google Places API key not configured. Ask your admin to add it under Sales → Extractor → Settings." });
       }
 
       // Build the search query with location context
@@ -17153,21 +17191,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.error("Get quotation settings error:", e);
       res.status(500).json({ message: "Failed to fetch settings" });
-    }
-  });
-  // Returns the CRM DATABASE_URL for the M-WhatsApp team to paste as CRM_DATABASE_URL.
-  // Restricted to super-admin only — the URL contains the database password.
-  app.get("/api/integration-info/crm-database-url", isAuthenticated, async (req: any, res) => {
-    try {
-      if (!isSuperAdmin(req.user.claims.email)) {
-        return res.status(403).json({ message: "Super admin only" });
-      }
-      const url = process.env.DATABASE_URL || "";
-      if (!url) return res.status(404).json({ message: "DATABASE_URL not set on server" });
-      res.json({ url });
-    } catch (e) {
-      console.error("Get CRM DB URL error:", e);
-      res.status(500).json({ message: "Failed to fetch database URL" });
     }
   });
 
