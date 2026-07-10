@@ -173,6 +173,9 @@ import {
   type InsertSalesPlan,
   type SalesMonthlyTarget,
   type InsertSalesMonthlyTarget,
+  extractorSettings,
+  type ExtractorSettings,
+  type InsertExtractorSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, sql, isNotNull, isNull, inArray, ilike, count } from "drizzle-orm";
@@ -5241,6 +5244,19 @@ export class DatabaseStorage implements IStorage {
     await this.getQuotationSettings(); // ensure row exists
     const { id: _ignoreId, ...safe } = (data as any) || {};
     const [row] = await db.update(quotationSettings).set({ ...safe, updatedAt: new Date() } as any).where(eq(quotationSettings.id, 'default')).returning();
+    return row;
+  }
+
+  async getExtractorSettings(): Promise<ExtractorSettings> {
+    const [row] = await db.select().from(extractorSettings).where(eq(extractorSettings.id, 'default'));
+    if (row) return row;
+    const [created] = await db.insert(extractorSettings).values({ id: 'default' } as any).returning();
+    return created;
+  }
+  async updateExtractorSettings(data: Partial<InsertExtractorSettings>): Promise<ExtractorSettings> {
+    await this.getExtractorSettings(); // ensure row exists
+    const { id: _ignoreId, ...safe } = (data as any) || {};
+    const [row] = await db.update(extractorSettings).set({ ...safe, updatedAt: new Date() } as any).where(eq(extractorSettings.id, 'default')).returning();
     return row;
   }
 }
