@@ -1951,3 +1951,16 @@ export const insertQuotationSchema = createInsertSchema(quotations).omit({
 
 export type InsertQuotation = z.infer<typeof insertQuotationSchema>;
 export type Quotation = typeof quotations.$inferSelect;
+
+// Extractor Settings (singleton row, id='default')
+export const extractorSettings = pgTable("extractor_settings", {
+  id: varchar("id").primaryKey().default("default"),
+  googlePlacesApiKey: text("google_places_api_key").default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertExtractorSettingsSchema = createInsertSchema(extractorSettings).omit({
+  updatedAt: true,
+});
+export type InsertExtractorSettings = z.infer<typeof insertExtractorSettingsSchema>;
+export type ExtractorSettings = typeof extractorSettings.$inferSelect;
