@@ -287,11 +287,6 @@ function CopyBlock({
 }
 
 function IntegrationReferenceCard({ bridgeUrl }: { bridgeUrl: string }) {
-  const { toast } = useToast();
-  const [dbUrl, setDbUrl] = useState<string | null>(null);
-  const [dbLoading, setDbLoading] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
-
   const cleanBase = bridgeUrl.replace(/\/$/, "");
   const postUrl = `${cleanBase}/webhook/stage-changed`;
   const samplePayload = JSON.stringify(
@@ -309,37 +304,12 @@ function IntegrationReferenceCard({ bridgeUrl }: { bridgeUrl: string }) {
   -H 'Content-Type: application/json' \\
   -d '${samplePayload.replace(/\n/g, " ").replace(/  +/g, " ")}'`;
 
-  const loadDbUrl = async () => {
-    setDbLoading(true);
-    setDbError(null);
-    try {
-      const res = await fetch("/api/integration-info/crm-database-url", { credentials: "include" });
-      if (res.status === 403) {
-        setDbError("Super admin only");
-        toast({ title: "Super admin only", description: "Only senthil@microgenn.com can reveal this URL.", variant: "destructive" });
-        return;
-      }
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        setDbError(j.message || `HTTP ${res.status}`);
-        return;
-      }
-      const j = await res.json();
-      setDbUrl(j.url);
-    } catch (e: any) {
-      setDbError(e?.message || "Failed to load");
-    } finally {
-      setDbLoading(false);
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Integration Reference (for M-WhatsApp Team)</CardTitle>
         <CardDescription>
-          Copy-paste ready values for the M-WhatsApp bridge. Share the database URL only with trusted operators —
-          it contains the Postgres password.
+          Copy-paste ready values for the M-WhatsApp bridge.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -355,33 +325,15 @@ function IntegrationReferenceCard({ bridgeUrl }: { bridgeUrl: string }) {
         <CopyBlock label="curl test command" value={curlSample} testId="webhook-curl" multiline />
 
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <Label className="text-xs font-medium">CRM_DATABASE_URL (for the M-WhatsApp project's secret)</Label>
-            {!dbUrl && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={loadDbUrl}
-                disabled={dbLoading}
-                data-testid="button-reveal-db-url"
-              >
-                <Eye className="h-3 w-3 mr-1" />
-                {dbLoading ? "Loading..." : "Reveal & Copy (Super Admin)"}
-              </Button>
-            )}
+          <Label className="text-xs font-medium">CRM_DATABASE_URL (for the M-WhatsApp project's secret)</Label>
+          <div className="rounded-md bg-muted/40 p-3 mt-1 text-xs text-muted-foreground space-y-1">
+            <p>For security, database credentials are never sent through the application API.</p>
+            <p>Read the value directly on the VPS:</p>
+            <pre className="mt-1 bg-muted p-2 rounded text-xs font-mono overflow-x-auto">
+              {`grep DATABASE_URL /var/www/m-crm/ecosystem.config.cjs`}
+            </pre>
+            <p>Set this as <code className="font-mono bg-muted px-1 rounded">CRM_DATABASE_URL</code> in the M-WhatsApp project secrets.</p>
           </div>
-          {dbUrl ? (
-            <CopyBlock label="" value={dbUrl} testId="db-url" masked />
-          ) : (
-            <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-              {dbError ? <span className="text-destructive">{dbError}</span> : "Click \"Reveal & Copy\" to load this value."}
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">
-            Paste into the M-WhatsApp app's <code>CRM_DATABASE_URL</code> environment variable so the Leads tab
-            can read live data.
-          </p>
         </div>
       </CardContent>
     </Card>
