@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2, Plus, X, UserPlus } from "lucide-react";
+import { MapPin, Search, Building2, Phone, Globe, Star, CheckCircle2, XCircle, Download, Loader2, MapPinned, Factory, AlertTriangle, Trash2, Plus, X, UserPlus, Settings, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +67,9 @@ export default function ExtractorPage() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [newApiKey, setNewApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [city, setCity] = useState("");
   const [area, setArea] = useState("");
   const [industry, setIndustry] = useState("");
@@ -88,6 +91,31 @@ export default function ExtractorPage() {
     enabled: !!currentUser,
   });
 
+  // Fetch extractor settings (admin only)
+  const { data: extractorSettingsData } = useQuery<{ isKeyConfigured: boolean; googlePlacesApiKey: string }>({
+    queryKey: ["/api/extractor/settings"],
+    enabled: !!(currentUser?.role === "admin" || currentUser?.email === SUPER_ADMIN_EMAIL),
+    retry: false,
+  });
+
+  // Update extractor settings mutation
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (data: { googlePlacesApiKey: string }) => {
+      const response = await apiRequest("PATCH", "/api/extractor/settings", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/extractor/settings"] });
+      toast({ title: "Settings Saved", description: "Google Places API key has been updated." });
+      setShowSettingsDialog(false);
+      setNewApiKey("");
+      setShowApiKey(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Save Failed", description: error.message || "Failed to save settings", variant: "destructive" });
+    },
+  });
+
   // Fetch sales executives for assignment
   const { data: allUsers } = useQuery<User[]>({
     queryKey: ["/api/users/all"],
@@ -98,6 +126,7 @@ export default function ExtractorPage() {
   const isAdmin = currentUser?.role === "admin";
   const isDepartmentHead = deptHeadStatus?.isHead || false;
   const canAssign = isSuperAdmin || isAdmin || isDepartmentHead;
+  const canConfigureSettings = isSuperAdmin || isAdmin;
 
   // Filter to include both sales_executive and sales_head roles
   const salesExecutives = allUsers?.filter(
@@ -408,7 +437,7 @@ export default function ExtractorPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <MapPinned className="h-6 w-6 text-primary" />
@@ -418,7 +447,116 @@ export default function ExtractorPage() {
             Search and extract business data from Google Maps to create new seeds
           </p>
         </div>
+        {canConfigureSettings && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setNewApiKey("");
+              setShowApiKey(false);
+              setShowSettingsDialog(true);
+            }}
+            data-testid="button-extractor-settings"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            API Settings
+            {extractorSettingsData && (
+              <Badge
+                variant={extractorSettingsData.isKeyConfigured ? "default" : "destructive"}
+                className="ml-2"
+              >
+                {extractorSettingsData.isKeyConfigured ? "Configured" : "Not Set"}
+              </Badge>
+            )}
+          </Button>
+        )}
       </div>
+
+      {/* Extractor Settings Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Google Places API Settings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {extractorSettingsData?.isKeyConfigured && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  A Google Places API key is currently configured. Enter a new key below to replace it, or leave blank to keep the existing one.
+                </AlertDescription>
+              </Alert>
+            )}
+            {!extractorSettingsData?.isKeyConfigured && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  No API key configured. The Extractor search will not work until you add one.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="api-key-input">Google Places API Key</Label>
+              <div className="relative">
+                <Input
+                  id="api-key-input"
+                  type={showApiKey ? "text" : "password"}
+                  placeholder={extractorSettingsData?.isKeyConfigured ? "Enter new key to replace existing..." : "AIza..."}
+                  value={newApiKey}
+                  onChange={(e) => setNewApiKey(e.target.value)}
+                  className="pr-10"
+                  data-testid="input-api-key"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Get your key from{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-2"
+                >
+                  Google Cloud Console
+                </a>
+                . Make sure <strong>Places API (New)</strong> is enabled.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                if (!newApiKey.trim()) {
+                  toast({ title: "No Key Entered", description: "Please enter an API key to save.", variant: "destructive" });
+                  return;
+                }
+                updateSettingsMutation.mutate({ googlePlacesApiKey: newApiKey.trim() });
+              }}
+              disabled={updateSettingsMutation.isPending}
+              data-testid="button-save-api-key"
+            >
+              {updateSettingsMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+              ) : (
+                "Save API Key"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Search Form */}
       <Card>
