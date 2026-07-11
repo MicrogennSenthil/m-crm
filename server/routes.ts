@@ -336,6 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set up session
       (req.session as any).userId = user.id;
       (req.session as any).isLocalAuth = true;
+      (req.session as any).loginAt = Date.now(); // used by isAuthenticated for blacklist time comparison
       req.user = { claims: { sub: user.id } };
 
       // Invalidate any stale auth caches for this user
