@@ -25,16 +25,16 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    // Try to parse JSON error message
+    // Try to parse JSON error message — use a flag to avoid the inner throw
+    // being swallowed by the same catch block
+    let parsed: string | null = null;
     try {
       const json = JSON.parse(text);
-      if (json.message) {
-        throw new Error(json.message);
-      }
-    } catch (e) {
-      // Not JSON or no message field, use raw text
+      if (json.message) parsed = json.message;
+    } catch {
+      // Not JSON — fall through to raw text
     }
-    throw new Error(text || `Request failed with status ${res.status}`);
+    throw new Error(parsed ?? text ?? `Request failed with status ${res.status}`);
   }
 }
 
