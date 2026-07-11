@@ -359,12 +359,19 @@ export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   if ((req.session as any)?.isLocalAuth && (req.session as any)?.userId) {
     // For local auth, set up req.user with claims for consistency
     const userId = (req.session as any).userId;
-    // Reject session if user has logged out (Redis-backed, survives PM2 restarts)
+    // Reject session if user has logged out — compare loginAt vs blacklistAt
+    // (mirrors the JWT path logic; needed for cluster mode where in-memory
+    // blacklist may be stale on some workers after re-login)
     const blacklistedAt = await getBlacklistTimestamp(userId);
     if (blacklistedAt !== null) {
-      (req.session as any).isLocalAuth = false;
-      (req.session as any).userId = null;
-      return res.status(401).json({ message: "Unauthorized" });
+      const loginAt: number = (req.session as any).loginAt ?? 0;
+      if (loginAt < blacklistedAt) {
+        // Session predates the logout — invalidate it
+        (req.session as any).isLocalAuth = false;
+        (req.session as any).userId = null;
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      // loginAt >= blacklistedAt means user re-logged-in after the logout — valid session
     }
     const user = await storage.getUser(userId);
     if (user) {
