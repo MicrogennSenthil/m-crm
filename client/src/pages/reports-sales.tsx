@@ -57,7 +57,19 @@ import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, 
 
 type ReportType = "fresh" | "pending" | "completed" | "all";
 
-const LEAD_STAGES = ["new", "contacted", "demo_scheduled", "proposal_sent", "closed_won", "closed_lost"];
+const LEAD_STAGES = [
+  "seed", "lead", "demo_scheduled", "quote_sent", "negotiation", "closed_won", "closed_lost"
+];
+
+const STAGE_LABELS: Record<string, string> = {
+  seed: "Seeds",
+  lead: "Leads",
+  demo_scheduled: "Demo Scheduled",
+  quote_sent: "Quote Sent",
+  negotiation: "Negotiation",
+  closed_won: "Closed Won",
+  closed_lost: "Closed Lost",
+};
 
 function exportToCSV(data: any[], filename: string) {
   if (!data || data.length === 0) return;
@@ -190,11 +202,11 @@ export default function SalesReports() {
   }, [leads, selectedCustomer, selectedStage, selectedSource, searchQuery]);
 
   const reportData = useMemo(() => {
-    const freshCalls = filteredLeads.filter(l => l.stage === "new" || l.stage === "contacted");
-    const pendingCalls = filteredLeads.filter(l => 
-      l.stage === "demo_scheduled" || l.stage === "proposal_sent"
+    const freshCalls = filteredLeads.filter(l => l.stage === "seed" || l.stage === "lead");
+    const pendingCalls = filteredLeads.filter(l =>
+      l.stage === "demo_scheduled" || l.stage === "quote_sent" || l.stage === "negotiation"
     );
-    const completedCalls = filteredLeads.filter(l => 
+    const completedCalls = filteredLeads.filter(l =>
       l.stage === "closed_won" || l.stage === "closed_lost"
     );
     
@@ -222,8 +234,8 @@ export default function SalesReports() {
     }).length || 0;
     
     return {
-      fresh: filteredLeads.filter(l => l.stage === "new" || l.stage === "contacted").length,
-      pending: filteredLeads.filter(l => l.stage === "demo_scheduled" || l.stage === "proposal_sent").length,
+      fresh: filteredLeads.filter(l => l.stage === "seed" || l.stage === "lead").length,
+      pending: filteredLeads.filter(l => l.stage === "demo_scheduled" || l.stage === "quote_sent" || l.stage === "negotiation").length,
       completed: filteredLeads.filter(l => l.stage === "closed_won" || l.stage === "closed_lost").length,
       all: filteredLeads.length,
       won: filteredLeads.filter(l => l.stage === "closed_won").length,
@@ -239,7 +251,7 @@ export default function SalesReports() {
       "Email": lead.contactEmail,
       "Phone": lead.contactPhone,
       "Location": lead.city || "",
-      "Stage": lead.stage?.replace("_", " ").toUpperCase(),
+      "Stage": lead.stage ? (STAGE_LABELS[lead.stage] ?? lead.stage.replace(/_/g, " ").toUpperCase()) : "",
       "Source": lead.leadSource === "other" && (lead as any).customLeadSource ? (lead as any).customLeadSource : lead.leadSource,
       "Expected Value": lead.estimatedValue,
       "Created Date": lead.createdAt ? format(new Date(lead.createdAt), "yyyy-MM-dd") : "",
@@ -290,10 +302,11 @@ export default function SalesReports() {
 
   const getStageColor = (stage: string) => {
     switch (stage) {
-      case "new": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "contacted": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-      case "demo_scheduled": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-      case "proposal_sent": return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
+      case "seed": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "lead": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200";
+      case "demo_scheduled": return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      case "quote_sent": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+      case "negotiation": return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
       case "closed_won": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
       case "closed_lost": return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
       default: return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
@@ -377,7 +390,7 @@ export default function SalesReports() {
                 <SelectContent>
                   <SelectItem value="all">All Stages</SelectItem>
                   {LEAD_STAGES.map(s => (
-                    <SelectItem key={s} value={s}>{s.replace("_", " ").toUpperCase()}</SelectItem>
+                    <SelectItem key={s} value={s}>{STAGE_LABELS[s] ?? s.replace(/_/g, " ").toUpperCase()}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -532,7 +545,7 @@ export default function SalesReports() {
                           <TableCell>{lead.city || "-"}</TableCell>
                           <TableCell>
                             <Badge className={getStageColor(lead.stage || "")}>
-                              {lead.stage?.replace("_", " ").toUpperCase()}
+                              {lead.stage ? (STAGE_LABELS[lead.stage] ?? lead.stage.replace(/_/g, " ").toUpperCase()) : "-"}
                             </Badge>
                           </TableCell>
                           <TableCell>{lead.leadSource || "-"}</TableCell>
