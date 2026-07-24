@@ -14,6 +14,7 @@ import { startModuleContractReminderScheduler } from "./moduleContractReminderSc
 import { storage } from "./storage";
 import { setCached } from "./cache";
 import { pool } from "./db";
+import { clearAllPermissionCaches } from "./replitAuth";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -125,6 +126,11 @@ export default async function runApp(
       } else {
         log(`[ModuleSync] All system modules are up to date`, "scheduler");
       }
+      // Clear all permission caches after sync so any cache entries built
+      // during the brief startup window (before modules were synced) are discarded.
+      // Without this, a user whose cache was populated before sync completed would
+      // get stale permissions (missing newly-synced modules) for up to 5 minutes.
+      clearAllPermissionCaches();
     } catch (error) {
       log(`[ModuleSync] Error syncing system modules: ${error}`, "scheduler");
     }
