@@ -524,7 +524,12 @@ async function getUserPermissions(userId: string): Promise<Map<string, { canView
     });
   }
   
-  permissionCache.set(userId, { permissions: permMap, timestamp: Date.now() });
+  // Only cache if we actually got modules back. If the list is empty it likely
+  // means the DB returned nothing (transient error or pre-sync window). Caching
+  // an empty map for 5 minutes would block ALL permission checks until expiry.
+  if (permMap.size > 0) {
+    permissionCache.set(userId, { permissions: permMap, timestamp: Date.now() });
+  }
   return permMap;
 }
 
